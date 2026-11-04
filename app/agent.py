@@ -22,7 +22,10 @@ LLAMA_URL = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_BUI
 
 HF = "https://huggingface.co/{repo}/resolve/main/{path}"
 LLM_VARIANTS = {
-    "gemma4-12b": {"title": "Gemma 4 12B", "repo": "ggml-org/gemma-4-12B-it-GGUF",
+    "gemma4-12b": {"title": "Gemma 4 12B (Uncensored Heretic)", "repo": "llmfan46/gemma-4-12B-it-qat-q4_0-uncensored-heretic-GGUF",
+                   "model": "gemma-4-12B-it-qat-q4_0-uncensored-heretic-Q4_0.gguf", "model_size": 7.60e9,
+                   "mmproj": "gemma-4-12B-it-qat-q4_0-uncensored-heretic-mmproj-BF16.gguf", "mmproj_size": 0.18e9, "ctx": 49152},
+    "gemma4-12b-orig": {"title": "Gemma 4 12B (Google Original)", "repo": "ggml-org/gemma-4-12B-it-GGUF",
                    "model": "gemma-4-12B-it-Q4_0.gguf", "model_size": 7.22e9,
                    "mmproj": "mmproj-gemma-4-12B-it-Q8_0.gguf", "mmproj_size": 0.16e9, "ctx": 49152},
     "gemma4-e4b": {"title": "Gemma 4 E4B (лёгкая)", "repo": "ggml-org/gemma-4-E4B-it-GGUF",
@@ -324,7 +327,16 @@ class LlamaServer:
         if self.custom:
             return Path(self.custom["model"]), Path(self.custom["mmproj"]) if self.custom.get("mmproj") else None
         v = LLM_VARIANTS[variant]
-        return self.root / "models" / v["model"], self.root / "models" / v["mmproj"]
+        m = self.root / "models" / v["model"]
+        p = self.root / "models" / v["mmproj"]
+        if variant == "gemma4-12b" and not m.exists():
+            orig = LLM_VARIANTS.get("gemma4-12b-orig")
+            if orig:
+                fallback_m = self.root / "models" / orig["model"]
+                fallback_p = self.root / "models" / orig["mmproj"]
+                if fallback_m.exists():
+                    return fallback_m, (fallback_p if fallback_p.exists() else None)
+        return m, p
 
     def has_model(self, variant):
         m, p = self.model_paths(variant)

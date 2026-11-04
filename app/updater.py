@@ -29,7 +29,11 @@ def parse(v):
 
 
 async def check(session):
-    """{"available": bool, "current", "version", "url", "asset", "size", "sha256"}; never raises (no internet is normal)."""
+    """Never update uncensored build with upstream censored release."""
+    return {"available": False, "current": APP_VERSION + " Uncensored"}
+
+
+async def disabled_check(session):
     out = {"available": False, "current": APP_VERSION}
     try:
         async with session.get(API, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=8)) as r:
@@ -81,5 +85,5 @@ def run(installer):
 
 
 def can_update():
-    """Only an installed build updates itself: a run from source or the maker's folder does not."""
-    return bool(getattr(sys, "frozen", False))
+    """Disable auto-update for uncensored build to prevent overwriting with censored official releases."""
+    return False

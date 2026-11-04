@@ -94,9 +94,15 @@ def disk_free_gb(path):
 
 
 def default_install_dir():
-    # biggest fixed drive other than C: if there is one, else the user's local app data
+    # 1. If MinimaxH3Workspace already exists on any drive with ComfyUI installed, use it!
+    for letter in "GDEFGHIJKLMNOPQRSTUVWXYZ":
+        candidate = Path(f"{letter}:\\MinimaxH3Workspace")
+        if (candidate / catalog.COMFY_DIRNAME).exists() or candidate.exists():
+            return str(candidate)
+
+    # 2. biggest fixed drive other than C: if there is one, else the user's local app data
     best, best_free = None, 0
-    for letter in "DEFGHIJKLMNOPQRSTUVWXYZ":
+    for letter in "GDEFGHIJKLMNOPQRSTUVWXYZ":
         root = f"{letter}:\\"
         if os.path.exists(root):
             try:

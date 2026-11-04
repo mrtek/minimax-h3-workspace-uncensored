@@ -132,7 +132,7 @@ def main():
         except Exception:
             pass
         api = JsApi(port)
-        api._window = webview.create_window("Minimax H3 Workspace", url, width=1440, height=920, min_size=(1000, 680),
+        api._window = webview.create_window("Minimax H3 Workspace (Uncensored)", url, width=1440, height=920, min_size=(1000, 680),
                                            background_color="#12070a", js_api=api,
                                            draggable=True)  # pywebview blocks dragging of every picture by default; the app drags pictures into slots
         webview.start(gui="edgechromium", private_mode=False,
