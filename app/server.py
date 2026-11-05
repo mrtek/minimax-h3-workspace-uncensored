@@ -1176,13 +1176,25 @@ class App:
             if f and f not in meta_map:
                 fp = (loras_dir / f) if loras_dir else None
                 meta_map[f] = loras_registry.get_lora_metadata(f, full_file_path=fp, custom_meta=custom_meta)
+        items = self.config.get("custom_loras") or []
+        conflicts = loras_registry.analyze_lora_conflicts(items, custom_meta=custom_meta)
         return web.json_response({
             "files": clean,
-            "items": self.config.get("custom_loras") or [],
+            "items": items,
             "meta": meta_map,
+            "conflicts": conflicts,
             "civitai_token": self.config.get("civitai_token") or "",
             "hf_token": self.config.get("hf_token") or "",
         })
+
+    async def h_loras_conflicts(self, req):
+        import loras_registry
+        data = await req.json()
+        items = data.get("items") or []
+        builtins = data.get("builtins") or {}
+        custom_meta = self.config.get("custom_lora_meta") or {}
+        conflicts = loras_registry.analyze_lora_conflicts(items, custom_meta=custom_meta, builtins=builtins)
+        return web.json_response({"conflicts": conflicts})
 
     async def h_loras_meta_save(self, req):
         data = await req.json()
@@ -1959,6 +1971,7 @@ def build_app(comfy_override=None):
         web.post("/api/generate/custom", state.h_generate_custom),
         web.get("/api/loras/custom", state.h_loras_custom),
         web.post("/api/loras/custom", state.h_loras_custom_set),
+        web.post("/api/loras/conflicts", state.h_loras_conflicts),
         web.post("/api/loras/meta/save", state.h_loras_meta_save),
         web.get("/api/civitai/search", state.h_civitai_search),
         web.post("/api/civitai/resolve", state.h_civitai_resolve),

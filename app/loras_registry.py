@@ -275,6 +275,219 @@ def get_lora_metadata(file_path_or_name, full_file_path=None, custom_meta=None):
     }
 
 
+def analyze_lora_conflicts(active_items, custom_meta=None, builtins=None):
+    """Analyzes a list of active LoRA items for mutual conflicts, schedule breakage, or overcooking.
+
+    Returns a list of conflict dictionaries:
+    [
+      {
+        "id": "splits_bifurcation",
+        "level": "danger",  # "danger" (red), "warning" (orange), "caution" (yellow)
+        "title": "...",
+        "desc": "...",
+        "culprits": ["file1.safetensors"],
+        "action": {"type": "disable", "target": "file1.safetensors", "label": "Отключить ..."}
+      }, ...
+    ]
+    """
+    conflicts = []
+    if not active_items and not builtins:
+        return conflicts
+
+    parsed = []
+    total_strength = 0.0
+
+    for item in (active_items or []):
+        if isinstance(item, dict):
+            if not item.get("on", True):
+                continue
+            f = item.get("file", "")
+            s = float(item.get("strength", 0.8))
+        else:
+            f = str(item)
+            s = 0.8
+        if not f:
+            continue
+        meta = get_lora_metadata(f, custom_meta=custom_meta)
+        fn_lower = Path(f).name.lower()
+        parsed.append({
+            "file": f,
+            "filename": Path(f).name,
+            "name": meta["name"],
+            "strength": s,
+            "lower": fn_lower,
+            "category": meta.get("category", ""),
+        })
+        if s > 0:
+            total_strength += s
+
+    # Include builtins if provided (e.g. {"realism": {"on": True, "v": 0.5}, "speed": {"on": True, "v": 4.0}, ...})
+    b = builtins or {}
+    builtins_active = {k: v for k, v in b.items() if isinstance(v, dict) and v.get("on", False)}
+    for bk, bv in builtins_active.items():
+        v = float(bv.get("v", 0.5))
+        if v > 0 and bk != "speed":
+            total_strength += v
+
+    # 1. Splits / Screen Bifurcation (Двойное лицо, раздвоенный рот)
+    splits = [p for p in parsed if re.search(r"splits|split.*os", p["lower"])]
+    if splits:
+        for sp in splits:
+            conflicts.append({
+                "id": "splits_bifurcation",
+                "level": "danger",
+                "title": f"Раздвоение лица и губ на портретах ({sp['name']})",
+                "desc": (
+                    f"Модель «{sp['filename']}» натренирована на гимнастические шпагаты («splits») и деление планов. "
+                    "Внимание: на портретах и крупных планах её веса разрывают геометрию рта, создавая вторую нижнюю губу, "
+                    "раздвоенный подбородок и фантомные черты. Если вы не снимаете гимнастический шпагат во весь рост — "
+                    "отключите её."
+                ),
+                "culprits": [sp["file"]],
+                "action": {
+                    "type": "disable",
+                    "target": sp["file"],
+                    "label": f"Отключить {sp['name']}",
+                },
+            })
+
+    # 2. Multi-Turbo / Distillation clash (Конфликт планировщиков 4 шага vs 8 шагов)
+    turbos = [p for p in parsed if re.search(r"turbo.*4step|pika.*turbo|pika.*8step|fasth3.*preview|dmd2.*4step|fastvideo.*turbo|fasth3.*lora", p["lower"])]
+    if len(turbos) > 1:
+        names = ", ".join(t["name"] for t in turbos)
+        conflicts.append({
+            "id": "turbo_clash",
+            "level": "danger",
+            "title": f"Конфликт турбо-ускорителей ({len(turbos)} модели одновременно)",
+            "desc": (
+                f"Включено несколько турбо-LoRA ({names}) с разным шагом сэмплирования (4 шага и 8 шагов). "
+                "Их совместная работа ломает расписание шума (sigmas) диффузии, что приводит к сплошному шуму, "
+                "чёрным кадрам или мылу. Оставьте только один турбо-ускоритель."
+            ),
+            "culprits": [t["file"] for t in turbos],
+            "action": {
+                "type": "keep_one",
+                "target": turbos[0]["file"],
+                "culprits": [t["file"] for t in turbos],
+                "label": f"Оставить только {turbos[0]['name']}",
+            },
+        })
+
+    # 3. Speed Slider vs Motion Repair (Конфликт динамики: ускорение vs сглаживание)
+    has_speed = any(re.search(r"speed_slider|speedslider", p["lower"]) for p in parsed) or (
+        "speed" in builtins_active and abs(float(builtins_active["speed"].get("v", 0))) >= 1.5
+    )
+    has_repair = any(re.search(r"motion_repair", p["lower"]) for p in parsed) or ("motion" in builtins_active)
+    if has_speed and has_repair:
+        repair_file = next((p["file"] for p in parsed if re.search(r"motion_repair", p["lower"])), "motion")
+        conflicts.append({
+            "id": "speed_vs_repair",
+            "level": "warning",
+            "title": "Конфликт динамики: Speed Slider против Motion Repair",
+            "desc": (
+                "Включены одновременно ускорение («Speed Slider») и подавление дрожания («Motion Repair»). "
+                "Один инструмент форсирует резкие межкадровые сдвиги, а второй пытается их сгладить. "
+                "В результате видео может дёргаться рывками («желе»), заикаться или стробить."
+            ),
+            "culprits": [p["file"] for p in parsed if re.search(r"speed|motion", p["lower"])],
+            "action": {
+                "type": "disable",
+                "target": repair_file,
+                "label": "Отключить Motion Repair",
+            },
+        })
+
+    # 4. Overcooking / Total Weight Excess (Перегруз суммарной силы LoRA)
+    if total_strength > 1.35 or (len(parsed) >= 3 and total_strength > 1.2):
+        conflicts.append({
+            "id": "overcooking",
+            "level": "warning",
+            "title": f"Перегруз суммарного веса LoRA ({total_strength:.2f} при норме до 1.0–1.2)",
+            "desc": (
+                f"Включено {len(parsed)} LoRA с общим весом {total_strength:.2f}. В диффузионных моделях перегруз весов "
+                "разрушает латентное пространство (эффект 'overbaking'): кожа становится неестественно восковой и пластиковой, "
+                "мелкие черты лица «плавятся», появляются тёмные артефакты диффузии. Рекомендуется снизить веса до 0.5–0.6."
+            ),
+            "culprits": [p["file"] for p in parsed],
+            "action": {
+                "type": "scale_down",
+                "target": "0.55",
+                "label": "Снизить веса активных LoRA до 0.55",
+            },
+        })
+
+    # 5. Multiple Heavy Anatomy / NSFW LoRAs (Наложение анатомических моделей)
+    nsfw_anatomy = [
+        p for p in parsed
+        if re.search(r"dr34ml4y|unlocked|hmnsfw|aio.*sex|mysticxxx|rough.*sex|shrekman|deepthroat|cunnilingus|hmpussy|hmcumshot", p["lower"])
+    ]
+    if len(nsfw_anatomy) >= 2:
+        names = ", ".join(f"«{p['name']}»" for p in nsfw_anatomy)
+        conflicts.append({
+            "id": "anatomy_stacking",
+            "level": "warning",
+            "title": f"Наложение анатомических LoRA ({len(nsfw_anatomy)} модели одновременно)",
+            "desc": (
+                f"Одновременно включены {names}. Эти модели переопределяют форму тел и интимных зон. "
+                "Их одновременная работа часто приводит к лишним конечностям, неестественной сцепке тел и деформации кожи. "
+                "Рекомендуется оставить одну основную модель (например, только Unlocked для наготы или только DR34ML4Y для позы)."
+            ),
+            "culprits": [p["file"] for p in nsfw_anatomy],
+            "action": {
+                "type": "keep_one",
+                "target": nsfw_anatomy[0]["file"],
+                "culprits": [p["file"] for p in nsfw_anatomy],
+                "label": f"Оставить только {nsfw_anatomy[0]['name']}",
+            },
+        })
+
+    # 6. Style Clash: 2D/Anime vs Realism
+    anime = [p for p in parsed if re.search(r"anime|2dan1m|cartoon|toon|3dcg", p["lower"])]
+    realism = [p for p in parsed if re.search(r"realism.*people|hyperrealistic|photo", p["lower"])] or (
+        [{"file": "realism", "name": "Реализм людей"}] if "realism" in builtins_active else []
+    )
+    if anime and realism:
+        conflicts.append({
+            "id": "style_clash",
+            "level": "warning",
+            "title": "Конфликт стилей: 2D/Аниме против фотореализма",
+            "desc": (
+                f"Активны одновременно аниме/2D LoRA ({anime[0]['name']}) и реализм ({realism[0]['name']}). "
+                "Сеть получает взаимоисключающие стилевые команды, что приводит к гибридным лицам с восковыми пятнами "
+                "и грязными текстурами."
+            ),
+            "culprits": [anime[0]["file"], realism[0]["file"]],
+            "action": {
+                "type": "disable",
+                "target": anime[0]["file"],
+                "label": f"Отключить {anime[0]['name']}",
+            },
+        })
+
+    # 7. Duplicate Style: Multiple Latex models
+    latex = [p for p in parsed if re.search(r"latex", p["lower"])]
+    if len(latex) >= 2:
+        names = ", ".join(f"«{p['name']}»" for p in latex)
+        conflicts.append({
+            "id": "duplicate_latex",
+            "level": "caution",
+            "title": "Дублирование стиля: несколько латексных LoRA",
+            "desc": (
+                f"Включены сразу две модели латекса ({names}). Их эффекты перемножаются, "
+                "вызывая зеркальный пересвет ткани и потерю фактуры складок."
+            ),
+            "culprits": [p["file"] for p in latex],
+            "action": {
+                "type": "keep_one",
+                "target": latex[0]["file"],
+                "culprits": [p["file"] for p in latex],
+                "label": f"Оставить только {latex[0]['name']}",
+            },
+        })
+
+    return conflicts
+
+
 def format_loras_for_agent(active_loras, custom_meta=None):
     """Formats active LoRAs into an authoritative instruction block for the Agent."""
     if not active_loras:
@@ -304,6 +517,16 @@ def format_loras_for_agent(active_loras, custom_meta=None):
     if not lines:
         return ""
 
+    conflicts = analyze_lora_conflicts(active_loras, custom_meta=custom_meta)
+    conflict_notes = ""
+    if conflicts:
+        c_lines = [f"- ⚠️ {c['title']}: {c['desc']}" for c in conflicts]
+        conflict_notes = (
+            "\nВНИМАНИЕ: ОБНАРУЖЕНЫ КОНФЛИКТЫ МЕЖДУ ВКЛЮЧЕННЫМИ LORA:\n"
+            + "\n".join(c_lines)
+            + "\n(Если пользователь просит сцену, которой эти конфликты могут повредить, например крупный план или портрет при активной splits-os — кратко предупреди пользователя в конце ответа о найденном конфликте!).\n\n"
+        )
+
     rule = (
         "ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ LORA ДЛЯ АГЕНТА:\n"
         "1. В видеогенерации АКТИВНЫ указанные выше LoRA. Если тема сцены, персонаж, одежда, ракурс или действия "
@@ -317,6 +540,7 @@ def format_loras_for_agent(active_loras, custom_meta=None):
         "ПОДКЛЮЧЕННЫЕ И АКТИВНЫЕ LORA В ПРОЕКТЕ:\n"
         + "\n".join(lines)
         + "\n\n"
+        + conflict_notes
         + rule
         + "\n"
     )

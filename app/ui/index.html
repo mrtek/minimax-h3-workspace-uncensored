@@ -1164,6 +1164,7 @@ details[open] summary::before{content:'－ '}
         <div class="card" id="clCard" style="margin-bottom:16px" hidden>
           <div class="card-h"><h3>Свои LoRA <small style="color:var(--muted);font-weight:500">· подключение, триггеры и каталог</small></h3><span><button class="btn" id="clCivitai" type="button" style="background:linear-gradient(135deg, rgba(230,50,50,0.25), rgba(180,20,50,0.4));border:1px solid rgba(255,80,80,0.4)">🌐 Каталог Civitai</button> <button class="btn" id="clRe" type="button">Обновить список</button> <button class="btn pri" id="clAdd" type="button">+ Добавить LoRA</button></span></div>
           <div class="hint" style="margin-bottom:10px">Здесь отображаются все подключенные LoRA. Для каждой модели показаны понятное назначение, рекомендуемая сила и ключевые слова-триггеры для Агента. Скачивайте новые LoRA напрямую из каталога Civitai или добавляйте свои в <b>ComfyUI\models\loras</b>.</div>
+          <div id="clConflicts"></div>
           <div class="mlist" id="clList"></div>
         </div>
         <div class="card">
@@ -1805,9 +1806,243 @@ async function loadCL() {
   } catch {}
 }
 
+function evaluateLoraConflicts(items, metaMap, builtins) {
+  const conflicts = [];
+  const active = (items || []).filter(x => x && x.on && x.file);
+  const parsed = [];
+  let totalStrength = 0;
+
+  active.forEach(x => {
+    const fn = (x.file || '').split(/[/\\]/).pop().toLowerCase();
+    const meta = (metaMap && (metaMap[x.file] || metaMap[fn])) || getLoraMeta(x.file) || {};
+    const s = +x.strength || 0;
+    parsed.push({
+      file: x.file,
+      filename: (x.file || '').split(/[/\\]/).pop(),
+      name: meta.name || cleanLoraName(x.file),
+      strength: s,
+      lower: fn,
+      category: meta.category || '',
+    });
+    if (s > 0) totalStrength += s;
+  });
+
+  const b = builtins || {};
+  Object.keys(b).forEach(k => {
+    const bv = b[k];
+    if (bv && bv.on && k !== 'speed') {
+      const v = +bv.v || 0.5;
+      if (v > 0) totalStrength += v;
+    }
+  });
+
+  // 1. Splits / screen bifurcation (Раздвоение лица и губ)
+  const splits = parsed.filter(p => /splits|split.*os/i.test(p.lower));
+  splits.forEach(sp => {
+    conflicts.push({
+      id: 'splits_bifurcation',
+      level: 'danger',
+      title: `Раздвоение лица и губ на портретах (${sp.name})`,
+      desc: `Модель «${sp.filename}» натренирована на гимнастические шпагаты («splits») и деление планов. Внимание: на портретах и крупных планах её веса разрывают геометрию рта, создавая вторую нижнюю губу, раздвоенный подбородок и фантомные черты лица. Если вы не снимаете гимнастический шпагат во весь рост — обязательно отключите её.`,
+      culprits: [sp.file],
+      action: {
+        type: 'disable',
+        target: sp.file,
+        label: `Отключить ${sp.name}`,
+      }
+    });
+  });
+
+  // 2. Multi-Turbo clash (Конфликт планировщиков 4 шага vs 8 шагов)
+  const turbos = parsed.filter(p => /turbo.*4step|pika.*turbo|pika.*8step|fasth3.*preview|dmd2.*4step|fastvideo.*turbo|fasth3.*lora/i.test(p.lower));
+  if (turbos.length > 1) {
+    const names = turbos.map(t => `«${t.name}»`).join(', ');
+    conflicts.push({
+      id: 'turbo_clash',
+      level: 'danger',
+      title: `Конфликт турбо-ускорителей (${turbos.length} модели одновременно)`,
+      desc: `Одновременно включено несколько турбо-LoRA (${names}) с разным шагом сэмплирования (4 шага и 8 шагов). Их совместная работа ломает расписание шума (sigmas) диффузии, что приводит к сплошному шуму, чёрным кадрам или каше. Оставьте только один ускоритель.`,
+      culprits: turbos.map(t => t.file),
+      action: {
+        type: 'keep_one',
+        target: turbos[0].file,
+        culprits: turbos.map(t => t.file),
+        label: `Оставить только ${turbos[0].name}`,
+      }
+    });
+  }
+
+  // 3. Speed slider vs Motion repair (Конфликт динамики: ускорение vs сглаживание)
+  const hasSpeed = parsed.some(p => /speed_slider|speedslider/i.test(p.lower)) || (b.speed && b.speed.on && Math.abs(+b.speed.v) >= 1.5);
+  const hasRepair = parsed.some(p => /motion_repair/i.test(p.lower)) || (b.motion && b.motion.on);
+  if (hasSpeed && hasRepair) {
+    const repairItem = parsed.find(p => /motion_repair/i.test(p.lower));
+    conflicts.push({
+      id: 'speed_vs_repair',
+      level: 'warning',
+      title: 'Конфликт динамики: Speed Slider против Motion Repair',
+      desc: 'Включены одновременно ускорение («Speed Slider») и подавление дрожания («Motion Repair»). Один инструмент форсирует резкие межпакетные смещения, а второй пытается их сгладить. В результате видео может дёргаться рывками («желе»), заикаться или стробить.',
+      culprits: parsed.filter(p => /speed|motion/i.test(p.lower)).map(p => p.file),
+      action: {
+        type: 'disable',
+        target: repairItem ? repairItem.file : 'builtin_motion',
+        label: 'Отключить Motion Repair',
+      }
+    });
+  }
+
+  // 4. Overcooking / Total Weight Excess (Перегруз суммарного веса LoRA)
+  if (totalStrength > 1.35 || (parsed.length >= 3 && totalStrength > 1.2)) {
+    conflicts.push({
+      id: 'overcooking',
+      level: 'warning',
+      title: `Перегруз суммарного веса LoRA (${totalStrength.toFixed(2)} при норме до 1.0–1.2)`,
+      desc: `Включено ${parsed.length} LoRA с общим весом ${totalStrength.toFixed(2)}. В диффузионных моделях перегруз весов разрушает латентное пространство (эффект 'overbaking'): кожа становится неестественно восковой и пластиковой, мелкие черты лица «плавятся», появляются тёмные артефакты диффузии. Рекомендуется снизить веса до 0.5–0.6.`,
+      culprits: parsed.map(p => p.file),
+      action: {
+        type: 'scale_down',
+        target: '0.55',
+        label: 'Снизить силу активных LoRA до 0.55',
+      }
+    });
+  }
+
+  // 5. Multiple Heavy Anatomy / NSFW LoRAs (Наложение анатомических моделей)
+  const nsfw = parsed.filter(p => /dr34ml4y|unlocked|hmnsfw|aio.*sex|mysticxxx|rough.*sex|shrekman|deepthroat|cunnilingus|hmpussy|hmcumshot/i.test(p.lower));
+  if (nsfw.length >= 2) {
+    const names = nsfw.map(p => `«${p.name}»`).join(', ');
+    conflicts.push({
+      id: 'anatomy_stacking',
+      level: 'warning',
+      title: `Наложение анатомических LoRA (${nsfw.length} модели одновременно)`,
+      desc: `Одновременно включены ${names}. Эти модели переопределяют форму тел и интимных зон. Их одновременное наложение часто приводит к лишним конечностям, неестественной сцепке тел и деформации кожи. Рекомендуется оставить одну основную модель под текущую задачу.`,
+      culprits: nsfw.map(p => p.file),
+      action: {
+        type: 'keep_one',
+        target: nsfw[0].file,
+        culprits: nsfw.map(p => p.file),
+        label: `Оставить только ${nsfw[0].name}`,
+      }
+    });
+  }
+
+  // 6. Style Clash: 2D/Anime vs Realism
+  const anime = parsed.filter(p => /anime|2dan1m|cartoon|toon|3dcg/i.test(p.lower));
+  const realism = parsed.filter(p => /realism.*people|hyperrealistic|photo/i.test(p.lower)) || (b.realism && b.realism.on ? [{ file: 'builtin_realism', name: 'Реализм людей' }] : []);
+  if (anime.length && realism.length) {
+    conflicts.push({
+      id: 'style_clash',
+      level: 'warning',
+      title: 'Конфликт стилей: 2D/Аниме против фотореализма',
+      desc: `Активны одновременно аниме/2D LoRA (${anime[0].name}) и фотореализм (${realism[0].name}). Сеть получает взаимоисключающие стилевые команды, что приводит к гибридным лицам с восковыми пятнами и грязными текстурами.`,
+      culprits: [anime[0].file, realism[0].file],
+      action: {
+        type: 'disable',
+        target: anime[0].file,
+        label: `Отключить ${anime[0].name}`,
+      }
+    });
+  }
+
+  // 7. Duplicate Style: Multiple Latex models
+  const latex = parsed.filter(p => /latex/i.test(p.lower));
+  if (latex.length >= 2) {
+    const names = latex.map(p => `«${p.name}»`).join(', ');
+    conflicts.push({
+      id: 'duplicate_latex',
+      level: 'caution',
+      title: 'Дублирование стиля: несколько латексных LoRA',
+      desc: `Включены сразу две модели латекса (${names}). Их эффекты суммируются, вызывая чрезмерный зеркальный пересвет ткани и потерю фактуры складок.`,
+      culprits: latex.map(p => p.file),
+      action: {
+        type: 'keep_one',
+        target: latex[0].file,
+        culprits: latex.map(p => p.file),
+        label: `Оставить только ${latex[0].name}`,
+      }
+    });
+  }
+
+  return conflicts;
+}
+
+function renderConflictBoxHTML(conflicts) {
+  if (!conflicts || !conflicts.length) return '';
+  const colors = {
+    danger: { border: '#ff5555', bg: 'rgba(255, 60, 60, 0.15)', text: '#ff7777', badge: 'Критический конфликт' },
+    warning: { border: '#ffaa33', bg: 'rgba(255, 170, 50, 0.12)', text: '#ffbb44', badge: 'Предупреждение' },
+    caution: { border: '#ffd155', bg: 'rgba(255, 210, 80, 0.10)', text: '#ffe066', badge: 'Совет' },
+  };
+
+  return `<div class="lora-conflict-card" style="background:linear-gradient(135deg, rgba(230,40,40,0.12), rgba(20,20,30,0.7));border:1px solid rgba(255,80,80,0.4);border-radius:10px;padding:12px;margin-bottom:12px;box-shadow:0 4px 16px rgba(0,0,0,0.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:16px;line-height:1">⚠️</span>
+        <b style="color:#ff8888;font-size:13px;letter-spacing:0.2px">Обнаружены конфликты LoRA (${conflicts.length})</b>
+      </div>
+      <span style="font-size:11px;color:#ffa0a0;opacity:0.85">Могут ухудшить качество видео, исказить лицо или сломать кадры</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${conflicts.map((c, i) => {
+        const col = colors[c.level] || colors.warning;
+        return `<div class="lcb-row" data-ci="${i}" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-left:3.5px solid ${col.border};border-radius:6px;padding:8px 10px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:240px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:${col.border};background:${col.bg};padding:1px 5px;border-radius:3px">${col.badge}</span>
+                <b style="font-size:12px;color:${col.text}">${esc(c.title)}</b>
+              </div>
+              <div style="font-size:11.5px;color:var(--text-2, #ccc);line-height:1.4">${esc(c.desc)}</div>
+            </div>
+            ${c.action ? `<button type="button" class="btn mini lcb-act-btn" data-act="${esc(c.action.type)}" data-target="${esc(c.action.target || '')}" data-culprits="${esc(JSON.stringify(c.action.culprits || []))}" style="margin-top:2px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;white-space:nowrap;padding:4px 9px;font-size:11.5px;cursor:pointer;border-radius:6px">⚡ ${esc(c.action.label)}</button>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function handleConflictAction(btn) {
+  const act = btn.dataset.act;
+  const target = btn.dataset.target;
+  let culprits = [];
+  try { culprits = JSON.parse(btn.dataset.culprits || '[]'); } catch(e) {}
+
+  if (act === 'disable') {
+    const it = CL.items.find(x => x && (x.file === target || (x.file && x.file.endsWith(target))));
+    if (it) it.on = false;
+    syncAllLoras();
+    toast('Конфликтная LoRA отключена');
+  } else if (act === 'scale_down') {
+    const newWeight = parseFloat(target) || 0.55;
+    CL.items.forEach(x => {
+      if (x && x.on && +x.strength > newWeight) {
+        x.strength = newWeight;
+      }
+    });
+    syncAllLoras();
+    toast(`Сила активных LoRA снижена до ${newWeight}`);
+  } else if (act === 'keep_one') {
+    const keepFile = target;
+    culprits.forEach(f => {
+      if (f !== keepFile) {
+        const it = CL.items.find(x => x && (x.file === f || (x.file && x.file.endsWith(f))));
+        if (it) it.on = false;
+      }
+    });
+    syncAllLoras();
+    toast('Оставлена только одна активная LoRA из группы');
+  }
+}
+
 function renderCL() {
   const el = $('#clList');
   if (!el) return;
+  const conflicts = evaluateLoraConflicts(CL.items, CL.meta);
+  const confEl = $('#clConflicts');
+  if (confEl) {
+    confEl.innerHTML = renderConflictBoxHTML(conflicts);
+  }
   el.innerHTML = CL.items.length ? CL.items.map((x, i) => {
     const meta = getLoraMeta(x.file);
     const title = meta.name || cleanLoraName(x.file);
@@ -1885,7 +2120,8 @@ function mountLoras(box, st, keys) {
       <div class="row-l" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <span>Свои LoRA</span>
         <span class="hint">${customItems.length ? customItems.filter(x => x.on).length + ' акт.' : 'нет активных'}</span>
-      </div>`;
+      </div>
+      <div class="mode-lora-conflicts">${renderConflictBoxHTML(evaluateLoraConflicts(customItems, CL.meta, st.loras))}</div>`;
 
     if (customItems.length) {
       html += customItems.map((c, i) => {
@@ -1966,9 +2202,17 @@ function mountLoras(box, st, keys) {
       r.style.setProperty('--p', ((c.strength - r.min) / (r.max - r.min) * 100) + '%');
       $('.cl-v', el).textContent = c.on ? `сила ${(+c.strength).toFixed(2).replace(/\.?0+$/, '')}` : 'выключена';
     });
+    const cfBox = $('.mode-lora-conflicts', box);
+    if (cfBox) {
+      cfBox.innerHTML = renderConflictBoxHTML(evaluateLoraConflicts(CL.items, CL.meta, st.loras));
+    }
   };
 
   box.onclick = e => {
+    if (e.target.closest('.lcb-act-btn')) {
+      handleConflictAction(e.target.closest('.lcb-act-btn'));
+      return;
+    }
     if (e.target.closest('.cl-trig-chip')) {
       const trig = e.target.closest('.cl-trig-chip').dataset.trig;
       if (trig) {
@@ -4957,6 +5201,13 @@ $('#clList').addEventListener('click', e => {
   else if (e.target.closest('.cl-edit')) { openLoraEdit(CL.items[i].file); return; }
   else return;
   syncAllLoras();
+});
+$('#clConflicts')?.addEventListener('click', e => {
+  const btn = e.target.closest('.lcb-act-btn');
+  if (btn) {
+    e.preventDefault();
+    handleConflictAction(btn);
+  }
 });
 $('#clCivitai')?.addEventListener('click', openCivitaiModal);
 $('.nav[data-view="models"]').addEventListener('click', loadCL);
