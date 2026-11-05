@@ -1,6 +1,6 @@
 """Updates from GitHub Releases: look for a newer release, download its installer, check it, run it.
 
-The release must carry one file named Minimax.H3.Workspace.Uncensored-Setup.exe (GitHub shows its sha256 next to it).
+The release must carry an installer starting with Minimax.H3.Workspace.Uncensored-Setup (GitHub shows its sha256 next to it).
 """
 
 import hashlib
@@ -39,13 +39,15 @@ async def check(session):
     except Exception:
         return out
     new, cur = parse(rel.get("tag_name")), parse(APP_VERSION)
-    asset = next((a for a in rel.get("assets", []) if a.get("name") == ASSET), None)
+    asset = next((a for a in rel.get("assets", [])
+                  if a.get("name", "").startswith("Minimax.H3.Workspace.Uncensored-Setup") and a.get("name", "").endswith(".exe")), None)
     if not new or not cur or not asset or rel.get("draft") or rel.get("prerelease"):
         return out
     url = asset.get("browser_download_url", "")
     if new > cur and url.startswith(DOWNLOAD_PREFIX):
         digest = str(asset.get("digest") or "")
         out.update(available=True, version=".".join(map(str, new)), url=rel.get("html_url", ""), asset=url,
+                   name=asset.get("name") or ASSET,
                    size=int(asset.get("size") or 0), sha256=digest.split(":", 1)[1] if digest.startswith("sha256:") else "")
     return out
 
@@ -56,7 +58,8 @@ async def download(session, info):
         raise ValueError("Адрес обновления не с GitHub")
     folder = Path(tempfile.gettempdir()) / "h3studio_update"
     folder.mkdir(exist_ok=True)
-    dest = folder / ASSET
+    filename = info.get("name") or ASSET
+    dest = folder / filename
     sha = hashlib.sha256()
     size = 0
     async with session.get(info["asset"], headers=HEADERS, timeout=aiohttp.ClientTimeout(total=900)) as r:
