@@ -460,8 +460,13 @@ details[open] summary::before{content:'－ '}
 .ag-empty b{color:var(--text);font-size:15px}
 .ag-empty span{font-size:13px;padding:8px 12px;border-radius:10px;background:var(--bg-2);border:1px solid var(--line);cursor:pointer}
 .ag-empty span:hover{border-color:var(--accent)}
-.msg{max-width:88%;padding:11px 14px;border-radius:14px;line-height:1.55;font-size:13.5px;white-space:pre-wrap;word-wrap:break-word}
-.msg.u{align-self:flex-end;background:var(--accent-soft);border:1px solid rgba(var(--accent-rgb),.3)}
+.msg{max-width:88%;padding:11px 14px;border-radius:14px;line-height:1.55;font-size:13.5px;white-space:pre-wrap;word-wrap:break-word;user-select:text;-webkit-user-select:text}
+.msg.u{align-self:flex-end;background:var(--accent-soft);border:1px solid rgba(var(--accent-rgb),.3);position:relative;user-select:text;-webkit-user-select:text}
+.msg.u .msg-u-text{user-select:text;-webkit-user-select:text;white-space:pre-wrap;word-wrap:break-word}
+.msg.u .msg-u-actions{display:flex;gap:6px;justify-content:flex-end;margin-top:6px;opacity:0.75;transition:opacity .15s}
+.msg.u:hover .msg-u-actions{opacity:1}
+.msg-u-btn{background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);color:var(--text-2,#ddd);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:all .15s;user-select:none;-webkit-user-select:none}
+.msg-u-btn:hover{background:rgba(255,255,255,0.18);color:#fff;border-color:rgba(255,255,255,0.3)}
 .msg.a{align-self:flex-start;background:var(--bg-2);border:1px solid var(--line);white-space:normal}
 .msg.a p{margin:0 0 8px}.msg.a p:last-child{margin:0}
 .msg .imgs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
@@ -1157,8 +1162,8 @@ details[open] summary::before{content:'－ '}
             <span>Скачайте недостающую ноду по ссылке (кнопка «Code» → «Download ZIP» на GitHub), распакуйте папку в <b>ComfyUI\custom_nodes</b> и <b>перезапустите ComfyUI</b>. Потом нажмите «Проверить ещё раз».</span></div>
         </div>
         <div class="card" id="clCard" style="margin-bottom:16px" hidden>
-          <div class="card-h"><h3>Свои LoRA <small style="color:var(--muted);font-weight:500">· для тех, кто знает ComfyUI</small></h3><span><button class="btn" id="clRe" type="button">Обновить список</button> <button class="btn pri" id="clAdd" type="button">+ Добавить LoRA</button></span></div>
-          <div class="hint" style="margin-bottom:10px">Положите файл LoRA в папку <b>ComfyUI\models\loras</b>, нажмите «Обновить список» и добавьте её. Она подключится ко всем разделам сразу после основной модели. Новичкам ничего менять не нужно: всё уже готово. Свои VAE и модели меняются кнопкой «Заменить…» в списке ниже.</div>
+          <div class="card-h"><h3>Свои LoRA <small style="color:var(--muted);font-weight:500">· подключение, триггеры и каталог</small></h3><span><button class="btn" id="clCivitai" type="button" style="background:linear-gradient(135deg, rgba(230,50,50,0.25), rgba(180,20,50,0.4));border:1px solid rgba(255,80,80,0.4)">🌐 Каталог Civitai</button> <button class="btn" id="clRe" type="button">Обновить список</button> <button class="btn pri" id="clAdd" type="button">+ Добавить LoRA</button></span></div>
+          <div class="hint" style="margin-bottom:10px">Здесь отображаются все подключенные LoRA. Для каждой модели показаны понятное назначение, рекомендуемая сила и ключевые слова-триггеры для Агента. Скачивайте новые LoRA напрямую из каталога Civitai или добавляйте свои в <b>ComfyUI\models\loras</b>.</div>
           <div class="mlist" id="clList"></div>
         </div>
         <div class="card">
@@ -1207,11 +1212,112 @@ details[open] summary::before{content:'－ '}
   </div>
 </div>
 
+<div class="modal" id="loraEditModal" hidden>
+  <div class="box" style="max-width:520px;width:95%">
+    <h3 style="margin-top:0">Настройка LoRA для Агента</h3>
+    <p class="hint" id="lemFile" style="font-family:monospace;font-size:12px;margin-bottom:12px;word-break:break-all"></p>
+    
+    <label style="display:block;margin-bottom:10px">
+      <span style="font-size:12px;display:block;margin-bottom:4px;font-weight:600">Понятное название</span>
+      <input type="text" id="lemName" class="inp" style="width:100%" placeholder="Например: NSFW Позы (DR34ML4Y)">
+    </label>
+    
+    <label style="display:block;margin-bottom:10px">
+      <span style="font-size:12px;display:block;margin-bottom:4px;font-weight:600">Категория</span>
+      <input type="text" id="lemCat" class="inp" style="width:100%" placeholder="Например: NSFW & Позы, Одежда, Реализм...">
+    </label>
+
+    <label style="display:block;margin-bottom:10px">
+      <span style="font-size:12px;display:block;margin-bottom:4px;font-weight:600">Для чего эта LoRA (описание)</span>
+      <textarea id="lemDesc" class="inp" style="width:100%;height:60px;resize:vertical" placeholder="Кратко опишите, что делает эта модель..."></textarea>
+    </label>
+
+    <label style="display:block;margin-bottom:16px">
+      <span style="font-size:12px;display:block;margin-bottom:4px;font-weight:600">Слова-триггеры (через запятую)</span>
+      <input type="text" id="lemTrig" class="inp" style="width:100%" placeholder="m15510n4ry, d0gg1e, c0wg1rl...">
+      <span class="hint" style="font-size:11px;display:block;margin-top:4px">Агент автоматически вставит эти слова в промпт, когда LoRA включена!</span>
+    </label>
+
+    <div class="v-btns" style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn" id="lemCancel" type="button">Отмена</button>
+      <button class="btn primary" id="lemSave" type="button">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="civitaiModal" hidden>
+  <div class="box" style="max-width:960px;width:95%;max-height:92vh;display:flex;flex-direction:column;padding:20px;box-sizing:border-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="margin:0;display:flex;align-items:center;gap:8px">🌐 Каталог LoRA для MiniMax H3 (Civitai & Hugging Face)</h3>
+      <button class="btn mini" id="civClose" type="button" style="padding:4px 10px">✕</button>
+    </div>
+
+    <!-- Search bar and source picker -->
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input type="text" id="civSearch" class="inp" style="flex:1;min-width:200px" placeholder="Поиск по теме или названию (nsfw, latex, speed, motion, realism, turbo...)" />
+      <button class="btn primary" id="civSearchBtn" type="button" style="padding:6px 16px">Найти</button>
+      <select id="civMirror" class="inp" style="width:190px" title="Источник каталога">
+        <option value="red" selected>civitai.red (Civitai РФ)</option>
+        <option value="com">civitai.com (Civitai)</option>
+        <option value="hf">huggingface.co (Hugging Face)</option>
+      </select>
+    </div>
+
+    <!-- Direct Civitai or Hugging Face Link Download Bar -->
+    <div style="display:flex;gap:8px;margin-bottom:10px;background:rgba(255,255,255,0.03);padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);align-items:center;flex-wrap:wrap">
+      <input type="text" id="civLink" class="inp" style="flex:1;min-width:240px" placeholder="Вставьте прямую ссылку с Civitai или Hugging Face (например, https://huggingface.co/... или https://civitai.red/models/...)" />
+      <button class="btn" id="civLinkBtn" type="button" style="white-space:nowrap">Скачать по ссылке</button>
+    </div>
+
+    <!-- Token Settings Accordion -->
+    <div style="margin-bottom:12px;font-size:12px">
+      <details>
+        <summary style="cursor:pointer;color:var(--sub,#aaa);user-select:none">⚙ Настройки токенов Civitai и Hugging Face (для закрытых / 18+ / gated моделей)</summary>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span style="width:130px;color:var(--sub,#aaa)">Civitai API Key:</span>
+            <input type="password" id="civToken" class="inp" style="flex:1;min-width:200px" placeholder="Бесплатный Civitai API Key (на civitai.com: Account Settings -> API Keys)" />
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span style="width:130px;color:var(--sub,#aaa)">HF Token (hf_...):</span>
+            <input type="password" id="hfToken" class="inp" style="flex:1;min-width:200px" placeholder="Hugging Face Access Token (на huggingface.co/settings/tokens)" />
+            <button class="btn mini" id="civTokenSave" type="button">Сохранить</button>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Download Progress Box -->
+    <div id="civProgressBox" hidden style="background:rgba(255,100,100,0.08);border:1px solid rgba(255,100,100,0.3);border-radius:8px;padding:12px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span id="civDlTitle" style="font-weight:600;font-size:13px">Скачивание...</span>
+        <span id="civDlSpeed" style="font-size:12px;color:var(--accent,#ff7777);font-weight:600"></span>
+      </div>
+      <div style="background:rgba(0,0,0,0.4);border-radius:6px;height:8px;overflow:hidden;margin-bottom:6px">
+        <div id="civDlBar" style="background:var(--accent,#ff5555);height:100%;width:0%;transition:width 0.2s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px">
+        <span id="civDlText" class="hint">0 МБ / 0 МБ</span>
+        <button class="btn mini" id="civDlCancel" type="button">Отмена</button>
+      </div>
+    </div>
+
+    <!-- Results Grid -->
+    <div id="civResults" style="flex:1;overflow-y:auto;min-height:280px;display:grid;grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));gap:12px;padding-right:4px">
+      <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--sub,#888)">Нажмите «Найти» для загрузки каталога моделей MiniMax H3</div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
 
 /* ---------- local server (real ComfyUI) or offline demo ---------- */
 const API = location.protocol.startsWith('http');
@@ -1632,13 +1738,36 @@ const REF_HINT = {
   match: 'Модель смотрит на картинки в уменьшенном виде: быстрее, но сходство с лицом чуть хуже. Берите для проб, пока подбираете промпт.',
 };
 /* optional and custom LoRAs across all generation modes */
-let CL = { files: [], items: [] };
+let CL = { files: [], items: [], meta: {}, civitai_token: '', hf_token: '' };
 const activeLoraBoxes = new Set();
 let clSaveTimer = null;
+let civDlInterval = null;
+let currentEditingFile = null;
+
+function cleanLoraFile(path) {
+  if (!path) return '';
+  return path.split('\\').pop().split('/').pop();
+}
 
 function cleanLoraName(path) {
   if (!path) return '';
-  return path.split('\\').pop().split('/').pop().replace(/\.safetensors$/i, '');
+  return cleanLoraFile(path).replace(/\.safetensors$/i, '');
+}
+
+function getLoraMeta(path) {
+  if (!path) return { name: '', desc: '', triggers: [], category: '' };
+  const cf = cleanLoraFile(path);
+  return (CL.meta && (CL.meta[path] || CL.meta[cf])) || {
+    name: cleanLoraName(path),
+    desc: '',
+    triggers: [],
+    category: 'Пользовательская LoRA'
+  };
+}
+
+function getLoraTitle(path) {
+  const m = getLoraMeta(path);
+  return m.name || cleanLoraName(path);
 }
 
 const saveCL = () => postJSON('/api/loras/custom', { items: CL.items }).catch(e => toast(e.message));
@@ -1662,6 +1791,11 @@ async function loadCL() {
     if (!r.files) return;
     CL.files = r.files || [];
     CL.items = r.items || [];
+    CL.meta = r.meta || {};
+    CL.civitai_token = r.civitai_token || '';
+    CL.hf_token = r.hf_token || '';
+    if ($('#civToken') && !$('#civToken').value) $('#civToken').value = CL.civitai_token;
+    if ($('#hfToken') && !$('#hfToken').value) $('#hfToken').value = CL.hf_token;
     const clCard = $('#clCard');
     if (clCard) clCard.hidden = false;
     renderCL();
@@ -1674,12 +1808,39 @@ async function loadCL() {
 function renderCL() {
   const el = $('#clList');
   if (!el) return;
-  el.innerHTML = CL.items.length ? CL.items.map((x, i) => `<div class="m" data-i="${i}">
-      <b><select class="cl-f">${CL.files.map(f => `<option${f === x.file ? ' selected' : ''}>${esc(f)}</option>`).join('')}${CL.files.includes(x.file) ? '' : `<option selected>${esc(x.file)}</option>`}</select></b>
-      <span class="hint">сила <input class="cl-s" type="number" step="0.05" min="-4" max="4" value="${x.strength}" style="width:70px"></span>
-      <button class="chip cl-on${x.on ? ' on' : ''}" type="button">${x.on ? 'включена' : 'выключена'}</button>
-      <button class="btn mini cl-x" type="button">Убрать</button></div>`).join('')
-    : '<div class="hint">Пока нет своих LoRA. Добавьте файл LoRA в папку ComfyUI\\models\\loras.</div>';
+  el.innerHTML = CL.items.length ? CL.items.map((x, i) => {
+    const meta = getLoraMeta(x.file);
+    const title = meta.name || cleanLoraName(x.file);
+    const desc = meta.desc || '';
+    const cat = meta.category || '';
+    const triggers = meta.triggers || [];
+    const cleanFile = cleanLoraFile(x.file);
+
+    return `<div class="m" data-i="${i}" style="display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:12px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:8px;background:rgba(255,255,255,0.02)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:240px">
+          <b><select class="cl-f" style="max-width:340px;background:var(--bg-2,#1b1b22);color:var(--text,#fff);border:1px solid var(--line,#444);border-radius:6px;padding:4px 8px">${CL.files.map(f => {
+            const m = getLoraMeta(f);
+            return `<option value="${esc(f)}"${f === x.file ? ' selected' : ''}>${esc((m.category ? '[' + m.category + '] ' : '') + (m.name || cleanLoraName(f)))}</option>`;
+          }).join('')}${CL.files.includes(x.file) ? '' : `<option value="${esc(x.file)}" selected>${esc(title)}</option>`}</select></b>
+          ${cat ? `<span style="font-size:10px;background:rgba(255,255,255,0.08);color:var(--sub,#aaa);padding:2px 6px;border-radius:4px">${esc(cat)}</span>` : ''}
+          <span style="font-size:11px;color:var(--sub,#888);font-family:monospace" title="${esc(x.file)}">${esc(cleanFile)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="hint">сила <input class="cl-s" type="number" step="0.05" min="-4" max="4" value="${x.strength}" style="width:70px"></span>
+          <button class="chip cl-on${x.on ? ' on' : ''}" type="button">${x.on ? 'включена' : 'выключена'}</button>
+          <button class="btn mini cl-edit" type="button" title="Редактировать название и триггеры">✏</button>
+          <button class="btn mini cl-x" type="button" title="Убрать из списка">Убрать</button>
+        </div>
+      </div>
+      ${desc ? `<div class="hint" style="font-size:11.5px;color:var(--text-2,#bbb);margin-top:2px;line-height:1.35">${esc(desc)}</div>` : ''}
+      ${triggers.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:2px">
+        <span style="font-size:11px;color:var(--sub,#888);margin-right:2px">Триггеры для Агента:</span>
+        ${triggers.map(t => `<span class="cl-trig-chip" data-trig="${esc(t)}" title="Нажмите, чтобы скопировать триггер" style="cursor:pointer;font-size:11px;background:rgba(255,100,100,0.12);color:var(--accent,#ff7777);border:1px solid rgba(255,100,100,0.25);border-radius:4px;padding:1px 6px;user-select:all">${esc(t)}</span>`).join('')}
+      </div>` : ''}
+    </div>`;
+  }).join('')
+  : '<div class="hint">Пока нет добавленных LoRA. Выберите файл из списка ниже или скачайте из каталога Civitai.</div>';
 }
 
 const LORA_DEFS = {
@@ -1728,32 +1889,57 @@ function mountLoras(box, st, keys) {
 
     if (customItems.length) {
       html += customItems.map((c, i) => {
-        const clean = cleanLoraName(c.file);
-        return `<div class="lora custom-lora" data-ci="${i}" style="margin-bottom:10px">
-          <div class="lora-h" style="display:flex;align-items:center;justify-content:space-between">
-            <button class="chip cl-chip ${c.on ? 'on' : ''}" type="button" title="Включить / выключить">${esc(clean)}</button>
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="lora-v cl-v">${c.on ? 'сила ' + (+c.strength).toFixed(2).replace(/\.?0+$/, '') : 'выключена'}</span>
-              <button type="button" class="btn mini cl-del" style="padding:2px 7px;font-size:12px;opacity:0.75" title="Убрать эту LoRA">✕</button>
+        const meta = getLoraMeta(c.file);
+        const title = meta.name || cleanLoraName(c.file);
+        const desc = meta.desc || '';
+        const cat = meta.category || '';
+        const triggers = meta.triggers || [];
+        const cleanFile = cleanLoraFile(c.file);
+
+        return `<div class="lora custom-lora" data-ci="${i}" style="margin-bottom:12px;background:rgba(255,255,255,0.02);padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.06)">
+          <div class="lora-h" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <button class="chip cl-chip ${c.on ? 'on' : ''}" type="button" title="Включить / выключить" style="font-weight:600;font-size:12.5px">${esc(title)}</button>
+                ${cat ? `<span style="font-size:10px;background:rgba(255,255,255,0.08);color:var(--sub,#aaa);padding:2px 6px;border-radius:4px">${esc(cat)}</span>` : ''}
+              </div>
+              <div style="font-size:11px;color:var(--sub,#888);margin-top:3px;font-family:monospace" title="${esc(c.file)}">${esc(cleanFile)}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="lora-v cl-v" style="font-size:12px">${c.on ? 'сила ' + (+c.strength).toFixed(2).replace(/\.?0+$/, '') : 'выключена'}</span>
+              <button type="button" class="btn mini cl-edit" style="padding:2px 6px;font-size:11px;opacity:0.75" title="Редактировать название и триггеры">✏</button>
+              <button type="button" class="btn mini cl-del" style="padding:2px 6px;font-size:11px;opacity:0.75" title="Убрать эту LoRA">✕</button>
             </div>
           </div>
-          <input type="range" class="lora-r cl-r" min="-1" max="2" step="0.05" value="${c.strength}" ${c.on ? '' : 'disabled'} style="opacity:${c.on ? 1 : 0.35}">
+          ${desc ? `<div class="hint" style="margin:5px 0 4px 0;line-height:1.35;font-size:11.5px;color:var(--text-2,#bbb)">${esc(desc)}</div>` : ''}
+          ${triggers.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 6px 0;align-items:center">
+            <span style="font-size:10.5px;color:var(--sub,#888);margin-right:2px">Триггеры:</span>
+            ${triggers.map(t => `<span class="cl-trig-chip" data-trig="${esc(t)}" title="Нажмите, чтобы скопировать триггер" style="cursor:pointer;font-size:11px;background:rgba(255,100,100,0.12);color:var(--accent,#ff7777);border:1px solid rgba(255,100,100,0.25);border-radius:4px;padding:1px 6px;user-select:all">${esc(t)}</span>`).join('')}
+          </div>` : ''}
+          <input type="range" class="lora-r cl-r" min="-2" max="3" step="0.05" value="${c.strength}" ${c.on ? '' : 'disabled'} style="opacity:${c.on ? 1 : 0.35};margin-top:4px">
         </div>`;
       }).join('');
     }
 
-    // Selector to add a new custom LoRA
+    // Selector to add a new custom LoRA + Civitai browser button
+    html += `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px">`;
     if (files.length) {
-      html += `<div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-        <select class="c-lora-picker" style="flex:1;background:var(--bg-2, #1b1b22);color:var(--text, #fff);border:1px solid var(--line, #444);border-radius:8px;padding:6px 10px;font-size:12px;outline:none">
-          <option value="">+ Добавить свою LoRA из models\\loras...</option>
-          ${files.map(f => `<option value="${esc(f)}">${esc(cleanLoraName(f))}</option>`).join('')}
+      html += `<select class="c-lora-picker" style="flex:1;min-width:200px;background:var(--bg-2, #1b1b22);color:var(--text, #fff);border:1px solid var(--line, #444);border-radius:8px;padding:6px 10px;font-size:12px;outline:none">
+          <option value="">+ Добавить LoRA из models\\loras...</option>
+          ${files.map(f => {
+            const m = getLoraMeta(f);
+            const t = m.name || cleanLoraName(f);
+            const cat = m.category ? `[${m.category}] ` : '';
+            return `<option value="${esc(f)}">${esc(cat + t + ' (' + cleanLoraFile(f) + ')')}</option>`;
+          }).join('')}
         </select>
-        <button class="btn mini cl-reload-btn" type="button" title="Обновить список файлов в папке loras" style="padding:6px 10px">🔄</button>
-      </div>`;
+        <button class="btn mini cl-reload-btn" type="button" title="Обновить список файлов в папке loras" style="padding:6px 10px">🔄</button>`;
     } else {
-      html += `<div class="hint" style="margin-top:6px">Файлы LoRA не найдены в <b>ComfyUI\\models\\loras</b>. Положите туда файлы .safetensors и нажмите <button class="btn mini cl-reload-btn" type="button" style="padding:2px 8px;font-size:11px">🔄 обновить</button></div>`;
+      html += `<div class="hint" style="flex:1">В папке models\\loras пока нет файлов.</div>
+        <button class="btn mini cl-reload-btn" type="button" style="padding:6px 10px">🔄 обновить</button>`;
     }
+    html += `<button class="btn mini cl-civitai-btn" type="button" style="padding:6px 12px;background:linear-gradient(135deg, rgba(230,50,50,0.25), rgba(180,20,50,0.4));border:1px solid rgba(255,80,80,0.4);white-space:nowrap" title="Поиск и скачивание LoRA для MiniMax H3">🌐 Каталог Civitai</button>
+      </div>`;
 
     html += `</div>`;
     box.innerHTML = html;
@@ -1783,6 +1969,14 @@ function mountLoras(box, st, keys) {
   };
 
   box.onclick = e => {
+    if (e.target.closest('.cl-trig-chip')) {
+      const trig = e.target.closest('.cl-trig-chip').dataset.trig;
+      if (trig) {
+        navigator.clipboard?.writeText(trig);
+        toast('Скопирован триггер: ' + trig);
+      }
+      return;
+    }
     const stdEl = e.target.closest('.std-lora');
     if (stdEl && e.target.closest('.lora-t')) {
       const s = st.loras[stdEl.dataset.k];
@@ -1798,6 +1992,11 @@ function mountLoras(box, st, keys) {
       }
       return;
     }
+    if (cEl && e.target.closest('.cl-edit')) {
+      const idx = +cEl.dataset.ci;
+      if (CL.items[idx]) openLoraEdit(CL.items[idx].file);
+      return;
+    }
     if (cEl && e.target.closest('.cl-del')) {
       const idx = +cEl.dataset.ci;
       CL.items.splice(idx, 1);
@@ -1806,6 +2005,10 @@ function mountLoras(box, st, keys) {
     }
     if (e.target.closest('.cl-reload-btn')) {
       loadCL().then(() => syncAllLoras());
+      return;
+    }
+    if (e.target.closest('.cl-civitai-btn')) {
+      openCivitaiModal();
       return;
     }
   };
@@ -1835,7 +2038,9 @@ function mountLoras(box, st, keys) {
     if (e.target.classList.contains('c-lora-picker') && e.target.value) {
       const f = e.target.value;
       if (!CL.items.some(x => x.file === f)) {
-        CL.items.push({ file: f, strength: 0.8, on: true });
+        const m = getLoraMeta(f);
+        const stVal = m.recommended_weight || 0.8;
+        CL.items.push({ file: f, strength: stVal, on: true });
         syncAllLoras();
       }
       e.target.value = '';
@@ -1846,6 +2051,327 @@ function mountLoras(box, st, keys) {
   render();
   if (!CL.files.length) loadCL();
 }
+
+/* Modal and Civitai handling helpers */
+function openLoraEdit(file) {
+  currentEditingFile = file;
+  const m = getLoraMeta(file);
+  $('#lemFile').textContent = file;
+  $('#lemName').value = m.name || cleanLoraName(file);
+  $('#lemCat').value = m.category || '';
+  $('#lemDesc').value = m.desc || '';
+  $('#lemTrig').value = (m.triggers || []).join(', ');
+  $('#loraEditModal').hidden = false;
+}
+
+$('#lemCancel')?.addEventListener('click', () => { $('#loraEditModal').hidden = true; });
+$('#lemSave')?.addEventListener('click', async () => {
+  if (!currentEditingFile) return;
+  const name = $('#lemName').value.trim();
+  const category = $('#lemCat').value.trim();
+  const desc = $('#lemDesc').value.trim();
+  const triggers = $('#lemTrig').value.split(',').map(s => s.trim()).filter(Boolean);
+
+  try {
+    const r = await fetch('/api/loras/meta/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file: currentEditingFile, name, category, desc, triggers })
+    });
+    if (!r.ok) throw new Error(await r.text());
+    
+    CL.meta[currentEditingFile] = { file: currentEditingFile, name, category, desc, triggers };
+    $('#loraEditModal').hidden = true;
+    syncAllLoras();
+    toast('Настройки LoRA сохранены!');
+  } catch (err) {
+    toast('Ошибка сохранения: ' + err.message);
+  }
+});
+
+function openCivitaiModal() {
+  const m = $('#civitaiModal');
+  if (!m) return;
+  m.hidden = false;
+  if ($('#civToken')) $('#civToken').value = CL.civitai_token || '';
+  if (!$('#civResults .civ-card')) {
+    searchCivitai();
+  }
+  startPollCivDl();
+}
+
+function closeCivitaiModal() {
+  const m = $('#civitaiModal');
+  if (m) m.hidden = true;
+  stopPollCivDl();
+}
+
+$('#civClose')?.addEventListener('click', closeCivitaiModal);
+$('#civSearchBtn')?.addEventListener('click', () => searchCivitai());
+$('#civSearch')?.addEventListener('keydown', e => { if (e.key === 'Enter') searchCivitai(); });
+$('#civMirror')?.addEventListener('change', () => searchCivitai());
+
+$('#civTokenSave')?.addEventListener('click', async () => {
+  const civToken = ($('#civToken')?.value || '').trim();
+  const hfToken = ($('#hfToken')?.value || '').trim();
+  CL.civitai_token = civToken;
+  CL.hf_token = hfToken;
+  try {
+    await fetch('/api/loras/tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ civitai_token: civToken, hf_token: hfToken })
+    });
+    toast('Токены сохранены');
+  } catch (e) {
+    toast('Ошибка сохранения токенов: ' + e.message);
+  }
+});
+
+$('#civMirror')?.addEventListener('change', () => {
+  const m = $('#civMirror').value;
+  if (m === 'hf') {
+    $('#civSearch').placeholder = 'Поиск по Hugging Face (realism, turbo, style, orbit...)';
+  } else {
+    $('#civSearch').placeholder = 'Поиск по Civitai (nsfw, latex, speed, motion, girl...)';
+  }
+  searchCivitai();
+});
+
+$('#civLinkBtn')?.addEventListener('click', async () => {
+  const link = ($('#civLink').value || '').trim();
+  if (!link) { toast('Вставьте ссылку Civitai или Hugging Face'); return; }
+  const mirror = $('#civMirror').value || 'red';
+  toast('Проверяем ссылку модели...');
+  try {
+    const isHf = link.includes('huggingface.co') || (link.includes('/') && !link.includes('civitai') && !link.match(/^\d+$/));
+    const endpoint = isHf ? '/api/hf/resolve' : '/api/civitai/resolve';
+    const payload = isHf ? { link, token: ($('#hfToken')?.value || CL.hf_token || '') } : { link, mirror };
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Не удалось распознать ссылку');
+    const v = data.version;
+    await startDownloadCiv(v, data.name, v.description, data.source || (isHf ? 'HuggingFace' : 'Civitai'));
+  } catch (err) {
+    toast('Ошибка: ' + err.message);
+  }
+});
+
+let CATALOG_ITEMS = [];
+
+async function searchCivitai() {
+  const q = ($('#civSearch').value || '').trim();
+  const mirror = $('#civMirror').value || 'red';
+  const isHf = mirror === 'hf';
+  const resEl = $('#civResults');
+  resEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--sub,#aaa)">Загрузка моделей с ${isHf ? 'Hugging Face' : 'Civitai'}…</div>`;
+  try {
+    const civToken = ($('#civToken')?.value || CL.civitai_token || '').trim();
+    const hfToken = ($('#hfToken')?.value || CL.hf_token || '').trim();
+    const url = isHf
+      ? `/api/hf/search?query=${encodeURIComponent(q)}&token=${encodeURIComponent(hfToken)}`
+      : `/api/civitai/search?query=${encodeURIComponent(q)}&mirror=${encodeURIComponent(mirror)}&token=${encodeURIComponent(civToken)}`;
+    const r = await fetch(url);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Ошибка поиска');
+    CATALOG_ITEMS = data.items || [];
+    if (!CATALOG_ITEMS.length) {
+      resEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--sub,#aaa)">Ничего не найдено для MiniMax H3. Попробуйте изменить запрос.</div>';
+      return;
+    }
+    resEl.innerHTML = CATALOG_ITEMS.map((item, idx) => {
+      const versions = item.versions || [];
+      const v = versions[0] || {};
+      const img = item.images && item.images[0] ? item.images[0].url : '';
+      const triggers = v.trainedWords || [];
+      const isVideo = img && (img.toLowerCase().includes('.mp4') || img.toLowerCase().includes('.webm'));
+      const isHfItem = item.source === 'huggingface' || String(item.id || '').includes('/');
+      const srcBadge = isHfItem
+        ? '<span style="background:rgba(255,200,50,0.18);color:#ffd166;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">🤗 Hugging Face</span>'
+        : '<span style="background:rgba(50,150,255,0.18);color:#5bc0de;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">🌐 Civitai</span>';
+      const fallbackIcon = isHfItem ? '🤗' : '🌐';
+
+      const mediaHtml = img ? (isVideo
+        ? `<video src="${esc(img)}" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;object-position:top;pointer-events:none"></video>`
+        : `<img src="${esc(img)}" alt="" style="width:100%;height:100%;object-fit:cover;object-position:top" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;background:#181818;font-size:32px">${fallbackIcon}</div>`)
+        : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#181818;color:var(--sub,#666);font-size:36px">${fallbackIcon}</div>`;
+
+      const hasMulti = versions.length > 1;
+      const verSelectorHtml = hasMulti ? `
+        <div style="margin-top:6px;margin-bottom:6px">
+          <select class="inp civ-ver-select" style="width:100%;font-size:11px;padding:3px 6px;background:rgba(0,0,0,0.4)" data-idx="${idx}">
+            ${versions.map((ver, vIdx) => `<option value="${vIdx}">${esc(ver.filename || ver.name)}</option>`).join('')}
+          </select>
+        </div>` : '';
+
+      return `<div class="civ-card" data-idx="${idx}" style="background:var(--bg-2, rgba(255,255,255,0.03));border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;min-height:350px">
+        <div style="height:150px;min-height:150px;max-height:150px;background:#111;overflow:hidden;position:relative">
+          ${mediaHtml}
+          <div style="position:absolute;top:6px;left:6px">${srcBadge}</div>
+          <span class="civ-size-badge" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.75);font-size:10px;padding:2px 6px;border-radius:4px;color:#fff;${v.sizeMB > 0 ? '' : 'display:none'}">${esc(v.sizeMB)} MB</span>
+          ${item.downloads ? `<span style="position:absolute;bottom:6px;left:6px;background:rgba(0,0,0,0.7);font-size:10px;padding:1px 5px;border-radius:3px;color:#ddd">⬇ ${esc(item.downloads)}</span>` : ''}
+        </div>
+        <div style="padding:10px;flex:1;display:flex;flex-direction:column;justify-content:space-between">
+          <div>
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px;line-height:1.3" title="${esc(item.name)}">${esc(item.name)}</div>
+            <div class="civ-author-line" style="font-size:11px;color:var(--sub,#888);margin-bottom:6px">Автор: ${esc(item.creator || (isHfItem ? 'HF' : 'Civitai'))} · <span class="civ-ver-name">${esc(v.name || 'H3')}</span></div>
+            ${item.description ? `<div style="font-size:11px;color:var(--text-2,#bbb);line-height:1.35;margin-bottom:6px;max-height:48px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical" title="${esc(item.description)}">${esc(item.description)}</div>` : ''}
+            ${verSelectorHtml}
+            <div class="civ-triggers-box" style="font-size:11px;color:var(--accent,#ff7777);margin-bottom:8px">
+              ${triggers.length ? `<b>Триггеры:</b> <span style="user-select:all">${triggers.map(t => `<span class="cl-trig-chip" style="display:inline-block;cursor:pointer;background:rgba(255,100,100,0.12);padding:1px 5px;border-radius:4px;margin:1px 2px" title="Кликните чтобы скопировать">${esc(t)}</span>`).join(' ')}</span>` : '<span style="color:var(--sub,#777);font-size:11px">Триггеры не требуются</span>'}
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:8px">
+            <button class="btn mini primary civ-dl-btn" type="button" style="flex:1" data-idx="${idx}">⬇ Скачать в ComfyUI</button>
+            <a href="${esc(item.civitaiUrl)}" target="_blank" rel="noopener" class="btn mini" style="padding:4px 8px;text-decoration:none" title="Открыть страницу модели">🔗</a>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    resEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--accent,#ff5555)">Ошибка: ${esc(err.message)}</div>`;
+  }
+}
+
+$('#civResults')?.addEventListener('change', e => {
+  const sel = e.target.closest('.civ-ver-select');
+  if (!sel) return;
+  const card = sel.closest('.civ-card');
+  if (!card) return;
+  const idx = +sel.dataset.idx;
+  const item = CATALOG_ITEMS[idx];
+  if (!item || !item.versions) return;
+  const vIdx = +sel.value;
+  const ver = item.versions[vIdx];
+  if (!ver) return;
+
+  const verNameEl = card.querySelector('.civ-ver-name');
+  if (verNameEl) verNameEl.textContent = ver.name || 'H3';
+
+  const sizeBadge = card.querySelector('.civ-size-badge');
+  if (sizeBadge) {
+    sizeBadge.textContent = ver.sizeMB > 0 ? `${ver.sizeMB} MB` : '';
+    sizeBadge.style.display = ver.sizeMB > 0 ? '' : 'none';
+  }
+
+  const trigBox = card.querySelector('.civ-triggers-box');
+  if (trigBox) {
+    const words = ver.trainedWords || [];
+    if (words.length) {
+      trigBox.innerHTML = `<b>Триггеры:</b> <span style="user-select:all">${words.map(t => `<span class="cl-trig-chip" style="display:inline-block;cursor:pointer;background:rgba(255,100,100,0.12);padding:1px 5px;border-radius:4px;margin:1px 2px" title="Кликните чтобы скопировать">${esc(t)}</span>`).join(' ')}</span>`;
+    } else {
+      trigBox.innerHTML = `<span style="color:var(--sub,#777);font-size:11px">Триггеры не требуются</span>`;
+    }
+  }
+});
+
+$('#civResults')?.addEventListener('click', async e => {
+  const chip = e.target.closest('.cl-trig-chip');
+  if (chip) {
+    const text = chip.textContent.trim();
+    if (text) {
+      navigator.clipboard?.writeText(text);
+      toast('Триггер скопирован: ' + text);
+    }
+    return;
+  }
+  const btn = e.target.closest('.civ-dl-btn');
+  if (!btn) return;
+  const idx = +btn.dataset.idx;
+  const item = CATALOG_ITEMS[idx];
+  if (!item) return;
+  const card = btn.closest('.civ-card');
+  const sel = card ? card.querySelector('.civ-ver-select') : null;
+  const vIdx = sel ? +sel.value : 0;
+  const ver = (item.versions && item.versions[vIdx]) || (item.versions && item.versions[0]) || {};
+  const isHf = item.source === 'huggingface' || String(item.id || '').includes('/');
+  await startDownloadCiv(ver, item.name, item.description, isHf ? 'HuggingFace' : 'Civitai');
+});
+
+async function startDownloadCiv(ver, modelName, modelDesc, source = 'Civitai') {
+  const isHf = source === 'HuggingFace' || (ver.downloadUrl && ver.downloadUrl.includes('huggingface'));
+  const token = isHf
+    ? (($('#hfToken') ? $('#hfToken').value : '') || CL.hf_token || '')
+    : (($('#civToken') ? $('#civToken').value : '') || CL.civitai_token || '');
+  try {
+    const payload = {
+      url: ver.downloadUrl,
+      filename: ver.filename,
+      token: token,
+      name: modelName || ver.name,
+      desc: modelDesc || ver.description,
+      triggers: ver.trainedWords || [],
+      source: isHf ? 'HuggingFace' : 'Civitai'
+    };
+    const r = await fetch('/api/civitai/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error || 'Ошибка старта скачивания');
+    toast(`Начато скачивание LoRA (${payload.source}): ${ver.filename}`);
+    startPollCivDl();
+  } catch (err) {
+    toast('Ошибка: ' + err.message);
+  }
+}
+
+async function checkCivDlStatus() {
+  try {
+    const r = await fetch('/api/civitai/download/status');
+    const st = await r.json();
+    const box = $('#civProgressBox');
+    if (!box) return;
+    if (st.status === 'downloading') {
+      box.hidden = false;
+      $('#civDlTitle').textContent = `Скачивание: ${st.name || st.file}`;
+      $('#civDlSpeed').textContent = st.speed || '';
+      $('#civDlBar').style.width = (st.percent || 0) + '%';
+      const doneMB = (st.done / (1024 * 1024)).toFixed(1);
+      const totalMB = (st.total / (1024 * 1024)).toFixed(1);
+      $('#civDlText').textContent = `${doneMB} МБ / ${totalMB} МБ (${st.percent}%)`;
+    } else if (st.status === 'done') {
+      box.hidden = true;
+      stopPollCivDl();
+      toast('LoRA успешно скачана в ComfyUI!');
+      await loadCL();
+      syncAllLoras();
+    } else if (st.status === 'error') {
+      box.hidden = false;
+      $('#civDlTitle').textContent = `Ошибка скачивания: ${st.file}`;
+      $('#civDlSpeed').textContent = 'Сбой';
+      $('#civDlText').textContent = st.error || 'Неизвестная ошибка';
+      stopPollCivDl();
+    } else {
+      box.hidden = true;
+    }
+  } catch {}
+}
+
+function startPollCivDl() {
+  stopPollCivDl();
+  checkCivDlStatus();
+  civDlInterval = setInterval(checkCivDlStatus, 1500);
+}
+
+function stopPollCivDl() {
+  if (civDlInterval) {
+    clearInterval(civDlInterval);
+    civDlInterval = null;
+  }
+}
+
+$('#civDlCancel')?.addEventListener('click', async () => {
+  await fetch('/api/civitai/download/cancel', { method: 'POST' });
+  stopPollCivDl();
+  $('#civProgressBox').hidden = true;
+  toast('Скачивание отменено');
+});
 
 function loraForm(st, fd) {
   Object.entries(st.loras || {}).forEach(([k, s]) => fd.append('lora_' + k, s.on ? s.v : 'off'));
@@ -2725,7 +3251,7 @@ function renderLib() {
   $('#selToggle').classList.toggle('on', selecting);
   IMG_PANELS.forEach(f => f());  // thumbnails under the pictures of the picture sections
 }
-const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// esc is defined at top of script
 const byId = id => LIB.find(x => x.id === id);
 
 async function saveItems(items) {
@@ -3130,7 +3656,11 @@ function renderMsgs() {
   AG.msgs.forEach((m, idx) => {
     const d = document.createElement('div'); d.className = 'msg ' + (m.role === 'user' ? 'u' : 'a'); d.dataset.i = idx;
     if (m.role === 'user') {
-      d.textContent = m.content;
+      d.innerHTML = `<div class="msg-u-text">${esc(m.content)}</div>
+        <div class="msg-u-actions">
+          <button class="msg-u-btn" data-act="copy" type="button" title="Скопировать текст запроса в буфер">📋 Копировать</button>
+          <button class="msg-u-btn" data-act="edit" type="button" title="Вставить этот текст в поле ввода">✏ В поле ввода</button>
+        </div>`;
       if (m.images?.length) d.insertAdjacentHTML('beforeend', `<div class="imgs">${m.images.map(u => `<img src="${u}">`).join('')}</div>`);
     } else renderAssistant(d, m);
     $('#agMsgs').append(d);
@@ -3254,7 +3784,10 @@ async function agSend() {
   AG.msgs.push(reply); renderMsgs();
   const el = $('#agMsgs .msg:last-child');
   AG.busy = true; $('#agSend').textContent = 'Стоп'; AG.ctrl = new AbortController();
-  const ctx = { duration: AG_IMG.includes(AG.target) ? null : AG.target === 'video' ? V.dur : AG.target === 'lipsync' ? (L.dur0 ? L.len() : null) : RM[AG.target].S.dur };
+  const ctx = {
+    duration: AG_IMG.includes(AG.target) ? null : AG.target === 'video' ? V.dur : AG.target === 'lipsync' ? (L.dur0 ? L.len() : null) : RM[AG.target].S.dur,
+    loras: (CL.items || []).filter(x => x && x.on && x.file)
+  };
   if (AG.target === 'actor') ctx.voice = RM.actor.voice() ? 1 : 0;
   try {
     const r = await fetch('/api/agent/chat', {
@@ -3368,6 +3901,27 @@ async function sendPrompt(blk, to) {
   toast(`Промпт перенесён в ${name}` + (files.length && to !== 'video' && to !== 'krea' ? ' вместе с картинками' : '') + (to === 'lipsync' ? (au ? ' и аудио — выделите нужный фрагмент' : ' — добавьте аудио') : ''));
 }
 $('#agMsgs').addEventListener('click', async e => {
+  const uBtn = e.target.closest('.msg-u-btn');
+  if (uBtn) {
+    const msgEl = uBtn.closest('.msg.u');
+    const idx = msgEl ? +msgEl.dataset.i : -1;
+    const msg = AG.msgs[idx];
+    const text = msg ? msg.content : (msgEl ? msgEl.querySelector('.msg-u-text')?.textContent : '');
+    if (text) {
+      if (uBtn.dataset.act === 'copy') {
+        navigator.clipboard?.writeText(text);
+        toast('Текст запроса скопирован в буфер!');
+      } else if (uBtn.dataset.act === 'edit') {
+        const inp = $('#agIn');
+        if (inp) {
+          inp.value = text;
+          inp.focus();
+          toast('Запрос вставлен в поле ввода');
+        }
+      }
+    }
+    return;
+  }
   const blk = e.target.closest('.pblock'); if (!blk) return;
   if (e.target.closest('[data-copy]')) { navigator.clipboard?.writeText($('pre', blk).textContent); toast('Промпт скопирован'); return; }
   const to = e.target.closest('[data-send]')?.dataset.send; if (to) sendPrompt(blk, to);
@@ -4392,10 +4946,19 @@ $('#clList').addEventListener('change', e => {
   syncAllLoras();
 });
 $('#clList').addEventListener('click', e => {
+  if (e.target.closest('.cl-trig-chip')) {
+    const trig = e.target.closest('.cl-trig-chip').dataset.trig;
+    if (trig) { navigator.clipboard?.writeText(trig); toast('Скопирован триггер: ' + trig); }
+    return;
+  }
   const row = e.target.closest('.m'); if (!row) return; const i = +row.dataset.i;
-  if (e.target.closest('.cl-on')) CL.items[i].on = !CL.items[i].on; else if (e.target.closest('.cl-x')) CL.items.splice(i, 1); else return;
+  if (e.target.closest('.cl-on')) CL.items[i].on = !CL.items[i].on;
+  else if (e.target.closest('.cl-x')) CL.items.splice(i, 1);
+  else if (e.target.closest('.cl-edit')) { openLoraEdit(CL.items[i].file); return; }
+  else return;
   syncAllLoras();
 });
+$('#clCivitai')?.addEventListener('click', openCivitaiModal);
 $('.nav[data-view="models"]').addEventListener('click', loadCL);
 if (API) {
   connectEvents(); loadStatus(); loadCloud(); pollSystem(); loadCL();

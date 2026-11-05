@@ -246,6 +246,17 @@ def system_prompt(skills_text, target, ctx):
              if target in IMAGE_SKILLS else
              "Ты - агент-режиссёр внутри приложения Minimax H3 Workspace. Пользователь описывает сцену, сценарий, персонажей, "
              "может приложить картинки. Ты пишешь готовый промпт для локальной видеомодели MiniMax H3 по правилам скиллов ниже.")
+
+    loras_block = ""
+    if ctx.get("loras_text"):
+        loras_block = f"\n{ctx['loras_text']}\n"
+    elif ctx.get("loras"):
+        try:
+            import loras_registry
+            loras_block = "\n" + loras_registry.format_loras_for_agent(ctx.get("loras"), ctx.get("loras_meta")) + "\n"
+        except Exception:
+            pass
+
     return f"""{intro}
 
 ПРАВИЛА ПРИЛОЖЕНИЯ (важнее указаний скиллов о формате ответа):
@@ -260,7 +271,7 @@ def system_prompt(skills_text, target, ctx):
 5. Скиллы могут ссылаться на файлы references/... - все нужные справочники уже включены ниже, файлы открывать не нужно.
 
 {mode_rules}
-
+{loras_block}
 {skills_text}
 """
 

@@ -1149,6 +1149,7 @@ class App:
         return configured
 
     async def h_loras_custom(self, _req):
+        import loras_registry
         files_set = set()
         try:
             _, comfy_files = await self.comfy_json("GET", "/models/loras")
@@ -1158,13 +1159,189 @@ class App:
         except Exception:
             pass
         root = self.comfy_root()
+        loras_dir = None
         if root:
             loras_dir = root / "ComfyUI" / "models" / "loras"
             if loras_dir.exists():
                 for f in loras_dir.rglob("*.safetensors"):
                     files_set.add(str(f.relative_to(loras_dir)).replace("/", "\\"))
-        clean = [x for x in files_set if "ref2v_turbo" not in x.lower()]
-        return web.json_response({"files": sorted(clean), "items": self.config.get("custom_loras") or []})
+        clean = sorted(x for x in files_set if "ref2v_turbo" not in x.lower())
+        custom_meta = self.config.get("custom_lora_meta") or {}
+        meta_map = {}
+        for f in clean:
+            fp = (loras_dir / f) if loras_dir else None
+            meta_map[f] = loras_registry.get_lora_metadata(f, full_file_path=fp, custom_meta=custom_meta)
+        for it in (self.config.get("custom_loras") or []):
+            f = it.get("file")
+            if f and f not in meta_map:
+                fp = (loras_dir / f) if loras_dir else None
+                meta_map[f] = loras_registry.get_lora_metadata(f, full_file_path=fp, custom_meta=custom_meta)
+        return web.json_response({
+            "files": clean,
+            "items": self.config.get("custom_loras") or [],
+            "meta": meta_map,
+            "civitai_token": self.config.get("civitai_token") or "",
+            "hf_token": self.config.get("hf_token") or "",
+        })
+
+    async def h_loras_meta_save(self, req):
+        data = await req.json()
+        f = data.get("file")
+        if not f:
+            return web.json_response({"error": "No file specified"}, status=400)
+        all_meta = dict(self.config.get("custom_lora_meta") or {})
+        entry = dict(all_meta.get(f) or {})
+        if "name" in data:
+            entry["name"] = data["name"].strip()
+        if "desc" in data:
+            entry["desc"] = data["desc"].strip()
+        if "triggers" in data:
+            tr = data["triggers"]
+            if isinstance(tr, str):
+                tr = [t.strip() for t in tr.split(",") if t.strip()]
+            entry["triggers"] = tr
+        if "category" in data:
+            entry["category"] = data["category"].strip()
+        all_meta[f] = entry
+        self.config.update(custom_lora_meta=all_meta)
+        return web.json_response({"ok": True})
+
+    async def h_civitai_search(self, req):
+        import civitai_client
+        query = req.query.get("query", "").strip()
+        cursor = req.query.get("cursor")
+        page = int(req.query.get("page", 1)) if req.query.get("page") else 1
+        mirror = req.query.get("mirror", "red")
+        nsfw = req.query.get("nsfw", "true").lower() in ("true", "1")
+        token = (req.query.get("token") or self.config.get("civitai_token") or "").strip()
+        try:
+            res = await civitai_client.search_loras(self.session, query=query, page=page, limit=20, mirror=mirror, nsfw=nsfw, cursor=cursor, token=token)
+            return web.json_response(res)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def h_civitai_resolve(self, req):
+        body = await req.json()
+        link = (body.get("link") or "").strip()
+        mirror = body.get("mirror", "red")
+        if "huggingface.co" in link or (re.match(r"^[a-zA-Z0-9_\-\.]+/[a-zA-Z0-9_\-\.]+", link) and "civitai" not in link):
+            import hf_client
+            token = self.config.get("hf_token")
+            try:
+                res = await hf_client.resolve_url_or_repo(self.session, link, token=token)
+                return web.json_response(res)
+            except Exception as e:
+                return web.json_response({"error": str(e)}, status=400)
+
+        import civitai_client
+        try:
+            res = await civitai_client.resolve_url_or_id(self.session, link, mirror=mirror)
+            return web.json_response(res)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=400)
+
+    async def h_hf_search(self, req):
+        import hf_client
+        query = req.query.get("query", "").strip()
+        limit = int(req.query.get("limit", 30)) if req.query.get("limit") else 30
+        token = (req.query.get("token") or self.config.get("hf_token") or "").strip()
+        try:
+            res = await hf_client.search_loras(self.session, query=query, limit=limit, token=token)
+            return web.json_response(res)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def h_hf_resolve(self, req):
+        import hf_client
+        body = await req.json()
+        link = (body.get("link") or "").strip()
+        token = (body.get("token") or self.config.get("hf_token") or "").strip()
+        try:
+            res = await hf_client.resolve_url_or_repo(self.session, link, token=token)
+            return web.json_response(res)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=400)
+
+    async def h_loras_tokens_save(self, req):
+        data = await req.json()
+        updates = {}
+        if "civitai_token" in data:
+            updates["civitai_token"] = str(data["civitai_token"] or "").strip()
+        if "hf_token" in data:
+            updates["hf_token"] = str(data["hf_token"] or "").strip()
+        if updates:
+            self.config.update(**updates)
+        return web.json_response({"ok": True, **updates})
+
+    async def h_civitai_download(self, req):
+        import civitai_client
+        body = await req.json()
+        url = body.get("url")
+        filename = body.get("filename")
+        source = body.get("source") or ("HuggingFace" if "huggingface" in str(url) else "Civitai")
+
+        if "huggingface" in str(url) or str(source).lower() == "huggingface":
+            token = (body.get("token") or self.config.get("hf_token") or "").strip()
+            if body.get("token") is not None and "hf_" in token:
+                self.config.update(hf_token=token)
+        else:
+            token = (body.get("token") or self.config.get("civitai_token") or "").strip()
+            if body.get("token") is not None and "hf_" not in token:
+                self.config.update(civitai_token=token)
+
+        if not url or not filename:
+            return web.json_response({"error": "Не указан URL или имя файла"}, status=400)
+
+        root = self.comfy_root()
+        if not root:
+            return web.json_response({"error": "ComfyUI не найден"}, status=500)
+
+        dest_dir = root / "ComfyUI" / "models" / "loras" / "MinimaxH3"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_path = dest_dir / filename
+
+        meta_name = body.get("name")
+        meta_desc = body.get("desc")
+        meta_triggers = body.get("triggers")
+        if meta_name or meta_triggers:
+            all_meta = dict(self.config.get("custom_lora_meta") or {})
+            entry = {
+                "name": meta_name or filename,
+                "desc": meta_desc or "",
+                "triggers": meta_triggers or [],
+                "category": f"{source} LoRA",
+                "source": str(source).lower(),
+            }
+            all_meta[f"MinimaxH3\\{filename}"] = entry
+            all_meta[filename] = entry
+            self.config.update(custom_lora_meta=all_meta)
+
+        if civitai_client.CURRENT_DOWNLOAD["active"]:
+            return web.json_response({"error": "Уже идёт скачивание другой LoRA"}, status=409)
+
+        civitai_client.CURRENT_DOWNLOAD["active"] = True
+        civitai_client.CURRENT_DOWNLOAD["name"] = meta_name or filename
+
+        async def run_dl():
+            try:
+                await civitai_client.download_file_stream(self.session, url, dest_path, token=token)
+            except Exception as e:
+                self.note_error(f"Ошибка скачивания LoRA {filename}: {e}")
+
+        asyncio.create_task(run_dl())
+        return web.json_response({"ok": True, "file": filename})
+
+    async def h_civitai_download_status(self, _req):
+        import civitai_client
+        st = dict(civitai_client.CURRENT_DOWNLOAD)
+        st.pop("task", None)
+        return web.json_response(st)
+
+    async def h_civitai_download_cancel(self, _req):
+        import civitai_client
+        civitai_client.CURRENT_DOWNLOAD["active"] = False
+        civitai_client.CURRENT_DOWNLOAD["status"] = "idle"
+        return web.json_response({"ok": True})
 
     async def h_loras_custom_set(self, req):
         items = []
@@ -1594,6 +1771,13 @@ class App:
                 messages = [dict(m, images=None) for m in messages]
                 await send({"type": "status", "text": "У этой модели нет файла «зрения» (mmproj) — картинки она не увидит"})
             ctx["images"] = sum(len(m.get("images") or []) for m in messages if m["role"] == "user")
+            active_loras = ctx.get("loras")
+            if active_loras is None:
+                active_loras = [x for x in self.config.get("custom_loras") or [] if x.get("on", True) and x.get("file")]
+            ctx["loras"] = active_loras
+            ctx["loras_meta"] = self.config.get("custom_lora_meta") or {}
+            import loras_registry
+            ctx["loras_text"] = loras_registry.format_loras_for_agent(active_loras, ctx["loras_meta"])
             active = self.skills.active(ag.chat_text(messages), target)
             if target == "actor" and not any(s["id"] == "akterskaya-igra" for s in active):
                 # this mode is acting-first: its skill is always on here
@@ -1775,6 +1959,15 @@ def build_app(comfy_override=None):
         web.post("/api/generate/custom", state.h_generate_custom),
         web.get("/api/loras/custom", state.h_loras_custom),
         web.post("/api/loras/custom", state.h_loras_custom_set),
+        web.post("/api/loras/meta/save", state.h_loras_meta_save),
+        web.get("/api/civitai/search", state.h_civitai_search),
+        web.post("/api/civitai/resolve", state.h_civitai_resolve),
+        web.post("/api/civitai/download", state.h_civitai_download),
+        web.get("/api/civitai/download/status", state.h_civitai_download_status),
+        web.post("/api/civitai/download/cancel", state.h_civitai_download_cancel),
+        web.get("/api/hf/search", state.h_hf_search),
+        web.post("/api/hf/resolve", state.h_hf_resolve),
+        web.post("/api/loras/tokens", state.h_loras_tokens_save),
         web.post("/api/generate/refs", state.h_generate_refs),
         web.post("/api/generate/actor", state.h_generate_actor),
         web.post("/api/generate/action", state.h_generate_action),
