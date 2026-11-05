@@ -1631,32 +1631,231 @@ const REF_HINT = {
   max: 'Модель внимательно разглядывает ваши картинки в полном размере, поэтому лицо и одежда похожи сильнее всего. Но работает в 2–3 раза дольше. Берите для готового видео.',
   match: 'Модель смотрит на картинки в уменьшенном виде: быстрее, но сходство с лицом чуть хуже. Берите для проб, пока подбираете промпт.',
 };
-/* optional LoRAs: the same on/off switch and strength slider in every mode */
+/* optional and custom LoRAs across all generation modes */
+let CL = { files: [], items: [] };
+const activeLoraBoxes = new Set();
+let clSaveTimer = null;
+
+function cleanLoraName(path) {
+  if (!path) return '';
+  return path.split('\\').pop().split('/').pop().replace(/\.safetensors$/i, '');
+}
+
+const saveCL = () => postJSON('/api/loras/custom', { items: CL.items }).catch(e => toast(e.message));
+
+function debouncedSaveCL() {
+  clearTimeout(clSaveTimer);
+  clSaveTimer = setTimeout(() => saveCL(), 400);
+}
+
+function syncAllLoras() {
+  saveCL();
+  renderCL();
+  activeLoraBoxes.forEach(render => {
+    try { render(); } catch(e) {}
+  });
+}
+
+async function loadCL() {
+  try {
+    const r = await (await fetch('/api/loras/custom')).json();
+    if (!r.files) return;
+    CL.files = r.files || [];
+    CL.items = r.items || [];
+    const clCard = $('#clCard');
+    if (clCard) clCard.hidden = false;
+    renderCL();
+    activeLoraBoxes.forEach(render => {
+      try { render(); } catch(e) {}
+    });
+  } catch {}
+}
+
+function renderCL() {
+  const el = $('#clList');
+  if (!el) return;
+  el.innerHTML = CL.items.length ? CL.items.map((x, i) => `<div class="m" data-i="${i}">
+      <b><select class="cl-f">${CL.files.map(f => `<option${f === x.file ? ' selected' : ''}>${esc(f)}</option>`).join('')}${CL.files.includes(x.file) ? '' : `<option selected>${esc(x.file)}</option>`}</select></b>
+      <span class="hint">сила <input class="cl-s" type="number" step="0.05" min="-4" max="4" value="${x.strength}" style="width:70px"></span>
+      <button class="chip cl-on${x.on ? ' on' : ''}" type="button">${x.on ? 'включена' : 'выключена'}</button>
+      <button class="btn mini cl-x" type="button">Убрать</button></div>`).join('')
+    : '<div class="hint">Пока нет своих LoRA. Добавьте файл LoRA в папку ComfyUI\\models\\loras.</div>';
+}
+
 const LORA_DEFS = {
   realism: { name: 'Реализм людей', hint: 'Для живых людей: естественная кожа и лицо. Если лицо выглядит «пластиково» — включите.', min: 0, max: 1, step: .05, v: .5, on: false },
   motion: { name: 'Исправление движения', hint: 'Если движение рвётся, дёргается или «плывёт» — включите.', min: 0, max: 1, step: .05, v: .5, on: false },
   dmad: { name: 'DMAD', hint: 'Усиливает динамику и чёткость движения. Как в исходном экшн-workflow: 0.8.', min: 0, max: 1.2, step: .05, v: .8, on: true },
   speed: { name: 'Speed Slider', hint: 'Скорость движения: 3–4 — быстро и резко; ближе к 0 — спокойнее; со знаком минус — замедление.', min: -8, max: 8, step: .5, v: 4, on: true },
 };
+
 function mountLoras(box, st, keys) {
+  if (!box) return;
   st.loras = st.loras || {};
-  keys.forEach(k => { st.loras[k] = st.loras[k] || { on: LORA_DEFS[k].on, v: LORA_DEFS[k].v }; });
-  box.innerHTML = keys.length ? `<div class="row"><div class="row-l">Дополнительные LoRA <span class="hint" style="font-family:inherit">включите нужные и задайте силу влияния</span></div>`
-    + keys.map(k => { const d = LORA_DEFS[k]; return `<div class="lora" data-k="${k}"><div class="lora-h"><button class="chip lora-t" type="button">${d.name}</button><span class="lora-v"></span></div>`
-      + `<input type="range" class="lora-r" min="${d.min}" max="${d.max}" step="${d.step}"><div class="hint">${d.hint}</div></div>`; }).join('') + '</div>' : '';
-  const paint = () => $$('.lora', box).forEach(el => {
-    const s = st.loras[el.dataset.k], r = $('.lora-r', el);
-    $('.lora-t', el).classList.toggle('on', s.on);
-    r.value = s.v; r.disabled = !s.on; r.style.opacity = s.on ? 1 : .35;
-    r.style.setProperty('--p', ((s.v - r.min) / (r.max - r.min) * 100) + '%');
-    $('.lora-v', el).textContent = s.on ? `сила ${(+s.v).toFixed(2).replace(/\.?0+$/, '')}` : 'выключена';
+  (keys || []).forEach(k => {
+    if (LORA_DEFS[k]) {
+      st.loras[k] = st.loras[k] || { on: LORA_DEFS[k].on, v: LORA_DEFS[k].v };
+    }
   });
-  box.onclick = e => { const el = e.target.closest('.lora'); if (!el || !e.target.closest('.lora-t')) return; const s = st.loras[el.dataset.k]; s.on = !s.on; paint(); };
-  box.oninput = e => { const el = e.target.closest('.lora'); if (!el) return; st.loras[el.dataset.k].v = +e.target.value; paint(); };
-  st._paintLoras = paint;
-  paint();
+
+  const render = () => {
+    let html = '';
+    
+    // 1. Built-in predefined LoRAs if keys specified
+    if (keys && keys.length) {
+      html += `<div class="row" style="margin-bottom:12px">
+        <div class="row-l">Встроенные LoRA <span class="hint" style="font-family:inherit">включите нужные</span></div>`
+        + keys.map(k => {
+          const d = LORA_DEFS[k];
+          if (!d) return '';
+          return `<div class="lora std-lora" data-k="${k}">
+            <div class="lora-h"><button class="chip lora-t" type="button">${d.name}</button><span class="lora-v"></span></div>
+            <input type="range" class="lora-r" min="${d.min}" max="${d.max}" step="${d.step}">
+            <div class="hint">${d.hint}</div>
+          </div>`;
+        }).join('') + '</div>';
+    }
+
+    // 2. Custom user LoRAs section
+    const customItems = CL.items || [];
+    const files = CL.files || [];
+    
+    html += `<div class="row custom-loras-section" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line, rgba(255,255,255,0.1))">
+      <div class="row-l" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span>Свои LoRA</span>
+        <span class="hint">${customItems.length ? customItems.filter(x => x.on).length + ' акт.' : 'нет активных'}</span>
+      </div>`;
+
+    if (customItems.length) {
+      html += customItems.map((c, i) => {
+        const clean = cleanLoraName(c.file);
+        return `<div class="lora custom-lora" data-ci="${i}" style="margin-bottom:10px">
+          <div class="lora-h" style="display:flex;align-items:center;justify-content:space-between">
+            <button class="chip cl-chip ${c.on ? 'on' : ''}" type="button" title="Включить / выключить">${esc(clean)}</button>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="lora-v cl-v">${c.on ? 'сила ' + (+c.strength).toFixed(2).replace(/\.?0+$/, '') : 'выключена'}</span>
+              <button type="button" class="btn mini cl-del" style="padding:2px 7px;font-size:12px;opacity:0.75" title="Убрать эту LoRA">✕</button>
+            </div>
+          </div>
+          <input type="range" class="lora-r cl-r" min="-1" max="2" step="0.05" value="${c.strength}" ${c.on ? '' : 'disabled'} style="opacity:${c.on ? 1 : 0.35}">
+        </div>`;
+      }).join('');
+    }
+
+    // Selector to add a new custom LoRA
+    if (files.length) {
+      html += `<div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <select class="c-lora-picker" style="flex:1;background:var(--bg-2, #1b1b22);color:var(--text, #fff);border:1px solid var(--line, #444);border-radius:8px;padding:6px 10px;font-size:12px;outline:none">
+          <option value="">+ Добавить свою LoRA из models\\loras...</option>
+          ${files.map(f => `<option value="${esc(f)}">${esc(cleanLoraName(f))}</option>`).join('')}
+        </select>
+        <button class="btn mini cl-reload-btn" type="button" title="Обновить список файлов в папке loras" style="padding:6px 10px">🔄</button>
+      </div>`;
+    } else {
+      html += `<div class="hint" style="margin-top:6px">Файлы LoRA не найдены в <b>ComfyUI\\models\\loras</b>. Положите туда файлы .safetensors и нажмите <button class="btn mini cl-reload-btn" type="button" style="padding:2px 8px;font-size:11px">🔄 обновить</button></div>`;
+    }
+
+    html += `</div>`;
+    box.innerHTML = html;
+    paint();
+  };
+
+  const paint = () => {
+    $$('.std-lora', box).forEach(el => {
+      const s = st.loras[el.dataset.k], r = $('.lora-r', el);
+      if (!s || !r) return;
+      $('.lora-t', el).classList.toggle('on', !!s.on);
+      r.value = s.v; r.disabled = !s.on; r.style.opacity = s.on ? 1 : .35;
+      r.style.setProperty('--p', ((s.v - r.min) / (r.max - r.min) * 100) + '%');
+      $('.lora-v', el).textContent = s.on ? `сила ${(+s.v).toFixed(2).replace(/\.?0+$/, '')}` : 'выключена';
+    });
+    $$('.custom-lora', box).forEach(el => {
+      const idx = +el.dataset.ci;
+      const c = CL.items[idx];
+      if (!c) return;
+      $('.cl-chip', el).classList.toggle('on', !!c.on);
+      const r = $('.cl-r', el);
+      if (!r) return;
+      r.value = c.strength; r.disabled = !c.on; r.style.opacity = c.on ? 1 : .35;
+      r.style.setProperty('--p', ((c.strength - r.min) / (r.max - r.min) * 100) + '%');
+      $('.cl-v', el).textContent = c.on ? `сила ${(+c.strength).toFixed(2).replace(/\.?0+$/, '')}` : 'выключена';
+    });
+  };
+
+  box.onclick = e => {
+    const stdEl = e.target.closest('.std-lora');
+    if (stdEl && e.target.closest('.lora-t')) {
+      const s = st.loras[stdEl.dataset.k];
+      if (s) { s.on = !s.on; paint(); }
+      return;
+    }
+    const cEl = e.target.closest('.custom-lora');
+    if (cEl && e.target.closest('.cl-chip')) {
+      const idx = +cEl.dataset.ci;
+      if (CL.items[idx]) {
+        CL.items[idx].on = !CL.items[idx].on;
+        syncAllLoras();
+      }
+      return;
+    }
+    if (cEl && e.target.closest('.cl-del')) {
+      const idx = +cEl.dataset.ci;
+      CL.items.splice(idx, 1);
+      syncAllLoras();
+      return;
+    }
+    if (e.target.closest('.cl-reload-btn')) {
+      loadCL().then(() => syncAllLoras());
+      return;
+    }
+  };
+
+  box.oninput = e => {
+    const stdEl = e.target.closest('.std-lora');
+    if (stdEl && e.target.classList.contains('lora-r')) {
+      if (st.loras[stdEl.dataset.k]) {
+        st.loras[stdEl.dataset.k].v = +e.target.value;
+        paint();
+      }
+      return;
+    }
+    const cEl = e.target.closest('.custom-lora');
+    if (cEl && e.target.classList.contains('cl-r')) {
+      const idx = +cEl.dataset.ci;
+      if (CL.items[idx]) {
+        CL.items[idx].strength = +e.target.value;
+        paint();
+        debouncedSaveCL();
+      }
+      return;
+    }
+  };
+
+  box.onchange = e => {
+    if (e.target.classList.contains('c-lora-picker') && e.target.value) {
+      const f = e.target.value;
+      if (!CL.items.some(x => x.file === f)) {
+        CL.items.push({ file: f, strength: 0.8, on: true });
+        syncAllLoras();
+      }
+      e.target.value = '';
+    }
+  };
+
+  activeLoraBoxes.add(render);
+  render();
+  if (!CL.files.length) loadCL();
 }
-function loraForm(st, fd) { Object.entries(st.loras || {}).forEach(([k, s]) => fd.append('lora_' + k, s.on ? s.v : 'off')); }
+
+function loraForm(st, fd) {
+  Object.entries(st.loras || {}).forEach(([k, s]) => fd.append('lora_' + k, s.on ? s.v : 'off'));
+  if (CL.items && CL.items.length) {
+    const active = CL.items.filter(x => x.on && x.file);
+    if (active.length) {
+      fd.append('custom_loras', JSON.stringify(active));
+    }
+  }
+}
 
 // reference slots take the shape of the picture: 16:9 wide, 9:16 tall, square square
 function fitSlot(r, img) {
@@ -1721,6 +1920,7 @@ const vPrev = previewPanel($('#vPreview'), V, {
       fd.append('prompt', $('#vPrompt').value.trim());
       fd.append('aspect', V.aspect); fd.append('quality', V.q); fd.append('duration', V.dur);
       seedForm(V, fd);
+      loraForm(V, fd);
       if ($('#dFirst')._file) fd.append('first', $('#dFirst')._file);
       if ($('#dFirst')._file && $('#dLast')._file) fd.append('last', $('#dLast')._file);
       return fd;
@@ -1729,7 +1929,10 @@ const vPrev = previewPanel($('#vPreview'), V, {
   meta: () => ({ mode: 'video', prompt: $('#vPrompt').value.trim(), sub: V.first && V.last ? 'Кадр → кадр' : V.first ? 'Картинка → видео' : 'Текст → видео' }),
   onDone: item => addToLib(item),
 });
-const vUpd = paramsCard($('#vParams'), V, { n: 3, duration: true, onChange: () => { vPrev(); vMode(); } });
+const vUpd = paramsCard($('#vParams'), V, {
+  n: 3, duration: true, extraRow: '<div id="vLoras"></div>',
+  onChange: () => { vPrev(); vMode(); }
+});
 function vMode() {
   $('#vMode').textContent = 'Режим: ' + (V.first && V.last ? 'видео между двумя кадрами' : V.first ? 'изображение → видео' : 'видео по тексту');
   $('#dLast').classList.toggle('disabled', !V.first);
@@ -1740,6 +1943,7 @@ const lastDrop = wireDrop($('#dLast'), on => { V.last = on; vUpd(); });
 wireDrop($('#dFirst'), (on, img) => { V.first = on; if (!on) lastDrop.clear(); vUpd(); if (on) fitAspect(V, img, vUpd, true); });
 $('#vPrompt').oninput = e => $('#vCount').textContent = e.target.value.length + ' символов';
 vUpd();
+mountLoras($('#vLoras'), V, ['realism']);
 
 /* ---------- LIPSYNC view ---------- */
 const L = { aspect: '9:16', q: '1080p', refSize: 'max', start: 0, end: 0, dur0: 0, refs: 0, len: () => Math.max(0, L.end - L.start) };
@@ -4175,42 +4379,26 @@ $('#cwFile').onchange = async e => {
 };
 $('.nav[data-view="custom"]').addEventListener('click', () => cwList(CW.id));
 
-/* the user's own LoRAs */
-const CL = { files: [], items: [] };
-async function loadCL() {
-  try {
-    const r = await (await fetch('/api/loras/custom')).json();
-    if (!r.files) return;
-    CL.files = r.files; CL.items = r.items; $('#clCard').hidden = false; renderCL();
-  } catch {}
-}
-function renderCL() {
-  $('#clList').innerHTML = CL.items.length ? CL.items.map((x, i) => `<div class="m" data-i="${i}">
-      <b><select class="cl-f">${CL.files.map(f => `<option${f === x.file ? ' selected' : ''}>${esc(f)}</option>`).join('')}${CL.files.includes(x.file) ? '' : `<option selected>${esc(x.file)}</option>`}</select></b>
-      <span class="hint">сила <input class="cl-s" type="number" step="0.05" min="-4" max="4" value="${x.strength}" style="width:70px"></span>
-      <button class="chip cl-on${x.on ? ' on' : ''}" type="button">${x.on ? 'включена' : 'выключена'}</button>
-      <button class="btn mini cl-x" type="button">Убрать</button></div>`).join('')
-    : '<div class="hint">Пока нет своих LoRA.</div>';
-}
-const saveCL = () => postJSON('/api/loras/custom', { items: CL.items }).catch(e => toast(e.message));
+/* the user's own LoRAs (Models screen bindings) */
 $('#clAdd').onclick = () => {
   if (!CL.files.length) { toast('ComfyUI не видит файлов в папке loras'); return; }
-  CL.items.push({ file: CL.files[0], strength: 0.8, on: true }); renderCL(); saveCL();
+  CL.items.push({ file: CL.files[0], strength: 0.8, on: true });
+  syncAllLoras();
 };
-$('#clRe').onclick = loadCL;
+$('#clRe').onclick = () => loadCL().then(() => syncAllLoras());
 $('#clList').addEventListener('change', e => {
   const row = e.target.closest('.m'); if (!row) return; const x = CL.items[+row.dataset.i];
   if (e.target.matches('.cl-f')) x.file = e.target.value; else if (e.target.matches('.cl-s')) x.strength = +e.target.value || 0;
-  saveCL();
+  syncAllLoras();
 });
 $('#clList').addEventListener('click', e => {
   const row = e.target.closest('.m'); if (!row) return; const i = +row.dataset.i;
   if (e.target.closest('.cl-on')) CL.items[i].on = !CL.items[i].on; else if (e.target.closest('.cl-x')) CL.items.splice(i, 1); else return;
-  renderCL(); saveCL();
+  syncAllLoras();
 });
 $('.nav[data-view="models"]').addEventListener('click', loadCL);
 if (API) {
-  connectEvents(); loadStatus(); loadCloud(); pollSystem();
+  connectEvents(); loadStatus(); loadCloud(); pollSystem(); loadCL();
   fetch('/api/status').then(r => r.json()).then(s => {
     if (!s.configured) { setNavLocked(true); goTo('models'); }
   });
