@@ -1,6 +1,6 @@
 """Updates from GitHub Releases: look for a newer release, download its installer, check it, run it.
 
-The release must carry one file named Minimax.H3.Workspace-Setup.exe (GitHub shows its sha256 next to it).
+The release must carry one file named Minimax.H3.Workspace.Uncensored-Setup.exe (GitHub shows its sha256 next to it).
 """
 
 import hashlib
@@ -15,10 +15,10 @@ import aiohttp
 
 from version import APP_VERSION
 
-REPO = "Yuliya1310/minimax-h3-workspace"
+REPO = "mrtek/minimax-h3-workspace-uncensored"
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
 DOWNLOAD_PREFIX = f"https://github.com/{REPO}/releases/download/"
-ASSET = "Minimax.H3.Workspace-Setup.exe"
+ASSET = "Minimax.H3.Workspace.Uncensored-Setup.exe"
 HEADERS = {"User-Agent": "Minimax-H3-Workspace", "Accept": "application/vnd.github+json"}
 
 
@@ -29,11 +29,7 @@ def parse(v):
 
 
 async def check(session):
-    """Never update uncensored build with upstream censored release."""
-    return {"available": False, "current": APP_VERSION + " Uncensored"}
-
-
-async def disabled_check(session):
+    """{"available": bool, "current", "version", "url", "asset", "size", "sha256"}; never raises (no internet is normal)."""
     out = {"available": False, "current": APP_VERSION}
     try:
         async with session.get(API, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=8)) as r:
@@ -85,5 +81,5 @@ def run(installer):
 
 
 def can_update():
-    """Disable auto-update for uncensored build to prevent overwriting with censored official releases."""
-    return False
+    """Only an installed build updates itself: a run from source or the maker's folder does not."""
+    return bool(getattr(sys, "frozen", False))
