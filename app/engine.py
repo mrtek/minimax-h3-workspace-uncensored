@@ -52,7 +52,7 @@ def detect_hardware(install_dir=None):
     try:
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.total,compute_cap,driver_version", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW).stdout
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=10, creationflags=CREATE_NO_WINDOW).stdout
         gpus = [[x.strip() for x in line.split(",")] for line in out.strip().splitlines() if line.strip()]
         if gpus:
             best = max(gpus, key=lambda g: float(g[1]))  # pick the card with most memory
@@ -137,6 +137,16 @@ class Cancelled(Exception):
     pass
 
 
+HF_MIRROR = ""   # host of a Hugging Face mirror when the user switched it on (for slow connections)
+
+
+def mirrored(url):
+    """The same file on the mirror, if the user chose one."""
+    if HF_MIRROR and url.startswith("https://huggingface.co/"):
+        return f"https://{HF_MIRROR}/" + url[len("https://huggingface.co/"):]
+    return url
+
+
 class Installer:
     """Runs the install steps and reports progress through `emit(dict)`."""
 
@@ -156,12 +166,13 @@ class Installer:
 
     async def download(self, url, dest, sid, label, size_hint=0):
         """Resumable download to dest (via dest.part)."""
+        url = mirrored(url)
         dest = Path(dest)
         if dest.exists():
             return
         dest.parent.mkdir(parents=True, exist_ok=True)
         part = dest.with_name(dest.name + ".part")
-        for attempt in range(6):
+        for attempt in range(40):  # a long outage: wait and continue from the saved .part file
             have = part.stat().st_size if part.exists() else 0
             headers = {"Range": f"bytes={have}-"} if have else {}
             try:
@@ -187,10 +198,10 @@ class Installer:
             except (Cancelled, asyncio.CancelledError):
                 raise
             except Exception as e:
-                if attempt == 5:
+                if attempt == 39:
                     raise RuntimeError(f"Не удалось скачать {label}: {e}")
                 await self.step(sid, "progress", label=f"{label} — обрыв связи, пробуем снова…")
-                await asyncio.sleep(3 + attempt * 3)
+                await asyncio.sleep(min(30, 3 + attempt * 3))
         part.replace(dest)
 
     async def install_comfy(self, install_dir):
@@ -329,14 +340,30 @@ class ComfyProcess:
     def start(self):
         if self.proc and self.proc.poll() is None:
             return
-        self.port = free_port(8188)
         py = self.root / "python_embeded" / "python.exe"
+        self.kill_orphans(py)
+        self.port = free_port(8188)
         args = [str(py), "-s", "ComfyUI\\main.py", "--windows-standalone-build", "--disable-auto-launch",
                 "--listen", "127.0.0.1", "--port", str(self.port), "--preview-method", "auto"]
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         log = open(self.log_path, "w", encoding="utf-8", errors="replace")
         self.proc = subprocess.Popen(args, cwd=self.root, stdout=log, stderr=subprocess.STDOUT,
                                      creationflags=CREATE_NO_WINDOW, env=local_env(self.root))
+
+    @staticmethod
+    def kill_orphans(py):
+        """After a crash the app's own ComfyUI may stay in the background and hold comfyui.db and the port.
+        Kill only python processes started from THIS install's python_embeded (never the user's own ComfyUI)."""
+        exe = str(py).replace("'", "''")
+        ps = ("Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+              f"Where-Object {{ $_.ExecutablePath -eq '{exe}' }} | "
+              "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
+        try:
+            subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], timeout=30,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
+            time.sleep(1)
+        except Exception:
+            pass
 
     def alive(self):
         return self.proc is not None and self.proc.poll() is None

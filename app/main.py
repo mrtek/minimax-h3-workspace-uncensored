@@ -119,14 +119,36 @@ class JsApi:
 
 
 def main():
+    import ctypes
+    if sys.platform == "win32":
+        # no Windows error dialogs (e.g. nvidia-smi.exe 0xc0000142 under memory pressure); child processes inherit this
+        ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002)  # SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX
     port = free_port()
     srv = ServerThread(port)
     srv.start()
     srv.ready.wait(30)
     url = f"http://127.0.0.1:{port}"
 
+    def explain_no_webview():
+        try:
+            ctypes.windll.user32.MessageBoxW(
+                0, "Не найден компонент Windows «Microsoft Edge WebView2», он рисует окно программы.\n\n"
+                   "Скачайте и установите «WebView2 Runtime» (бесплатно, с сайта Microsoft: microsoft.com/edge/webview2), "
+                   "затем запустите программу снова.\n\nПока программа откроется в обычном браузере.",
+                "Minimax H3 Workspace", 0x40)
+        except Exception:
+            pass
+
     try:
         import webview
+        if sys.platform == "win32":
+            try:
+                import report
+                if report.webview2_version().startswith("не найден"):
+                    explain_no_webview()
+                    raise RuntimeError("no WebView2")
+            except ImportError:
+                pass
         try:
             webview.settings["ALLOW_DOWNLOADS"] = True  # a plain <a download> also works as a fallback
         except Exception:

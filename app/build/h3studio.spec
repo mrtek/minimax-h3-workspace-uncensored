@@ -7,7 +7,7 @@ a = Analysis(
     [str(APP / "main.py")],
     pathex=[str(APP)],
     datas=[(str(APP / "ui" / "index.html"), "ui"), (str(APP / "skills"), "skills"), (str(APP / "bin"), "bin")],
-    hiddenimports=["webview.platforms.edgechromium", "webview.platforms.winforms", "clr"],
+    hiddenimports=["webview.platforms.edgechromium", "webview.platforms.winforms", "clr", "certifi"],
     excludes=["tkinter", "matplotlib", "numpy", "PIL", "pandas", "scipy", "IPython"],
 )
 pyz = PYZ(a.pure)

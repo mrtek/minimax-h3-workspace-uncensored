@@ -88,7 +88,7 @@
 .zv-stage{flex:1;overflow:auto;display:flex;cursor:grab}
 .zv-stage img{margin:auto;display:block;max-width:none;user-select:none}
 .zv-stage.drag{cursor:grabbing}
-.cw-left{display:grid;gap:16px;min-width:0}
+.cw-left{display:grid;gap:10px;min-width:0}
 .cw-right{position:sticky;top:12px;display:grid;gap:12px}
 @media (max-width:1150px){.cw-cols{grid-template-columns:1fr}.cw-right{position:static}.cw-rs{display:none}}
 .cw-res{display:grid;gap:12px}
@@ -103,26 +103,30 @@
 .cw-th{aspect-ratio:1;border-radius:10px;overflow:hidden;border:2px solid var(--line);background:var(--screen);padding:0;display:grid;place-items:center}
 .cw-th.on{border-color:var(--accent)}.cw-th img,.cw-th video{width:100%;height:100%;object-fit:cover}
 .cw-ok{color:var(--ok);font-weight:700;padding:2px 4px}
-.cw-prompts{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
-.cw-pp{border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:14px;padding:12px 14px;background:var(--bg-2)}
+.cw-prompts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px}
+.cw-pp{border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:12px;padding:9px 12px;background:var(--bg-2)}
 .cw-pp.neg{border-left-color:var(--pink)}
 .cw-pb{font-weight:800;font-size:12.5px;margin-bottom:8px;color:var(--ok)}.cw-pp.neg .cw-pb{color:var(--pink)}
 .cw-pb small{color:var(--dim);font-weight:500;margin-left:6px}
-.cw-pp textarea{min-height:120px;background:var(--surface)}
+.cw-pp textarea{min-height:84px;background:var(--surface)}
 .cw-asp{grid-column:span 2}
-.cw-toggles{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px}
-.cw-sw{display:flex;gap:12px;align-items:center;padding:12px 14px;background:var(--bg-2);border:1px solid var(--line);border-radius:14px;cursor:pointer}
+.cw-toggles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}
+.cw-sw{display:flex;gap:10px;align-items:center;padding:8px 12px;background:var(--bg-2);border:1px solid var(--line);border-radius:14px;cursor:pointer}
 .cw-sw b{font-weight:600;font-size:13px}
 .cw-bt{font-weight:800;font-size:12.5px;letter-spacing:.02em;margin-bottom:7px}
 .cw-wide textarea{min-height:110px}
-.cw-media{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
-.cw-file{display:grid;gap:4px;justify-items:center;text-align:center;padding:12px;border:1.5px dashed var(--line-2);border-radius:14px;background:var(--bg-2);cursor:pointer;transition:.15s}
+.qw-slots{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.qw-slots.one{grid-template-columns:1fr}
+.qw-slots .drop{height:130px}
+.qw-slots .drop .ph svg{width:24px;height:24px}
+.cw-media{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.cw-file{display:grid;gap:3px;justify-items:center;text-align:center;padding:8px;border:1.5px dashed var(--line-2);border-radius:14px;background:var(--bg-2);cursor:pointer;transition:.15s}
 .cw-file:hover,.cw-file.on{border-color:var(--accent)}
 .cw-file small{color:var(--muted);font-size:11.5px;word-break:break-all}
 .cw-fp{width:100%;aspect-ratio:4/3;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;overflow:hidden;font-size:30px}
 .cw-fp img{width:100%;height:100%;object-fit:cover}.cw-fp i{font-style:normal}
-.cw-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
-.cw-t{display:grid;gap:7px;align-content:start;padding:12px 14px;background:var(--bg-2);border:1px solid var(--line);border-radius:14px}
+.cw-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.cw-t{display:grid;gap:5px;align-content:start;padding:8px 10px;background:var(--bg-2);border:1px solid var(--line);border-radius:14px}
 .cw-t>span,.cw-f>span{font-size:11.5px;color:var(--muted);font-weight:600}
 .cw-pair{display:flex;align-items:flex-end;gap:8px}.cw-pair label{display:grid;gap:3px;font-size:11px;color:var(--dim);flex:1;min-width:0}.cw-pair b{padding-bottom:9px;color:var(--dim)}
 .cw-pair input,.cw-f input,.cw-f select,.cw-t input,.cw-t select{color:var(--text)}
@@ -131,8 +135,8 @@
 .cw-t input:focus,.cw-f input:focus,.cw-f select:focus,.cw-pair input:focus{border-color:var(--accent)}
 .cw-det>summary{cursor:pointer;font-weight:800;list-style:none;display:flex;gap:10px;align-items:baseline}.cw-det>summary small{color:var(--muted);font-weight:500}
 .cw-det>summary::before{content:'▸';color:var(--muted)}.cw-det[open]>summary::before{content:'▾'}
-.cw-boxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:14px}
-.cw-box{background:var(--bg-2);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.cw-boxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;margin-top:10px}
+.cw-box{background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:9px 12px}
 .cw-bg3{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
 .cw-bg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .cw-f{display:grid;gap:4px;align-content:start}.cw-f.wide{grid-column:1/-1}
@@ -154,7 +158,7 @@ body{
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none}
 
-.app{display:grid;grid-template-columns:248px 1fr;height:100vh}
+.app{display:grid;grid-template-columns:248px 1fr;height:calc(var(--vh,1vh)*100)}
 
 /* sidebar */
 .side{background:rgba(var(--bg2-rgb),.7);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:20px 14px;gap:6px;backdrop-filter:blur(12px);overflow-y:auto;min-height:0}
@@ -186,6 +190,8 @@ button{cursor:pointer;border:0;background:none}
 .rep-btn svg{width:16px;height:16px}
 .rep-btn:hover{color:var(--text);border-color:var(--accent)}
 .rep-btn[disabled]{opacity:.6;cursor:default}
+.sup-btn{display:block;margin:-4px 0 12px;padding:4px 10px;width:100%;text-align:center;font-size:12px;color:var(--muted);font-weight:600;border-radius:9px;flex:none}
+.sup-btn:hover{color:var(--text)}
 @media (max-height:760px){.side-foot{gap:6px;padding:10px 12px}.side-foot .stat{font-size:11.5px}}
 
 /* main */
@@ -220,7 +226,7 @@ h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
 .frames{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center}
 .arrow{color:var(--dim)}
 /* the frames are compact by default; the grip under them changes their height (--fh) */
-:root{--fh:clamp(130px,17vh,210px)}
+:root{--fh:clamp(130px,calc(var(--vh,1vh)*17),210px)}
 .hresize{height:16px;margin:8px 0 -8px;cursor:row-resize;position:relative;touch-action:none}
 .hresize::after{content:'';position:absolute;left:50%;top:6px;width:56px;height:4px;margin-left:-28px;border-radius:4px;background:var(--line-2);transition:background .15s}
 .hresize:hover::after,.hresize.drag::after{background:var(--accent)}
@@ -248,7 +254,7 @@ h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
 .drop.filled .x{display:grid}
 .drop input{display:none}
 
-textarea{width:100%;min-height:clamp(150px,26vh,340px);resize:vertical;background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:13px 14px;outline:none;line-height:1.55}
+textarea{width:100%;min-height:64px;height:110px;resize:vertical;background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:13px 14px;outline:none;line-height:1.55}
 textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .ta-foot{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:10px;flex-wrap:wrap}
 .tokens{display:flex;gap:6px;flex-wrap:wrap}
@@ -288,7 +294,7 @@ details[open] summary::before{content:'－ '}
 /* preview */
 .preview{position:sticky;top:28px;display:grid;gap:14px}
 .screen{background:var(--screen);border:1px solid var(--line);border-radius:var(--radius);display:grid;place-items:center;padding:18px;min-height:330px}
-.frame{position:relative;width:100%;max-height:min(62vh,640px);border-radius:12px;background:
+.frame{position:relative;width:100%;max-height:min(calc(var(--vh,1vh)*62),640px);border-radius:12px;background:
   repeating-linear-gradient(45deg,rgba(255,255,255,.015) 0 10px,transparent 10px 20px),var(--bg-2);
   border:1px solid var(--line-2);display:grid;place-items:center;transition:aspect-ratio .3s,width .3s;overflow:hidden}
 .frame .res{font-family:var(--mono);font-size:13px;color:var(--muted);text-align:center;display:grid;gap:4px}
@@ -317,6 +323,11 @@ details[open] summary::before{content:'－ '}
 .a-name small{display:block;color:var(--muted);font-weight:500;font-size:12px}
 .a-change{margin-left:auto;font-size:12.5px;color:var(--muted);font-weight:600;padding:7px 11px;border-radius:9px;border:1px solid var(--line-2);white-space:nowrap}
 .a-change:hover{color:var(--text);border-color:var(--accent)}
+.msg,.msg *,.pblock pre{user-select:text;-webkit-user-select:text;cursor:auto}
+.ctxm{position:fixed;z-index:99999;min-width:180px;background:var(--surface-2,#222);border:1px solid var(--line-2);border-radius:11px;padding:5px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.ctxm button{display:block;width:100%;text-align:left;padding:8px 12px;border-radius:8px;font-size:13px;color:var(--text)}
+.ctxm button:hover{background:var(--accent-soft)}
+.ctxm button:disabled{opacity:.4;pointer-events:none}
 .wave{position:relative;height:110px;border-radius:12px;background:var(--bg-2);border:1px solid var(--line);overflow:hidden;touch-action:none;user-select:none}
 .wave canvas{position:absolute;inset:0;width:100%;height:100%}
 .sel{position:absolute;top:0;bottom:0;background:rgba(var(--accent-rgb),.13);border-left:2px solid var(--accent);border-right:2px solid var(--accent-2);cursor:grab}
@@ -442,7 +453,7 @@ details[open] summary::before{content:'－ '}
 :root{--aw:clamp(300px,24vw,480px)}
 .ag-grid{position:relative;display:grid;grid-template-columns:230px minmax(0,1fr) var(--aw);gap:16px;align-items:start}
 .ag-grid .gresize{right:calc(var(--aw) - 3px)}
-.ag-hist{display:flex;flex-direction:column;gap:10px;height:calc(100vh - 150px);min-height:480px;padding:12px}
+.ag-hist{display:flex;flex-direction:column;gap:10px;height:calc(calc(var(--vh,1vh)*100) - 150px);min-height:480px;padding:12px}
 .ag-hlist{flex:1;overflow:auto;display:flex;flex-direction:column;gap:4px}
 .ag-h{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:10px;cursor:pointer;color:var(--muted)}
 .ag-h:hover{background:var(--surface-2);color:var(--text)}
@@ -454,7 +465,7 @@ details[open] summary::before{content:'－ '}
 .ag-h:hover button{opacity:1;background:var(--surface)}
 .ag-h button:hover{background:var(--accent)!important}
 .ag-hempty{font-size:12px;color:var(--dim);text-align:center;padding:20px 6px}
-.ag-chat{display:flex;flex-direction:column;height:calc(100vh - 150px);min-height:480px;padding:0;overflow:hidden}
+.ag-chat{display:flex;flex-direction:column;height:calc(calc(var(--vh,1vh)*100) - 150px);min-height:480px;padding:0;overflow:hidden}
 .ag-msgs{flex:1;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:14px}
 .ag-empty{margin:auto;display:grid;gap:8px;text-align:center;color:var(--muted);max-width:460px}
 .ag-empty b{color:var(--text);font-size:15px}
@@ -477,15 +488,20 @@ details[open] summary::before{content:'－ '}
 .pblock{margin:8px 0;border:1px solid var(--line-2);border-radius:12px;overflow:hidden;background:var(--screen)}
 .pblock pre{margin:0;padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.55;white-space:pre-wrap;max-height:340px;overflow:auto}
 .pblock .pb-act{display:flex;gap:8px;padding:8px 10px;border-top:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
-.pblock .pb-other{background:var(--surface-2);border:1px solid var(--line-2);border-radius:11px;padding:0 10px;font-size:13px;outline:none}
+.msg.a:has(.pblock){width:100%;max-width:100%}
+.pblock .pb-act .btn{padding:6px 12px;font-size:12.5px;border-radius:9px;min-height:0;height:auto}
+.pblock .pb-other{background:var(--surface-2);border:1px solid var(--line-2);border-radius:9px;padding:5px 8px;font-size:12.5px;outline:none}
 .pblock .pb-act small{margin-left:auto;align-self:center;color:var(--dim);font-family:var(--mono);font-size:11px}
 .ag-att{display:flex;gap:8px;padding:0 18px;flex-wrap:wrap}
 .ag-att div{position:relative}
 .ag-att img{height:56px;border-radius:8px;display:block}
 .ag-att b{position:absolute;left:4px;top:4px;font-size:10px;font-family:var(--mono);background:rgba(var(--ov-rgb),.8);padding:1px 5px;border-radius:5px}
 .ag-att button{position:absolute;right:-6px;top:-6px;width:20px;height:20px;border-radius:50%;background:var(--surface-2);font-size:11px}
-.ag-comp{display:flex;gap:10px;align-items:flex-end;padding:12px 18px 18px}
-.ag-comp textarea{min-height:48px;max-height:180px;flex:1}
+.ag-comp{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:flex-end;padding:12px 18px 14px}
+.ag-comp textarea{order:-2;min-height:56px;max-height:180px;flex:1 1 0;min-width:0}
+.ag-comp #agSend{order:-1}
+.ag-comp .ag-clip,.ag-comp #agClear{padding:6px 10px;min-height:0;font-size:12.5px;border-radius:9px}
+.ag-comp .ag-clip svg{width:15px;height:15px}
 .ag-clip{padding:12px;display:grid;place-items:center}
 .ag-clip.rec{background:rgba(var(--accent-rgb),.25);border-color:var(--accent);color:#fff;animation:pulse 1s infinite}
 .ag-audio{margin:0 18px;padding:10px 12px;border-radius:12px;background:var(--bg-2);border:1px solid var(--line);display:grid;gap:6px}
@@ -503,7 +519,7 @@ details[open] summary::before{content:'－ '}
 .sk p{font-size:11.5px;color:var(--dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .sk input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:11.5px;outline:none;font-family:var(--mono)}
 @media (max-width:1300px){.ag-grid{grid-template-columns:200px minmax(0,1fr)}.ag-grid>.col{grid-column:1/-1}.ag-grid .gresize{display:none}}
-@media (max-width:900px){.ag-grid{grid-template-columns:1fr}.ag-chat,.ag-hist{height:auto}.ag-chat{height:70vh}.ag-hlist{max-height:200px}}
+@media (max-width:900px){.ag-grid{grid-template-columns:1fr}.ag-chat,.ag-hist{height:auto}.ag-chat{height:calc(var(--vh,1vh)*70)}.ag-hlist{max-height:200px}}
 /* refs & action */
 /* reference videos / audios: small squares, video and audio side by side */
 .rm-media{display:flex;flex-wrap:wrap;gap:6px 28px;align-items:flex-start}
@@ -544,10 +560,29 @@ details[open] summary::before{content:'－ '}
 
 /* library */
 .li-th video{width:100%;height:100%;object-fit:cover;display:block}
-.v-media video{width:100%;max-height:70vh;display:block;background:#000}
+.v-media video{width:100%;max-height:calc(var(--vh,1vh)*70);display:block;background:#000}
 .lib-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:18px}
 .lib-bar .sp{flex:1}
-.lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--lib-min,230px),1fr));gap:14px}
+.kr-batching .ip-go{display:none!important}
+.mt-lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;max-height:300px;overflow:auto}
+.mt-card{position:relative;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg-2);cursor:pointer;text-align:left}
+.mt-card video,.mt-item video{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#000}
+.mt-card:hover{border-color:var(--pink)}
+.mt-card small{display:block;padding:4px 6px;color:var(--dim);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mt-len{position:absolute;right:5px;top:5px;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;padding:1px 6px;font-size:11px}
+.mt-plus{position:absolute;left:5px;top:5px;background:var(--pink);color:#fff;border-radius:50%;width:20px;height:20px;display:grid;place-items:center;font-size:14px;line-height:1}
+.mt-strip{display:flex;flex-wrap:wrap;gap:10px;min-height:60px;padding:4px 0}
+.mt-item{position:relative;width:170px;border:1px solid var(--line-2);border-radius:10px;overflow:hidden;background:var(--bg-2);cursor:grab}
+.mt-item.over{outline:2px solid var(--pink)}
+.mt-item .mt-n{position:absolute;left:5px;top:5px;background:var(--pink);color:#fff;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:700}
+.mt-item .mt-b{display:flex;justify-content:space-between;gap:4px;padding:5px}
+.mt-item .mt-b button{background:var(--surface-2);border-radius:7px;padding:2px 9px;font-size:12px}
+.zoom-btns{display:inline-flex;gap:4px;align-items:center}
+.zoom-btns .btn{padding:6px 10px;min-width:34px}
+.zoom-btns small{color:var(--dim);font-size:11px;min-width:38px;text-align:center}
+.sk-list[hidden]{display:none}
+#skToggle{cursor:pointer}
 .li{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;transition:.15s}
 .li:hover{border-color:var(--line-2);transform:translateY(-2px)}
 .li.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
@@ -580,10 +615,10 @@ details[open] summary::before{content:'－ '}
 
 /* modals, toast */
 .modal{position:fixed;inset:0;background:rgba(5,2,3,.72);backdrop-filter:blur(6px);display:grid;place-items:center;padding:20px;z-index:50}
-.box{position:relative;background:var(--surface);border:1px solid var(--line-2);border-radius:18px;width:min(980px,100%);max-height:calc(100vh - 40px);overflow:auto;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.box{position:relative;background:var(--surface);border:1px solid var(--line-2);border-radius:18px;width:min(980px,100%);max-height:calc(calc(var(--vh,1vh)*100) - 40px);overflow:auto;box-shadow:0 30px 80px rgba(0,0,0,.6)}
 .viewer{display:grid;grid-template-columns:1.5fr 1fr}
 .v-media{position:relative;background:var(--screen);display:grid;place-items:center;min-height:300px}
-.v-media img{width:100%;height:100%;object-fit:contain;max-height:70vh;display:block}
+.v-media img{width:100%;height:100%;object-fit:contain;max-height:calc(var(--vh,1vh)*70);display:block}
 .v-media .li-play{opacity:1;background:none}
 .v-info{padding:22px;display:grid;gap:14px;align-content:start}
 .v-info h3{font-size:16px;padding-right:30px}
@@ -626,6 +661,8 @@ details[open] summary::before{content:'－ '}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
       Отчёт для разработчика
     </button>
+    <button class="sup-btn" id="supBtn" type="button" title="Программа бесплатная. Если она вам помогла, можно поддержать автора: откроется страница оплаты в браузере. Ничего вводить в самой программе не нужно.">♥ Поддержать проект</button>
+    <div class="zoom-btns" id="uiZoom" title="Размер интерфейса (или Ctrl + колесо мыши)" style="margin:0 0 8px 4px"><button class="btn" id="uiSm" type="button">А−</button><small id="uiPct">100%</small><button class="btn" id="uiLg" type="button">А+</button></div>
     <div class="themes" id="themes" title="Тема оформления">
       <button data-t="" style="background:#e8264f" title="Бордо"></button>
       <button data-t="light" style="background:#f3f4f6" title="Светлая"></button>
@@ -655,6 +692,10 @@ details[open] summary::before{content:'－ '}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h0M15 9.5h0"/></svg>
       Актёрская игра
     </button>
+    <button class="nav" data-view="long">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="9" height="12" rx="2"/><rect x="13" y="6" width="9" height="12" rx="2"/></svg>
+      Длинное видео
+    </button>
     <button class="nav" data-view="action">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
       Экшн-сцены
@@ -682,6 +723,10 @@ details[open] summary::before{content:'－ '}
     <button class="nav" data-view="library">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5M16 4v5"/><path d="m10 13 4 2.5-4 2.5z" fill="currentColor"/></svg>
       Библиотека <span class="badge" id="libBadge">0</span>
+    </button>
+    <button class="nav" data-view="montage">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="6" height="14" rx="1.5"/><rect x="9" y="5" width="6" height="14" rx="1.5"/><rect x="16" y="5" width="6" height="14" rx="1.5"/></svg>
+      Монтаж
     </button>
     <button class="nav" data-view="models">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="m3 13 9 5 9-5M3 18l9 5 9-5" opacity=".5"/></svg>
@@ -738,6 +783,9 @@ details[open] summary::before{content:'－ '}
                 <button class="x" type="button" aria-label="Убрать">✕</button>
               </label>
             </div>
+            <label class="cw-chk" style="margin-top:10px;cursor:pointer" title="Видео закончится тем же кадром, с которого началось: его можно крутить по кругу без шва (живые обои)">
+              <input type="checkbox" id="vLoop"> <span><b>Зациклить</b> (для живых обоев): последний кадр будет таким же, как первый <small style="color:var(--muted)" id="vLoopHint">· нужен первый кадр</small></span>
+            </label>
             <div class="hresize" id="frameResize" title="Потяните вниз или вверх, чтобы изменить высоту кадров. Двойной клик — вернуть как было"></div>
           </div>
 
@@ -780,6 +828,7 @@ details[open] summary::before{content:'－ '}
                 </button>
                 <div class="a-name" id="aName">audio.mp3<small>—</small></div>
                 <button class="a-change" type="button" id="aChange">Заменить</button>
+                <button class="a-change a-del" type="button" id="aRemove" style="margin-left:8px">Удалить</button>
               </div>
               <div class="wave" id="wave">
                 <canvas id="waveCv"></canvas>
@@ -845,6 +894,8 @@ details[open] summary::before{content:'－ '}
     <section class="view" id="view-refs"></section>
     <section class="view" id="view-actor"></section>
     <section class="view" id="view-action"></section>
+    <section class="view" id="view-long"></section>
+    <section class="view" id="view-montage"></section>
     <section class="view" id="view-krea"></section>
     <section class="view" id="view-qwen"></section>
 
@@ -894,6 +945,7 @@ details[open] summary::before{content:'－ '}
             <button class="btn ag-clip" type="button" id="agMic" title="Голосовой ввод: нажмите, говорите, нажмите ещё раз">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
             </button>
+            <button class="btn" type="button" id="agClear" title="Очистить поле ввода">Очистить</button>
             <textarea id="agIn" rows="2" placeholder="Опишите сцену, сценарий или вставьте реплики… (Enter — отправить, Shift+Enter — новая строка)"></textarea>
             <button class="btn pri" id="agSend">Отправить</button>
           </div>
@@ -930,6 +982,9 @@ details[open] summary::before{content:'－ '}
             </details>
           </div>
           <div class="card">
+            <div class="card-h"><h3>Ответ агента</h3></div>
+            <div class="seg" id="agThink" style="grid-template-columns:1fr 1fr;margin-bottom:6px"><button type="button" data-k="fast">Быстро<small>без долгих рассуждений</small></button><button type="button" data-k="deep">Думать глубже<small>дольше, для сложных историй</small></button></div>
+            <div class="hint" id="agThinkHint" style="margin-bottom:14px"></div>
             <div class="card-h"><h3>Промпт для</h3></div>
             <div class="hint" style="margin-bottom:6px">Видео</div>
             <div class="seg" id="agTarget" style="grid-template-columns:1fr 1fr;grid-auto-rows:auto">
@@ -938,20 +993,32 @@ details[open] summary::before{content:'－ '}
               <button data-t="refs">Референсы<small>картинки, видео, аудио</small></button>
               <button data-t="actor">Актёрская игра<small>диалог, голос, эмоции</small></button>
               <button data-t="action">Экшн-сцены<small>бой, погоня, бег</small></button>
+              <button data-t="long">Длинное видео<small>клип или ролик по сценам</small></button>
             </div>
             <div class="hint" style="margin:12px 0 6px">Картинки</div>
             <div class="seg" id="agTarget2" style="grid-template-columns:1fr 1fr;grid-auto-rows:auto">
+              <button data-t="plist">Список кадров<small>серия картинок</small></button>
               <button data-t="krea">Картинка по тексту<small>Krea 2</small></button>
+              <button data-t="fluxt">Картинка по тексту<small>FLUX.2 klein</small></button>
+              <button data-t="qwent">Картинка по тексту<small>Qwen 2.1</small></button>
               <button data-t="qwen">Правка картинки<small>Qwen, нужна картинка</small></button>
+              <button data-t="story">Раскадровка<small>история в кадрах на одной картинке</small></button>
               <button data-t="sheet">Лист персонажа<small>4 панели, Krea 2</small></button>
+              <button data-t="sheet6">Лист персонажа ×6<small>6 панелей, Krea 2</small></button>
+            </div>
+            <div class="seg" id="agStoryF" hidden style="grid-template-columns:1fr 1fr;margin-top:10px">
+              <button data-f="1">По кадрам<small>кадры отдельно + лист</small></button><button data-f="0">Одним листом<small>одна картинка сразу</small></button>
+            </div>
+            <div class="seg" id="agStoryM" hidden style="grid-template-columns:repeat(3,1fr);margin-top:10px">
+              <button data-m="krea">Krea 2<small>можно в коммерцию</small></button><button data-m="flux">FLUX.2 klein<small>для коммерции</small></button><button data-m="qwen">Qwen 2.1<small>не для коммерции</small></button>
             </div>
             <small class="hint" id="agCtx" style="display:block;margin-top:8px"></small>
           </div>
           <div class="card">
-            <div class="card-h"><h3>Скиллы</h3>
+            <div class="card-h"><h3 id="skToggle" title="Показать или скрыть список">Скиллы <small id="skCnt" class="hint"></small> <span id="skArr">▸</span></h3>
               <label class="btn" title="Выберите папку скилла (с файлом SKILL.md)">Загрузить<input type="file" id="skUp" webkitdirectory multiple hidden></label>
             </div>
-            <div id="skList" class="sk-list"></div>
+            <div id="skList" class="sk-list" hidden></div>
             <small class="hint">«Авто» — скилл подключается, когда в сообщении есть одно из слов.</small>
           </div>
         </div>
@@ -972,7 +1039,13 @@ details[open] summary::before{content:'－ '}
         </span>
       </div>
       <div class="note" id="cwHowto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h0M11 12h1v5h1"/></svg>
-        <span>В ComfyUI откройте свой workflow и выберите <b>Workflow → Export (API)</b>. Полученный файл .json загрузите сюда. Обычный сохранённый workflow не подойдёт.</span></div>
+        <span><b>Как этим пользоваться — прочитайте один раз:</b>
+          <ol style="margin:8px 0 0 18px;padding:0;display:grid;gap:4px">
+            <li>Сначала настройте свой workflow <b>в самом ComfyUI</b>: поставьте нужные ноды (через Manager), положите модели и один раз запустите его там, чтобы убедиться, что он работает без ошибок.</li>
+            <li>Затем в ComfyUI выберите <b>Workflow → Export (API)</b>. Именно API: обычный сохранённый workflow не подойдёт.</li>
+            <li>Нажмите здесь «Добавить файл…» и выберите этот .json. Приложение само покажет все его настройки: промпт, шаги, размер, seed, модели, переключатели.</li>
+          </ol>
+          <div style="margin-top:8px">Приложение <b>не ставит ноды и не чинит</b> workflow: если он не работает в ComfyUI, здесь он тоже не заработает. Этот раздел есть только при варианте «У меня уже есть ComfyUI». Готовые разделы (Image-to-Video, Lipsync и другие) сделаны простыми, без тонких настроек.</div></span></div>
       <div id="cwBody" style="margin-top:16px"></div>
     </section>
 
@@ -1006,6 +1079,7 @@ details[open] summary::before{content:'－ '}
           <button class="chip" data-f="refs">Референсы</button>
           <button class="chip" data-f="actor">Актёрская игра</button>
           <button class="chip" data-f="action">Экшн</button>
+          <button class="chip" data-f="long">Длинное</button>
           <button class="chip" data-f="custom">Свои</button>
           <button class="chip" data-f="fav">★ Избранное</button>
         </div>
@@ -1013,6 +1087,7 @@ details[open] summary::before{content:'－ '}
         <span class="counter" id="selCount" hidden></span>
         <button class="btn" id="bulkSave" hidden>Сохранить выбранные</button>
         <button class="btn danger" id="bulkDel" hidden>Удалить выбранные</button>
+        <span class="zoom-btns" title="Размер значков (или Ctrl + колесо мыши)"><button class="btn" id="libSm" type="button">−</button><button class="btn" id="libLg" type="button">+</button></span>
         <button class="btn" id="selToggle">Выбрать</button>
       </div>
       <div class="lib" id="lib"></div>
@@ -1045,12 +1120,12 @@ details[open] summary::before{content:'－ '}
           <button class="opt on" data-opt="new">
             <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></div>
             <b>Я новичок — у меня ничего нет</b>
-            <span>Всё скачается и установится само: ComfyUI, ноды и модели под вашу видеокарту</span>
+            <span>Всё скачается и установится само: ComfyUI, ноды и модели под вашу видеокарту. Готовые простые разделы, без тонких настроек и без загрузки своих workflow</span>
           </button>
           <button class="opt" data-opt="external">
             <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></div>
             <b>У меня уже есть ComfyUI и модели</b>
-            <span>Для опытных: подключиться к вашему запущенному ComfyUI — ничего не скачиваем и не ставим</span>
+            <span>Для опытных: подключиться к вашему запущенному ComfyUI — ничего не скачиваем и не ставим. Только здесь доступен раздел «Свои workflow» для полной настройки</span>
           </button>
           <button class="opt" data-opt="cloud" hidden>
             <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 1 0-1.4-8.8A6 6 0 0 0 4.5 12 3.5 3.5 0 0 0 6 19z"/></svg></div>
@@ -1073,15 +1148,18 @@ details[open] summary::before{content:'－ '}
           </div>
           <div class="fld" data-for="new external">
             <label>Что вы хотите делать? <span class="hint" id="modeHint">— отметьте только нужное, остальное можно докачать потом в разделе «Модели»</span></label>
+            <button type="button" class="a-change" id="modeAll" style="margin:6px 0 10px">Выбрать все</button>
             <div class="mode-cards" id="modePick">
               <button class="mcard" data-m="video"><i></i><b>Image-to-Video</b><span>Видео по тексту, по картинке, по первому и последнему кадру</span><small></small></button>
               <button class="mcard" data-m="lipsync"><i></i><b>Lipsync / клип</b><span>Персонаж поёт или говорит под ваше аудио</span><small></small></button>
               <button class="mcard" data-m="refs"><i></i><b>Референсы</b><span>Видео по нескольким картинкам, референс-видео и аудио</span><small></small></button>
               <button class="mcard" data-m="actor"><i></i><b>Актёрская игра</b><span>Диалоги и крупные планы: эмоции, голос по образцу</span><small></small></button>
               <button class="mcard" data-m="action"><i></i><b>Экшн-сцены</b><span>Бой, погоня, бег, прыжки</span><small></small></button>
-              <button class="mcard" data-m="krea"><i></i><b>Картинка по тексту</b><span>Krea 2: красивые картинки по описанию</span><small></small></button>
+              <button class="mcard" data-m="long"><i></i><b>Длинное видео</b><span>Клипы и ролики по сценам: до 15 с на сцену, сцены продолжают друг друга</span><small></small></button>
+              <button class="mcard" data-m="krea"><i></i><b>Картинка по тексту</b><span>Krea 2: красивые картинки по описанию (можно в коммерцию)</span><small></small></button>
               <button class="mcard" data-m="kreareal"><i></i><b>Картинка: реализм</b><span>Krea 2 для реалистичных людей и фото (в «Картинке по тексту», +15 ГБ)</span><small></small></button>
               <button class="mcard" data-m="qwen"><i></i><b>Правка картинки</b><span>Qwen: изменить свою картинку, лист персонажа</span><small></small></button>
+              <button class="mcard" data-m="flux"><i></i><b>Правка картинки: можно в коммерцию</b><span>FLUX.2 klein: изменить свою картинку со свободной лицензией (+12 ГБ)</span><small></small></button>
               <button class="mcard" data-m="upscale"><i></i><b>Увеличение видео и картинок</b><span>Увеличить готовое видео и добавить чёткости (долго, но по желанию)</span><small></small></button>
             </div>
             <div class="note" id="modeTotal" style="margin-top:4px"></div>
@@ -1118,7 +1196,7 @@ details[open] summary::before{content:'－ '}
           <div class="wz-go">
             <span class="hint" id="pErr"></span>
             <button class="btn" id="pCancel">Остановить</button>
-            <button class="btn pri big" id="pRetry" hidden>Продолжить</button>
+            <button class="btn pri big" id="pRetry" hidden>Продолжить установку</button>
             <button class="btn pri big" id="pDone" hidden>Начать работу</button>
           </div>
         </div>
@@ -1155,6 +1233,20 @@ details[open] summary::before{content:'－ '}
           <div class="card-h"><h3>Движок</h3><button class="btn" id="mdReset">Изменить настройки</button></div>
           <div class="kv" id="mdEngine"></div>
         </div>
+        <div class="card" id="mdOwnCard" style="margin-bottom:16px" hidden>
+          <div class="card-h"><h3>Хотите настраивать всё самому?</h3></div>
+          <div class="hint" style="font-size:13px;line-height:1.6">
+            Сейчас программа работает в простом режиме: она сама поставила ComfyUI и всё нужное, и в ней только готовые разделы. Тонкие настройки (шаги, свои схемы, свои ноды) здесь <b>недоступны</b>, так задумано.<br><br>
+            Если вы умеете работать в ComfyUI и хотите загружать свои workflow, нужно сделать так:
+            <ol style="margin:6px 0 6px 18px;padding:0;display:grid;gap:4px">
+              <li>Установите и запустите <b>свой</b> ComfyUI (отдельно от этой программы) и настройте в нём нужный workflow, чтобы он работал там без ошибок.</li>
+              <li>Нажмите кнопку ниже и выберите вариант <b>«У меня уже есть ComfyUI и модели»</b>.</li>
+              <li>Появится раздел <b>«Свои workflow»</b>. Загрузите в него файл, сохранённый в ComfyUI через <b>Workflow → Export (API)</b>.</li>
+            </ol>
+            Если вы не уверены, что это вам нужно, ничего не нажимайте: в простом режиме всё работает без настроек.
+          </div>
+          <button class="btn" id="mdOwnGo" type="button" style="margin-top:10px">Перейти к настройке своего ComfyUI</button>
+        </div>
         <div class="card" id="mdNodesCard" style="margin-bottom:16px" hidden>
           <div class="card-h"><h3>Ноды ComfyUI</h3><button class="btn" id="mdNodesRe" type="button">Проверить ещё раз</button></div>
           <div class="mlist" id="mdNodes"></div>
@@ -1167,8 +1259,15 @@ details[open] summary::before{content:'－ '}
           <div id="clConflicts"></div>
           <div class="mlist" id="clList"></div>
         </div>
+        <div class="card" id="mdDl" hidden style="margin-bottom:16px">
+          <div class="card-h"><h3>Скачивание в вашу папку моделей</h3><button class="btn" id="mdDlStop" type="button">Остановить</button></div>
+          <div class="hint" id="mdDlL" style="margin-bottom:8px"></div>
+          <div style="height:8px;border-radius:6px;background:var(--bg-2);overflow:hidden"><i id="mdDlB" style="display:block;height:100%;width:0;background:var(--grad);transition:width .4s"></i></div>
+          <div class="hint" id="mdDlN" style="margin-top:6px"></div>
+        </div>
         <div class="card">
-          <div class="card-h"><h3>Модели</h3><span><span id="mdAdd"></span> <button class="btn pri" id="mdFix" hidden>Докачать недостающие</button></span></div>
+          <div class="card-h"><h3>Модели</h3><span><span id="mdAdd"></span> <button class="btn pri" id="mdFix" hidden>Докачать недостающие</button> <button class="btn pri" id="mdFixExt" hidden>Скачать недостающие</button></span></div>
+          <label class="hint" style="display:flex;gap:8px;align-items:flex-start;margin:0 0 10px;cursor:pointer" title="Те же файлы, но с другого сервера. Помогает, когда Hugging Face грузит медленно или не открывается."><input type="checkbox" id="mdMirror" style="margin-top:3px"><span>Если Hugging Face грузит медленно: скачивать через зеркало <b>hf-mirror.com</b>. Файлы те же. Скачивание можно закрыть и продолжить позже, оно докачается с того же места.</span></label>
           <div class="mlist" id="mlist"></div>
         </div>
       </div>
@@ -1190,6 +1289,7 @@ details[open] summary::before{content:'－ '}
         <button class="btn" id="vwCopy">Скопировать промпт</button>
         <button class="btn" id="vwRepeat">Повторить с этими настройками</button>
         <button class="btn" id="vwUp" title="Увеличить разрешение и добавить чёткости (SeedVR2). Долго: минуты на каждые несколько секунд видео">Увеличить видео…</button>
+        <button class="btn pri" id="vwContinue" hidden>Продолжить это видео</button>
         <button class="btn" id="vwSeed" hidden>Зафиксировать seed этого видео</button>
         <button class="btn" id="vwFav">В избранное</button>
         <button class="btn danger" id="vwDel">Удалить</button>
@@ -1338,6 +1438,7 @@ function connectEvents() {
     if (m.type === 'engine') { setEngine(m.online); if (m.online) loadStatus(); return; }
     if (m.type === 'setup') { onSetupEvent(m); return; }
     if (m.type === 'agent_setup') { onAgentSetup(m); return; }
+    if (m.type === 'mdl') { onMdl(m); return; }
     qHandle(m);
     const fn = promptHandlers.get(m.prompt_id);
     if (fn) fn(m);
@@ -1350,13 +1451,59 @@ function setEngine(on) {
   $('#engDot').classList.toggle('off', !on && !cloudOn);
   $('#engTxt').textContent = cloudOn ? 'облако' : on ? 'подключён' : 'не запущен';
 }
+let SQ_ASKED = false;
+async function askSavedQueue() {
+  if (SQ_ASKED) return; SQ_ASKED = true;
+  try {
+    const r = await (await fetch('/api/queue/saved')).json();
+    if (!r.count) return;
+    const cancel = () => fetch('/api/queue/discard', { method: 'POST' });
+    const btn = $('#confirm [data-close]'); btn.addEventListener('click', cancel, { once: true });
+    confirmBox('Продолжить очередь?', `В прошлый раз осталось ${r.count} незавершённых заданий (программу закрыли или пропало питание). Продолжить их? Задание, которое шло, начнётся заново. Если нажать «Отмена», они будут забыты.`, 'Продолжить', async () => {
+      btn.removeEventListener('click', cancel);
+      const j = await postJSON('/api/queue/resume');
+      (j.jobs || []).forEach(x => qAdd(x.prompt_id, x.mode, x.prompt));
+      toast('Задания вернулись в очередь'); goTo('queue');
+    });
+  } catch {}
+}
+let OFFER_SHOWN = false;
+function offerNewModes(s) {
+  const o = (s.offer_modes || [])[0];
+  if (OFFER_SHOWN || !o) return;
+  OFFER_SHOWN = true;
+  const show = () => {
+    if (!$('#confirm').hidden) return setTimeout(show, 3000);  // another question is open: wait
+    const name = { flux: 'Правка картинки: FLUX.2 klein (можно в коммерцию)', long: 'Длинное видео (клипы и ролики по сценам)' }[o.mode] || o.mode;
+    const btn = $('#confirm [data-close]');
+    const later = () => fetch('/api/mode/offered', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: o.mode }) });
+    btn.addEventListener('click', later, { once: true });
+    confirmBox('Новый режим', `В обновлении появился режим «${name}». Чтобы он заработал, нужно скачать модели (около ${o.gb} ГБ). Добавить сейчас? Скачивание можно закрыть и продолжить позже, оно докачается с того же места.`, 'Добавить', async () => {
+      btn.removeEventListener('click', later); await later();
+      try {
+        if (s.engine === 'external') {
+          await postJSON('/api/mode/add', { mode: o.mode }); await loadStatus(); goTo('models');
+          if (MD_NEED.length) mdStart(MD_NEED);
+        } else {
+          if (!setupInfo) setupInfo = await (await fetch('/api/setup/info')).json();
+          const c = setupInfo.config;
+          await postJSON('/api/setup/install', { install_dir: c.install_dir, models_dir: c.models_dir || '', add_mode: o.mode });
+          showSetupPane('progress'); setStep(2); resetProgress();
+        }
+      } catch (err) { toast(err.message); }
+    });
+  };
+  setTimeout(show, 2000);
+}
 async function loadStatus() {
   try {
     const s = await (await fetch('/api/status')).json();
     $('#navCustom').hidden = s.engine !== 'external';
     setEngine(s.online);
     if (!s.online) return;
+    askSavedQueue();
     renderModels(s);
+    offerNewModes(s);
   } catch { setEngine(false); }
 }
 
@@ -1431,6 +1578,15 @@ function paramsCard(el, st, opts) {
       <div class="row-l">Качество <span class="resv"></span></div>
       <div class="seg">${QUALITY.map(q => `<button data-q="${q.id}">${q.id}<small>${q.sub}</small></button>`).join('')}</div>
     </div>
+    <div class="row">
+      <div class="row-l">Свой размер <small class="hint">(необязательно)</small></div>
+      <div class="path on" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input class="cw-w" inputmode="numeric" placeholder="ширина" style="width:90px"> <span>×</span>
+        <input class="cw-h" inputmode="numeric" placeholder="высота" style="width:90px">
+        <button class="btn cw-reset" type="button" hidden style="padding:6px 12px;font-size:12.5px">Сбросить</button>
+      </div>
+      <div class="hint cw-hint">Впишите нужные числа: программа сама округлит их до значений, которые понимает модель (кратно 32). Пусто — размер по формату и качеству выше.</div>
+    </div>
     ${opts.extraRow || ''}
     ${opts.duration ? `
     <div class="row">
@@ -1462,8 +1618,10 @@ function paramsCard(el, st, opts) {
     $$('.chip', el).forEach(c => c.classList.toggle('on', c.dataset.a === st.aspect));
     $$('.seg button[data-q]', el).forEach(c => c.classList.toggle('on', c.dataset.q === st.q));
     $$('.seg button[data-r]', el).forEach(c => c.classList.toggle('on', c.dataset.r === st.refSize));
-    const [w, h] = resFor(st.aspect, st.q);
-    $('.resv', el).textContent = `${w}×${h}`;
+    const [w, h] = st.cw && st.ch ? [st.cw, st.ch] : resFor(st.aspect, st.q);
+    $('.resv', el).textContent = `${w}×${h}` + (st.cw && st.ch ? ' · свой' : '');
+    $('.cw-reset', el).hidden = !(st.cw || st.ch);
+    $$('.seg button[data-q]', el).forEach(c => c.style.opacity = st.cw && st.ch ? .45 : '');
     if (opts.duration) {
       const d = $('.dur', el); d.value = st.dur;
       d.style.setProperty('--p', ((st.dur - 3) / 22 * 100) + '%');
@@ -1487,10 +1645,49 @@ function paramsCard(el, st, opts) {
     if (e.target.closest('.seed-new')) { st.seed = newSeed(); upd(); }
     if (e.target.closest('.seed-copy')) { navigator.clipboard?.writeText(String(st.seed || '')); toast('Seed скопирован: ' + st.seed); }
   });
+  const cwApply = () => {
+    const iw = $('.cw-w', el), ih = $('.cw-h', el), hint = $('.cw-hint', el);
+    const a = parseInt(iw.value, 10), b = parseInt(ih.value, 10);
+    if (a >= 64 && b >= 64) {
+      st.cw = Math.min(2048, Math.max(64, Math.round(a / 32) * 32)); st.ch = Math.min(2048, Math.max(64, Math.round(b / 32) * 32));
+      iw.value = st.cw; ih.value = st.ch;
+      hint.textContent = `Размер будет ${st.cw}×${st.ch}` + (st.cw !== a || st.ch !== b ? ` (округлено с ${a}×${b})` : '') + (st.cw * st.ch > 1920 * 1088 ? '. Это больше 1080p: может не хватить видеопамяти.' : '');
+    } else { st.cw = st.ch = 0; hint.textContent = 'Впишите оба числа (от 64 и больше): программа округлит их до кратных 32. Пусто — размер по формату и качеству.'; }
+    upd();
+  };
+  $('.cw-w', el).onchange = $('.cw-h', el).onchange = cwApply;
+  $('.cw-reset', el).onclick = () => { $('.cw-w', el).value = $('.cw-h', el).value = ''; st.cw = st.ch = 0; cwApply(); };
   $('.seed-in', el).oninput = e => { st.seed = e.target.value.replace(/\D/g, '').slice(0, 18); e.target.value = st.seed; };
   if (opts.duration) $('.dur', el).oninput = e => { st.dur = +e.target.value; upd(); };
   return upd;
 }
+const SZ_ROW = `<div class="row sz-row"><div class="row-l">Свой размер <span class="hint">(необязательно)</span></div>
+  <div class="path on" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn sz-p" data-p="0" type="button" title="Обычный размер (около 1 МП): быстро, как эскиз" style="padding:6px 12px;font-size:12.5px">Эскиз</button><button class="btn sz-p" data-p="2k" type="button" title="Сразу 2К: по длинной стороне 2048" style="padding:6px 12px;font-size:12.5px">2К</button><input class="sz-w" inputmode="numeric" placeholder="ширина" style="width:90px"> <span>×</span> <input class="sz-h" inputmode="numeric" placeholder="высота" style="width:90px"> <button class="btn sz-reset" type="button" hidden style="padding:6px 12px;font-size:12.5px">Сбросить</button></div>
+  <div class="hint sz-hint">Размер подстраивается под шаг модели, кратно 32: например, 1920×1080 станет 1920×1088. Пусто — размер по формату выше.</div></div>`;
+function szWire(el, st, onChange, getBase) {
+  const iw = $('.sz-w', el), ih = $('.sz-h', el), hint = $('.sz-hint', el), rs = $('.sz-reset', el);
+  const def = hint.textContent;
+  const apply = () => {
+    const a = parseInt(iw.value, 10), b = parseInt(ih.value, 10);
+    if (a >= 64 && b >= 64) {
+      let k = a * b > 2200000 ? Math.sqrt(2200000 / (a * b)) : 1;
+      const r = v => Math.min(2048, Math.max(256, Math.round(v * k / 32) * 32));
+      st.cw = r(a); st.ch = r(b); iw.value = st.cw; ih.value = st.ch;
+      hint.textContent = `Будет ${st.cw}×${st.ch}` + (st.cw !== a || st.ch !== b ? ` (округлено с ${a}×${b}, шаг 32)` : '') + (st.cw * st.ch > 1500000 ? '. Это больше 1,5 МП: дольше и больше видеопамяти.' : '');
+    } else { st.cw = st.ch = 0; hint.textContent = def; }
+    rs.hidden = !(st.cw || st.ch);
+    onChange();
+  };
+  iw.onchange = ih.onchange = apply;
+  $$('.sz-p', el).forEach(b => b.onclick = () => {
+    if (b.dataset.p === '0') { iw.value = ih.value = ''; apply(); return; }
+    const [bw, bh] = (getBase && getBase()) || [1376, 768], k = 2048 / Math.max(bw, bh);
+    iw.value = Math.round(bw * k / 32) * 32; ih.value = Math.round(bh * k / 32) * 32; apply();
+    if (st.engine === 'krea') toast('Krea 2 лучше всего работает около 1 МП: для неё надёжнее эскиз и потом «Увеличить до 2К» в Библиотеке');
+  });
+  rs.onclick = () => { iw.value = ih.value = ''; apply(); };
+}
+function sizeForm(st, fd) { if (st.cw && st.ch) { fd.append('width', st.cw); fd.append('height', st.ch); } }
 const newSeed = () => String(Math.floor(Math.random() * 2 ** 50));
 // the seed goes to the server only when the user fixed it; otherwise the server draws a new one
 function seedForm(st, fd) { if (st.seedFixed && st.seed) fd.append('seed', st.seed); }
@@ -1544,6 +1741,7 @@ function previewPanel(el, st, opts) {
       <div class="res"></div>
       <canvas class="live" hidden></canvas>
       <img class="live-img" alt="" hidden>
+      <video class="live-vid" autoplay loop muted playsinline hidden style="width:100%;height:100%;object-fit:contain"></video>
       <video class="result" controls loop playsinline hidden></video>
       <div class="wait" hidden></div>
       <div class="live-hud" hidden><span class="live-dot"></span><span class="hud-t">Предпросмотр</span><span class="hud-s"></span></div>
@@ -1561,12 +1759,12 @@ function previewPanel(el, st, opts) {
     <div class="status"></div>`;
   const frame = $('.frame', el), go = $('.go', el), stopB = $('.stop', el), status = $('.status', el);
   const live = $('.live', el), hud = $('.live-hud', el), bar = $('.bar', el);
-  const liveImg = $('.live-img', el), result = $('.result', el), wait = $('.wait', el);
+  const liveImg = $('.live-img', el), result = $('.result', el), wait = $('.wait', el), liveVid = $('.live-vid', el);
   const STEP_MS = 420;
   let run = null;
 
   function resetFrame() {
-    [live, hud, liveImg, result, wait].forEach(x => x.hidden = true);
+    [live, hud, liveImg, liveVid, result, wait].forEach(x => x.hidden = true);
     result.pause(); result.removeAttribute('src');
     $('.res', frame).hidden = false; frame.classList.remove('done');
   }
@@ -1611,18 +1809,26 @@ function previewPanel(el, st, opts) {
     showStage();
     run.tick = setInterval(showStage, 1000);
     previewHandlers.set(el, blob => {
-      if (!run || run.stage === 'queued') return;
+      if (!run || run.stage === 'queued' || run.anim) return;   // the animated preview (KJNodes) wins over the single frame
       URL.revokeObjectURL(liveImg.dataset.url || '');
       liveImg.dataset.url = liveImg.src = URL.createObjectURL(blob);
       liveImg.classList.remove('dim'); liveImg.hidden = false; wait.hidden = true;
     });
     onPrompt(run.id, ev => {
       if (!run || run.id !== ev.prompt_id) return;
+      if (ev.type === 'preview_anim') {
+        run.anim = true; wait.hidden = true; liveImg.classList.remove('dim');
+        if (ev.mime.startsWith('video/')) { liveVid.src = `data:${ev.mime};base64,${ev.image}`; liveVid.hidden = false; liveImg.hidden = true; liveVid.play().catch(() => {}); }
+        else { liveImg.src = `data:${ev.mime};base64,${ev.image}`; liveImg.hidden = false; liveVid.hidden = true; }
+        return;
+      }
       if (ev.type === 'stage') {
         const sampling = ev.stage.startsWith('sample');
-        if (sampling && run.stage !== ev.stage) run.sampleT0 = performance.now();
+        if (sampling && run.stage !== ev.stage) { run.sampleT0 = performance.now(); run.step1T = null; }
         run.stage = ev.stage; run.step = ev.step; run.max = ev.max;
+        if (ev.scene) { if (run.scene !== ev.scene) { run.sampleT0 = performance.now(); run.step1T = null; } run.scene = ev.scene; run.nscenes = ev.scenes; }
         if (sampling && ev.step) run.stepT = performance.now();
+        if (sampling && ev.step === 1) run.step1T = run.stepT;   // the first step includes loading, it is not typical
         showStage();
       } else if (ev.type === 'done') realFinish('done', ev.item);
       else if (ev.type === 'error') realFinish('error', ev.message);
@@ -1640,10 +1846,16 @@ function previewPanel(el, st, opts) {
       const pass = two ? `проход ${run.stage === 'sample2' ? 2 : 1}/2 · ` : '';
       line = `${two && run.stage === 'sample' ? 'Проход 1 · генерация кадров' : txt} · шаг ${run.step || 0} из ${run.max}`;
       hudTxt = `${pass}шаг ${run.step || 0}/${run.max}`;
-      if (run.step) {
-        const per = (run.stepT - run.sampleT0) / run.step;
-        line += ` · ${two ? 'до конца прохода' : 'осталось'} ~${fmtTime((run.max - run.step) * per / 1000 + 10)}`;
-      }
+      if (run.scene) { line = `Сцена ${run.scene} из ${run.nscenes} · ` + line; hudTxt = `сцена ${run.scene}/${run.nscenes} · ${hudTxt}`;
+        p = 0.15 + 0.75 * ((run.scene - 1 + frac) / run.nscenes); }
+      if (run.step >= 2 && run.step1T) {
+        const per = (run.stepT - run.step1T) / (run.step - 1);
+        const left = (run.max - run.step) + (run.scene ? (run.nscenes - run.scene) * run.max : 0), extra = run.scene ? 10 * (run.nscenes - run.scene + 1) : 10;
+        if (run.scene) {
+          line += ` · эта сцена ещё ~${fmtTime((run.max - run.step) * per / 1000 + 10)}`;
+          if (run.nscenes > run.scene) line += ` · весь ролик ~${fmtTime(left * per / 1000 + extra)}`;
+        } else line += ` · ${two ? 'до конца прохода' : 'осталось'} ~${fmtTime(left * per / 1000 + extra)}`;
+      } else if (run.step >= 1) line += ' · время считаем, нужен ещё шаг';
     }
     bar.style.width = (p * 100) + '%';
     $('.hud-s', el).textContent = hudTxt;
@@ -1656,7 +1868,7 @@ function previewPanel(el, st, opts) {
     const took = fmtTime((performance.now() - run.t0) / 1000);
     run = null;
     if (kind === 'done') {
-      [liveImg, wait].forEach(x => x.hidden = true);
+      [liveImg, liveVid, wait].forEach(x => x.hidden = true);
       result.src = data.url; result.dataset.dragid = data.id; result.draggable = true; result.hidden = false; result.muted = true; result.play().catch(() => {});
       frame.classList.add('done'); $('.hud-t', el).textContent = 'Готово'; $('.hud-s', el).textContent = took;
       status.innerHTML = `Готово за ${took} — видео в библиотеке. Seed: <b style="font-family:var(--mono)">${esc(String(data.seed ?? '—'))}</b> `
@@ -2681,28 +2893,51 @@ const vPrev = previewPanel($('#vPreview'), V, {
   extraLabel: 'Режим',
   extra: () => V.first && V.last ? 'Кадр → кадр' : V.first ? 'Картинка → видео' : 'Текст → видео',
   validate: () => !$('#vPrompt').value.trim() ? 'Напишите промпт' : '',
-  passes: () => [8],
+  passes: () => [V.accel === 'sla' ? 4 : 8],
   target: () => $('#dFirst img'),
   real: {
     url: '/api/generate/video',
     form: () => {
       const fd = new FormData();
       fd.append('prompt', $('#vPrompt').value.trim());
-      fd.append('aspect', V.aspect); fd.append('quality', V.q); fd.append('duration', V.dur);
+      sizeForm(V, fd); fd.append('aspect', V.aspect); fd.append('quality', V.q); fd.append('duration', V.dur);
       seedForm(V, fd);
       loraForm(V, fd);
       if ($('#dFirst')._file) fd.append('first', $('#dFirst')._file);
-      if ($('#dFirst')._file && $('#dLast')._file) fd.append('last', $('#dLast')._file);
+      fd.append('accel', V.accel === 'sla' ? 'sla' : '');
+      const loop = $('#vLoop').checked && $('#dFirst')._file;
+      if (loop) fd.append('loop', '1');
+      else if ($('#dFirst')._file && $('#dLast')._file) fd.append('last', $('#dLast')._file);
       return fd;
     },
   },
-  meta: () => ({ mode: 'video', prompt: $('#vPrompt').value.trim(), sub: V.first && V.last ? 'Кадр → кадр' : V.first ? 'Картинка → видео' : 'Текст → видео' }),
+  meta: () => ({ mode: 'video', prompt: $('#vPrompt').value.trim(), sub: $('#vLoop').checked && V.first ? 'Зацикленное видео' : V.first && V.last ? 'Кадр → кадр' : V.first ? 'Картинка → видео' : 'Текст → видео' }),
   onDone: item => addToLib(item),
 });
-const vUpd = paramsCard($('#vParams'), V, {
-  n: 3, duration: true, extraRow: '<div id="vLoras"></div>',
-  onChange: () => { vPrev(); vMode(); }
+$('#vLoop').onchange = () => { $('#dLast').style.opacity = $('#vLoop').checked ? .4 : ''; vPrev(); };
+const vUpd = paramsCard($('#vParams'), V, { n: 3, duration: true, onChange: () => { vPrev(); vMode(); },
+  extraRow: `<div class="row"><div class="row-l">Ускорение <span class="hint">для слабых видеокарт</span></div>
+    <div class="seg v-accel" style="grid-template-columns:1fr 1fr"><button type="button" data-ac="normal">Обычное<small>как раньше</small></button><button type="button" data-ac="sla">Быстрый черновик<small>в 1,3 раза быстрее, качество ниже</small></button></div>
+    <div class="hint v-achint" hidden></div><div class="hint" style="margin-top:6px">«Быстрый черновик» нужен для проб: это скорость, а не увеличение размера. Для готового ролика выбирайте «Обычное».</div></div><div id="vLoras"></div>` });
+function vAccUpd() { $$('.v-accel button').forEach(b => b.classList.toggle('on', (b.dataset.ac === 'sla') === (V.accel === 'sla'))); }
+async function vAccCheck() {
+  const hint = $('.v-achint'); hint.hidden = true; hint.innerHTML = '';
+  if (V.accel !== 'sla') return;
+  try {
+    const st = await (await fetch('/api/status')).json();
+    const m = (st.models || []).find(x => x.role === 'sla_lora');
+    if (m && !m.have) {
+      hint.hidden = false;
+      hint.innerHTML = `Для быстрого режима нужен файл ускорения (${GB(m.size)}). <button class="btn mini pri" type="button" id="vAccDl">Скачать</button> <span class="hint" id="vAccProg"></span>`;
+      $('#vAccDl').onclick = () => { mdStart(['sla_lora']); };
+    }
+  } catch {}
+}
+$('#vParams').addEventListener('click', e => {
+  const b = e.target.closest('.v-accel button'); if (!b) return;
+  V.accel = b.dataset.ac; vAccUpd(); vAccCheck(); vPrev();
 });
+vAccUpd(); vAccCheck();
 function vMode() {
   $('#vMode').textContent = 'Режим: ' + (V.first && V.last ? 'видео между двумя кадрами' : V.first ? 'изображение → видео' : 'видео по тексту');
   $('#dLast').classList.toggle('disabled', !V.first);
@@ -2731,7 +2966,7 @@ const lPrev = previewPanel($('#lPreview'), L, {
     form: () => {
       const fd = new FormData();
       fd.append('prompt', $('#lPrompt').value.trim());
-      fd.append('aspect', L.aspect); fd.append('quality', L.q); fd.append('ref_size', L.refSize);
+      sizeForm(L, fd); fd.append('aspect', L.aspect); fd.append('quality', L.q); fd.append('ref_size', L.refSize);
       loraForm(L, fd); seedForm(L, fd);
       fd.append('audio', new File([wavSlice(abuf, L.start, L.end)], 'clip.wav', { type: 'audio/wav' }));
       fd.append('audio_len', L.len().toFixed(3));
@@ -2820,6 +3055,14 @@ let actx, abuf, peaks = [], src, raf, playStart = 0;
 const wave = $('#wave'), cv = $('#waveCv'), selEl = $('#sel'), ph = $('#ph');
 const aFile = $('#aFile');
 $('#aChange').onclick = () => aFile.click();
+$('#aRemove').onclick = () => {
+  stop();
+  abuf = null; peaks = []; undoStack = []; cut = null; audioName = '';
+  L.dur0 = 0; L.start = 0; L.end = 0; MEM.audio = null; aFile.value = '';
+  $('#aEd').classList.remove('on'); aDrop.style.display = '';
+  syncCut(); lUpd(); memSave();
+  toast('Аудио удалено');
+};
 aFile.onchange = () => loadAudio(aFile.files[0]);
 const aDrop = $('#aDrop');
 aDrop.addEventListener('dragover', e => { e.preventDefault(); aDrop.classList.add('over'); });
@@ -3049,7 +3292,7 @@ function stop() {
 
 /* ---------- SETUP & MODELS view ---------- */
 const GB = b => b < 1e9 ? Math.round(b / 1e6) + ' МБ' : (b / 1e9).toFixed(1).replace(/\.0$/, '') + ' ГБ';
-const MODE_ORDER = ['video', 'lipsync', 'refs', 'actor', 'action', 'krea', 'kreareal', 'qwen', 'upscale'];
+const MODE_ORDER = ['video', 'lipsync', 'refs', 'actor', 'action', 'long', 'krea', 'kreareal', 'qwen', 'flux', 'upscale'];
 // start with one mode: a full set is ~100 GB, most people need one task to begin with
 let setupInfo = null, setupOpt = 'new', setupProfile = null, setupModes = ['video'];
 const SETUP_STEPS = [['comfy', 'ComfyUI'], ['nodes', 'Ноды'], ['start', 'Запуск ComfyUI'], ['models', 'Модели']];
@@ -3079,7 +3322,7 @@ async function openSetup() {
   const hw = setupInfo.hardware, c = setupInfo.config;
   // before setup ComfyUI may not exist yet, so the sidebar shows the detected card instead
   $('#hwGrid').innerHTML = [
-    ['Видеокарта', hw.nvidia ? hw.gpu : 'не найдена NVIDIA'], ['Видеопамять', hw.vram_gb ? hw.vram_gb + ' ГБ' : '—'],
+    ['Видеокарта', hw.nvidia ? hw.gpu : 'нет видеокарты NVIDIA (работает только с NVIDIA)'], ['Видеопамять', hw.vram_gb ? hw.vram_gb + ' ГБ' : '—'],
     ['Оперативная память', hw.ram_gb + ' ГБ'], ['Свободно на диске', hw.disk_free_gb != null ? hw.disk_free_gb + ' ГБ' : '—'],
   ].map(([k, v]) => `<div><small>${k}</small><b>${esc(String(v))}</b></div>`).join('');
   const V = { ok: ['ok', 'Подходит'], weak: ['weak', 'Будет работать медленно'], unsupported: ['unsupported', 'Не подходит'] }[setupInfo.verdict];
@@ -3099,6 +3342,7 @@ async function openSetup() {
   const P = setupInfo.profiles;
   $$('#modePick .mcard').forEach(c => {
     c.classList.toggle('on', setupModes.includes(c.dataset.m));
+    $('#modeAll').textContent = $$('#modePick .mcard').every(x => setupModes.includes(x.dataset.m)) ? 'Снять все (оставить только Image-to-Video)' : 'Выбрать все';
     $('small', c).textContent = `~${P[setupProfile].sizes[c.dataset.m]} ГБ, если ставить только его`;
   });
   const shared = setupModes.includes('lipsync') && setupModes.includes('refs')
@@ -3115,6 +3359,11 @@ $('#modePick').onclick = e => {
   const next = setupModes.includes(m) ? setupModes.filter(x => x !== m) : [...setupModes, m];
   if (!next.length) { toast('Нужен хотя бы один режим'); return; }
   setupModes = next.sort((a, b) => MODE_ORDER.indexOf(a) - MODE_ORDER.indexOf(b)); openSetup();
+};
+$('#modeAll').onclick = () => {
+  const all = $$('#modePick .mcard').map(c => c.dataset.m);
+  setupModes = all.every(m => setupModes.includes(m)) ? ['video'] : all.sort((a, b) => MODE_ORDER.indexOf(a) - MODE_ORDER.indexOf(b));
+  openSetup();
 };
 $('#profilePick').onclick = e => {
   const b = e.target.closest('button[data-p]'); if (!b) return;
@@ -3229,7 +3478,8 @@ async function afterSetup() {
 }
 
 /* status after setup */
-let MD_ENGINE = '';
+let MD_ENGINE = '', MD_EXTDIR = '', MD_NEED = [];
+let MD_EXT = false;
 function renderModels(s) {
   if (!s.models) return;
   MD_ENGINE = s.engine;
@@ -3238,12 +3488,19 @@ function renderModels(s) {
   $('#mlist').innerHTML = s.models.map(m => {
     const optional = !m.modes.length;
     const st = m.have ? '<span class="st ok">✓ есть</span>' : optional ? '<span class="st opt">необязательно</span>' : '<span class="st miss">нет</span>';
-    const modes = m.modes.map(x => ({ video: 'Image-to-Video', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра', action: 'Экшн', krea: 'Картинка по тексту', kreareal: 'Картинка: реализм', qwen: 'Правка картинки', upscale: 'Увеличение' })[x]).join(', ') || 'дополнительно';
-    return `<div class="m"><b>${esc(m.name.split('\\').pop())}<small>${esc(m.title)} · ${modes}<br>Нужен файл: <span class="mf" title="Нажмите, чтобы скопировать имя">${esc(m.file || '')}</span> · положить в папку ${esc(m.folder || '')} вашего ComfyUI (подойдёт и любая подпапка в ней)${m.marks ? ` · в названии: ${esc(m.marks)}` : ''}</small></b><span class="hint">${GB(m.size)}</span>${st}<div class="m-btns" style="grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap"><button class="btn mini" type="button" data-dlmodel="${m.role}" title="Открыть страницу скачивания этого файла в браузере">Скачать…</button><button class="btn mini" type="button" data-copyname="${esc(m.file || '')}" title="Скопировать имя файла, чтобы найти его на компьютере или на сайте">Копировать имя</button><button class="btn mini" type="button" data-pickmodel="${m.role}" title="${m.have ? 'Заменить на другой файл (например, другую точность модели)' : 'Если файл у вас называется иначе — выберите его вручную'}">${m.have ? (m.picked ? 'Другой файл ✓' : 'Заменить…') : 'Указать файл…'}</button>${m.variants && m.variants.length > 1 ? `<button class="btn mini" type="button" data-variant="${m.role}" title="Поставить другую версию этой же модели, например полегче или новее">Другая версия…</button>` : ''}</div></div>`;
+    const modes = m.modes.map(x => ({ video: 'Image-to-Video', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра', action: 'Экшн', long: 'Длинное видео', krea: 'Картинка по тексту', kreareal: 'Картинка: реализм', qwen: 'Правка картинки', flux: 'Правка: FLUX.2', upscale: 'Увеличение' })[x]).join(', ') || 'дополнительно';
+    return `<div class="m"><b>${esc(m.name.split('\\').pop())}<small>${esc(m.title)} · ${modes}<br>Нужен файл: <span class="mf" title="Нажмите, чтобы скопировать имя">${esc(m.file || '')}</span> · положить в папку ${esc(m.folder || '')} вашего ComfyUI (подойдёт и любая подпапка в ней)${m.marks ? ` · в названии: ${esc(m.marks)}` : ''}</small></b><span class="hint">${GB(m.size)}</span>${st}<div class="m-btns" style="grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap">${s.engine === 'external' && !m.have ? `<button class="btn mini pri" type="button" data-dlnow="${m.role}" title="Скачать этот файл прямо в папку моделей вашего ComfyUI">Скачать сюда (${GB(m.size)})</button>` : ''}<button class="btn mini" type="button" data-dlmodel="${m.role}" title="Открыть страницу скачивания этого файла в браузере">Страница в интернете…</button><button class="btn mini" type="button" data-copyurl="${esc(m.url || '')}" title="Скопировать прямую ссылку, чтобы скачать менеджером загрузок или через другой компьютер">Копировать ссылку</button><button class="btn mini" type="button" data-copyname="${esc(m.file || '')}" title="Скопировать имя файла, чтобы найти его на компьютере или на сайте">Копировать имя</button><button class="btn mini" type="button" data-pickmodel="${m.role}" title="${m.have ? 'Заменить на другой файл (например, другую точность модели)' : 'Если файл у вас называется иначе — выберите его вручную'}">${m.have ? (m.picked ? 'Другой файл ✓' : 'Заменить…') : 'Указать файл…'}</button>${m.variants && m.variants.length > 1 ? `<button class="btn mini" type="button" data-variant="${m.role}" title="Поставить другую версию этой же модели, например полегче или новее">Другая версия…</button>` : ''}</div></div>`;
   }).join('');
   $('#mdFix').hidden = s.engine !== 'managed' || s.models.every(m => m.have || !m.modes.length);
-  const MN = { video: 'Image-to-Video', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра', action: 'Экшн-сцены', krea: 'Картинка по тексту', kreareal: 'Картинка: реализм', qwen: 'Правка картинки', upscale: 'Увеличение видео и картинок' };
-  $('#mdAdd').innerHTML = s.engine === 'managed' ? Object.entries(s.add_modes || {}).map(([m, gb]) =>
+  MD_EXT = s.engine === 'external';
+  $('#mdMirror').checked = !!s.hf_mirror;
+  MD_EXTDIR = (s.paths && s.paths.ext_models) || '';
+  const need = s.models.filter(m => !m.have && m.modes.some(x => (s.modes || []).includes(x)));
+  MD_NEED = need.map(m => m.role);
+  $('#mdFixExt').hidden = s.engine !== 'external' || !need.length;
+  $('#mdFixExt').textContent = `Скачать недостающие (${need.length}, ${GB(need.reduce((a, m) => a + m.size, 0))})`;
+  const MN = { video: 'Image-to-Video', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра', action: 'Экшн-сцены', long: 'Длинное видео', krea: 'Картинка по тексту', kreareal: 'Картинка: реализм', qwen: 'Правка картинки', flux: 'Правка картинки: FLUX.2 (в коммерцию)', upscale: 'Увеличение видео и картинок' };
+  $('#mdAdd').innerHTML = s.engine === 'managed' || s.engine === 'external' ? Object.entries(s.add_modes || {}).map(([m, gb]) =>
     `<button class="btn" data-add="${m}">Добавить ${MN[m]} (+${gb} ГБ)</button>`).join(' ') : '';
   $$(MODE_ORDER.map(v => `.nav[data-view="${v}"]`).join(',')).forEach(n => {
     const off = s.modes && !s.modes.includes(n.dataset.view);
@@ -3258,6 +3515,9 @@ function renderModels(s) {
     + (P.assistant ? `<span>Помощник (агент)</span><b>${esc(P.assistant)}</b>` : '')
     + `<span>Настройки и список Библиотеки</span><b>${esc(P.data || '')} (мало места)</b>`);
 }
+$('#mdMirror').onchange = async e => {
+  try { await postJSON('/api/settings/mirror', { on: e.target.checked }); toast(e.target.checked ? 'Скачивание через зеркало hf-mirror.com включено' : 'Зеркало выключено, скачиваем с Hugging Face'); loadStatus(); } catch (err) { toast(err.message); }
+};
 $('#mdFix').onclick = async () => {
   if (!setupInfo) setupInfo = await (await fetch('/api/setup/info')).json();
   const c = setupInfo.config;
@@ -3268,6 +3528,10 @@ $('#mdFix').onclick = async () => {
 };
 $('#mdAdd').onclick = async e => {
   const b = e.target.closest('[data-add]'); if (!b) return;
+  if (b.closest('#mdAdd') && MD_EXT) {
+    try { await postJSON('/api/mode/add', { mode: b.dataset.add }); toast('Режим добавлен: файлы моделей — в списке ниже'); loadStatus(); } catch (err) { toast(err.message); }
+    return;
+  }
   if (!setupInfo) setupInfo = await (await fetch('/api/setup/info')).json();
   const c = setupInfo.config;
   try {
@@ -3328,10 +3592,53 @@ async function mountCloud(host, wizard) {
 $('#mdReset').onclick = async () => {
   try { await postJSON('/api/setup/reset'); setNavLocked(true); openSetup(); } catch (e) { toast(e.message); }
 };
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-websearch]'); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  postJSON('/api/search-web', { q: b.dataset.websearch }).then(() => toast('Открываю поиск в браузере'), err => toast(err.message));
+});
+// own ComfyUI: download missing files straight into the user's models folder
+async function mdAskFolder() {
+  const msg = 'Укажите папку models вашего ComfyUI: в ней лежат папки diffusion_models, loras, vae… Например G:\\ModelHub\\Models';
+  if (window.pywebview?.api?.pick_folder) { toast('Выберите папку models вашего ComfyUI'); return (await window.pywebview.api.pick_folder('')) || ''; }
+  return (prompt(msg) || '').trim();
+}
+async function mdStart(roles) {
+  let folder = MD_EXTDIR;
+  if (!folder) { folder = await mdAskFolder(); if (!folder) return; }
+  try {
+    const r = await postJSON('/api/models/download', { roles, folder });
+    MD_EXTDIR = r.folder || folder;
+    $('#mdDl').hidden = false; $('#mdDlL').textContent = 'Начинаем…'; $('#mdDlB').style.width = '0';
+    toast(`Скачиваем ${r.count} файл(ов) в ${MD_EXTDIR}`);
+  } catch (err) {
+    if (/Папка не найдена|не похоже/.test(err.message)) MD_EXTDIR = '';
+    toast(err.message);
+  }
+}
+$('#mdFixExt').onclick = () => mdStart(MD_NEED);
+$('#mdDlStop').onclick = () => postJSON('/api/models/download/cancel');
+function onMdl(m) {
+  const card = $('#mdDl'); card.hidden = false;
+  const vp = $('#vAccProg'); if (vp) vp.textContent = m.state === 'done' ? 'Готово' : m.state === 'error' ? (m.label || '') : (m.total && m.done != null ? `${Math.round(m.done / m.total * 100)}%` : '');
+  if (m.state === 'done') setTimeout(() => vAccCheck(), 500);
+  if (m.state === 'done' || m.state === 'error') {
+    $('#mdDlL').textContent = m.label || ''; $('#mdDlN').textContent = '';
+    if (m.state === 'done') { $('#mdDlB').style.width = '100%'; loadStatus(); setTimeout(() => { card.hidden = true; }, 6000); }
+    return;
+  }
+  if (m.label) $('#mdDlL').textContent = m.label + (m.count > 1 ? ` · файл ${m.index} из ${m.count}` : '');
+  if (m.total && m.done != null) {
+    $('#mdDlB').style.width = Math.min(100, m.done / m.total * 100) + '%';
+    $('#mdDlN').textContent = `${GB(m.done)} из ${GB(m.total)}`;
+  }
+}
+$('#mdOwnGo').onclick = () => $('#mdReset').click();
 // custom nodes the sections need, for people who use their own ComfyUI
 async function loadNodes() {
   const card = $('#mdNodesCard'), st = await (await fetch('/api/status')).json().catch(() => ({}));
   card.hidden = st.engine !== 'external';
+  $('#mdOwnCard').hidden = st.engine !== 'managed';
   if (card.hidden) return;
   let r; try { r = await (await fetch('/api/nodes')).json(); } catch { return; }
   const list = r.nodes || [];
@@ -3358,7 +3665,7 @@ $('.nav[data-view="models"]').addEventListener('click', async () => {
 });
 
 /* ---------- LIBRARY ---------- */
-const MODE_NAME = { custom: 'Свой workflow', video: 'Видео', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра', action: 'Экшн', krea: 'Картинка по тексту', qwen: 'Правка картинки', upscale: 'Увеличение' };
+const MODE_NAME = { montage: 'Монтаж', custom: 'Свой workflow', video: 'Видео', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра', action: 'Экшн', long: 'Длинное видео', krea: 'Картинка по тексту', qwen: 'Правка картинки', upscale: 'Увеличение' };
 const LIB = [];
 const IMG_PANELS = [];  // refresh functions of the picture result windows
 let libFilter = 'all', selecting = false, selected = new Set(), openId = null;
@@ -3374,6 +3681,7 @@ const TOASTS = [];
 const noteMsg = s => { TOASTS.push(new Date().toLocaleTimeString('ru') + ' ' + String(s).slice(0, 300)); if (TOASTS.length > 20) TOASTS.shift(); };
 window.addEventListener('error', e => noteMsg('Ошибка скрипта: ' + e.message + ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')'));
 window.addEventListener('unhandledrejection', e => noteMsg('Ошибка: ' + (e.reason && e.reason.message || e.reason)));
+$('#supBtn').onclick = () => fetch('/api/support', { method: 'POST' }).then(() => toast('Открываю страницу поддержки в браузере'), () => {});
 $('#repBtn').onclick = async () => {
   const b = $('#repBtn'); b.disabled = true;
   try {
@@ -3420,7 +3728,7 @@ function qHandle(m) {
     j.state = 'running'; j.stage = m.stage; j.step = m.step; j.max = m.max; j.t0 = j.t0 || performance.now();
   } else if (m.type === 'done') {
     j.state = 'done'; j.took = j.t0 ? (performance.now() - j.t0) / 1000 : 0;
-    (m.items || [m.item]).forEach(it => { if (!LIB.some(x => x.id === it.id)) addToLib(normItem(it), new Date(it.date)); });
+    (m.items || [m.item]).forEach(it => { if (!LIB.some(x => x.id === it.id)) addToLib(normItem(it), new Date(it.date)); if (it.long && typeof RM !== 'undefined' && RM.long && RM.long.root._partDone) RM.long.root._partDone(normItem(it)); });
     if (j.detached) toast(`Готово: ${MODE_NAME[j.mode] || 'видео'} — оно в Библиотеке`);
   } else if (m.type === 'error') { j.state = 'error'; j.msg = m.message; if (j.detached) toast('Задание не получилось: ' + m.message); }
   else if (m.type === 'interrupted') j.state = 'stopped';
@@ -3567,6 +3875,7 @@ function openViewer(id) {
   $('#vwPrompt').textContent = it.prompt || 'без промпта';
   $('#vwFav').textContent = it.fav ? '★ В избранном' : 'В избранное';
   $('#vwSeed').hidden = it.seed == null;
+  $('#vwContinue').hidden = pic || !it.url || !!it.missing;
   $('#vwUp').hidden = it.mode === 'upscale' || it.mode === 'custom' || !it.url || !!it.missing;
   $('#vwUp').textContent = pic ? 'Увеличить картинку…' : 'Увеличить видео…';
   $('#viewer').hidden = false;
@@ -3605,6 +3914,21 @@ $('#vwCopy').onclick = () => {
 $('#vwZoom').onclick = () => { const it = byId(openId); if (it && it.url) zoomOpen(it.url); };
 $('#vwImg').onclick = () => { const it = byId(openId); if (it && it.kind === 'image' && it.url) zoomOpen(it.url); };
 $('#vwDel').onclick = () => askDelete([openId]);
+async function continueLong(it) {
+  const L2 = RM.long.root;
+  if (!(it.long && it.long.run) || (L2._run !== it.long.run && !(await L2._openRun(it.long.run)))) {
+    // a video that was not made here (or whose project is gone): continue from its last frames as a new project
+    L2._setSrc({ id: it.id, name: (it.prompt || it.sub || 'видео из Библиотеки').slice(0, 50) });
+    await useInWorkflow(it, 'long');   // the last picture of the video becomes the hero
+    goTo('long');
+    toast('Продолжаем это видео. Последний кадр встал первым референсом: добавьте другие референсы (персонаж, локацию…), опишите следующую сцену и нажмите «Сделать эту сцену».');
+    return;
+  }
+  goTo('long');
+  if (L2._mode === 'parts' && L2._ready() >= $$('.sc', L2).length && $$('.sc', L2).length < 12) L2._addScene('', 10);
+  toast('Проект открыт: те же картинки и сцены. Опишите следующую сцену и нажмите «Сделать эту сцену».');
+}
+$('#vwContinue').onclick = () => { const it = byId(openId); if (!it) return; closeViewer(); continueLong(it); };
 $('#vwSeed').onclick = () => {
   const it = byId(openId); if (!it || it.seed == null) return;
   const st = it.mode === 'video' ? V : it.mode === 'lipsync' ? L : RM[it.mode]?.S; if (!st) return;
@@ -3695,7 +4019,308 @@ function makeRefMode(cfg) {
     }
   };
   if (vidsEl) mkSlots(vidsEl, 3, 'video/*', ICON_VID, 'Видео');
-  mkSlots(audsEl, 3, 'audio/*', ICON_AUD, 'Аудио');
+  mkSlots(audsEl, cfg.scenes ? 1 : 3, 'audio/*', ICON_AUD, cfg.scenes ? 'Музыка' : 'Аудио');
+  let onScenes = () => {};
+  const promptEl = () => $('.rm-prompt', root) || root._ta || $('.sc textarea', root);
+  const sceneList = () => $$('.sc', root).map(c => ({ prompt: $('textarea', c).value.trim(), sec: +$('input[type=range]', c).value }));
+  if (cfg.scenes) {
+    const card = $('.rm-prompt', root).closest('.card');
+    card.innerHTML = `<div class="card-h"><h3><span class="n">3</span>Сцены</h3><span class="counter lm-total"></span></div>
+      <div class="seg lm-mode" style="grid-template-columns:1fr 1fr;margin-bottom:6px"><button type="button" data-m="parts">По частям<small>сцена за сценой, каждая сохраняется отдельно</small></button><button type="button" data-m="all">Весь ролик сразу<small>один готовый файл, ждать дольше</small></button></div>
+      <div class="hint lm-mode-hint" style="margin-bottom:10px"></div>
+      <button class="btn pri lm-chain" type="button" style="margin-bottom:12px;width:100%;padding:12px" title="Сцены считаются одна за другой сами: следующая запускается, когда предыдущая готова. Можно оставить компьютер на ночь: каждая сцена сохраняется в Библиотеку отдельным клипом.">▶ Сделать все сцены подряд (само, одну за другой)</button>
+      <div class="note lm-src" hidden style="margin-bottom:10px"><span><b>Продолжаем готовое видео:</b> <span class="lm-srcname"></span>. Первая сцена продолжит его конец, как будто это была прошлая сцена.</span> <button class="btn lm-srcx" type="button" style="padding:2px 9px;margin-left:8px">Убрать</button></div>
+      <div class="lm-scenes"></div>
+      <button class="btn" type="button" id="lmAdd" style="margin-top:10px">+ Добавить сцену</button>
+      <label class="btn" style="margin-top:10px;cursor:pointer" title="Видео, сделанное в другом месте: возьмём его последние кадры, и первая сцена продолжит их">Продолжить своё видео с компьютера…<input type="file" accept="video/*" class="lm-srcfile" hidden></label>
+      <div class="ta-foot"><div class="tokens rm-tokens"></div><span class="hint">нажмите, чтобы вставить в сцену</span></div>
+      <div class="note" style="margin-top:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h0M11 12h1v5h1"/></svg><span>Сцены идут одна за другой, каждая продолжает прошлую: герой, место и звук переходят дальше. В каждой сцене опишите героя, что он делает и как движется камера. Длину сцены задаёт ползунок. Текст сцены можно составить в разделе «Агент».</span></div>`;
+    const c1 = $('.rm-imgs', root).closest('.card');
+    $('h3', c1).innerHTML = '<span class="n">1</span>Референсы';
+    $('.rm-count', root).hidden = true;
+    $$('.rm-imgs .plus', root).forEach((pl, i) => { pl.lastChild.textContent = 'Референс'; });
+    $('.rm-media .sub-l span', root).textContent = 'Песня или фрагмент';
+    $('.rm-media .media-hint', root).textContent = 'любой длины: каждая сцена берёт свой кусок по порядку';
+    // the pictures of this section go to the agent in one press (no screenshots), the agent writes the scenes for them
+    const toAg = document.createElement('button'); toAg.type = 'button'; toAg.className = 'btn'; toAg.style.marginTop = '10px';
+    toAg.textContent = 'Написать сцены в «Агенте» по этим картинкам'; toAg.title = 'Откроет «Агента» с этими референсами в чате: опишите историю, он разобьёт её на сцены, а кнопка вставит их сюда';
+    c1.append(toAg);
+    toAg.onclick = async () => {
+      const files = $$('label.ref.filled', imgsEl).map(r => r._file).filter(Boolean);
+      try {
+        for (const f of files) {
+          if (AG.att.some(a => a.file && a.file.name === f.name && a.file.size === f.size)) continue;
+          await agAttachFile(f);
+        }
+        $('#agTarget [data-t="long"]').click(); goTo('agent');
+        toast(files.length ? `В чат агента добавлено картинок: ${files.length}. Опишите историю по сценам.` : 'Откройте «Агента» и опишите историю по сценам.');
+      } catch { toast('Не удалось передать картинки агенту'); }
+    };
+    const box = $('.lm-scenes', root);
+    const snap = v => { v = Math.max(5, Math.round(v * 24)); return v + (5 - v % 17 + 17) % 17; };
+    const accs = () => {  // frames of the finished video after each scene (same arithmetic as the server)
+      const out = []; let acc = 0;
+      $$('.sc input[type=range]', root).forEach((r, k) => { const seg = snap(+r.value); if (!k) acc = seg; else { const t = snap((seg + snap(1)) / 24), ov = snap((t - seg) / 24); acc += t - ov; } out.push(acc); });
+      return out;
+    };
+    const total = () => { const a = accs(); return a.length ? a[a.length - 1] / 24 : 0; };
+    const mmss = t => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
+    const recount = () => {
+      const all = $$('.sc', root), a = accs(), own = root._snd === 'own';
+      const st = Math.max(0, parseFloat($('.lm-start', root)?.value) || 0);
+      all.forEach((c, i) => {
+        $('b', c).textContent = `Сцена ${i + 1}`; $('.x', c).hidden = all.length < 2; $('output', c).textContent = $('input[type=range]', c).value + ' с';
+        const from = i ? a[i - 1] / 24 : 0, to = a[i] / 24;
+        $('.sc-win', c).textContent = own ? `кусок аудио ${mmss(st + from)}–${mmss(st + to)}` : '';
+      });
+      const t = total(); $('.lm-total', root).textContent = `≈ ${Math.round(t)} с в итоге`; S.dur = Math.round(t);
+      const dur = root._adur;
+      const w = $('.lm-warn', root); if (w) { w.hidden = !(own && dur && st + t > dur + 0.5); w.textContent = `Аудио короче, чем нужно: ролик на ${Math.round(t)} с, а от выбранного места в треке осталось ${Math.max(0, Math.round(dur - st))} с. Сократите сцены или начните трек раньше.`; }
+      changed(); onScenes(); refreshStates(); if (root._save && !root._restoring) root._save();
+    };
+    root._recount = recount;
+    root._mode = 'parts'; root._run = Math.random().toString(36).slice(2, 12);
+    const sig = c => JSON.stringify([+$('input[type=range]', c).value]);
+    const secOf = sg => { try { const a = JSON.parse(sg); return a.length === 1 ? a[0] : a[1]; } catch { return null; } };   // old saved projects had [text, seconds, file]
+    const sigOk = c => !!c._done && String(secOf(c._done.sig)) === String(+$('input[type=range]', c).value);
+    function readyUpTo() {   // how many scenes from the start are done and unchanged
+      let n = 0; for (const c of $$('.sc', root)) { if (sigOk(c)) n++; else break; } return n;
+    }
+    function refreshStates() {
+      const parts = root._mode === 'parts', ready = readyUpTo();
+      $$('.sc', root).forEach((c, i) => {
+        $('.sc-act', c).hidden = !parts;
+        const done = sigOk(c) && i < ready;
+        const stale = c._done && !done;
+        $('.sc-state', c).textContent = done ? '✓ готова, клип в Библиотеке' + (c._done.text != null && c._done.text.trim() !== $('textarea', c).value.trim() ? ' · текст изменён после генерации, клип прежний' : '') : stale ? 'длина изменена: переделайте (следующие тоже)' : i > ready ? `ждёт сцену ${ready + 1}: эта продолжает её конец` : '';
+        $('.sc-state', c).style.color = done ? 'var(--ok, #7bd88f)' : stale ? 'var(--pink)' : '';
+        const b = $('.sc-do', c); b.disabled = false; b.style.opacity = i > ready ? 0.55 : ''; b.textContent = done ? 'Переделать' : 'Сделать эту сцену';
+        const rg = $('.sc-redogo', c); if (rg) rg.hidden = !(done && parts && i < $$('.sc', root).length - 1);
+      });
+      const r = $('.lm-reset', root); if (r) r.hidden = !parts || !ready;
+      const ch = $('.lm-chain', root); if (ch) ch.hidden = !parts;
+      onScenes();
+      if (root._save && !root._restoring) root._save();
+    }
+    root._ready = readyUpTo; root._sig = sig;
+    root._chainPart = null;   // scene number started by "make all scenes in a row": only its result starts the next one
+    const chainNext = () => {
+      const all = $$('.sc', root), k = readyUpTo();
+      if (root._chainEnd != null && k > root._chainEnd) { root._chainPart = null; root._chainEnd = null; return; }
+      if (k >= all.length) { root._chainPart = null; toast('Все сцены готовы. Клипы лежат в Библиотеке: склейте их в «Монтаже».'); return; }
+      if (!all[k].querySelector('textarea').value.trim()) { root._chainPart = null; toast(`Сцена ${k + 1} пустая: опишите её, и нажмите «Сделать все сцены подряд» снова.`); return; }
+      root._chainPart = k; root._target = k; $('.go', $('.rm-preview', root)).click();
+    };
+    root._chainNext = chainNext;
+    $('.lm-chain', root).onclick = () => {
+      if (root._mode !== 'parts') return;
+      root._chainEnd = null;
+      if (readyUpTo() >= $$('.sc', root).length) { toast('Все сцены уже сделаны. Чтобы переделать одну, нажмите «Переделать» в её карточке.'); return; }
+      chainNext();
+    };
+    root._next = () => { const n = $$('.sc', root).length; return Math.min(n - 1, root._target != null ? root._target : readyUpTo()); };
+    S.len = () => { if (root._mode !== 'parts') return total(); const r = $$('.sc input[type=range]', root)[root._next()]; return r ? +r.value : total(); };
+    root._src = null;
+    const lastFrameFile = async file => {   // the last picture of a video file from the computer
+      const v = document.createElement('video'); v.muted = true; v.preload = 'auto'; v.src = URL.createObjectURL(file);
+      await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error('Не удалось открыть видео')); });
+      v.currentTime = Math.max(0, (v.duration || 1) - 0.12);
+      await new Promise(res => { v.onseeked = res; setTimeout(res, 3000); });
+      const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
+      const blob = await new Promise(r => c.toBlob(r, 'image/png')); URL.revokeObjectURL(v.src);
+      return new File([blob], 'last_frame.png', { type: 'image/png' });
+    };
+    root._setSrc = (src, fresh = true) => {   // src: { id } of a library clip or { file } from the computer; null removes it
+      root._src = src || null;
+      $('.lm-src', root).hidden = !src; $('.lm-srcname', root).textContent = src ? src.name : '';
+      if (src && fresh) { root._run = Math.random().toString(36).slice(2, 12); $$('.sc', root).forEach(c => { c._done = null; }); }
+      if (src) setMode('parts');
+      $('.lm-mode [data-m="all"]', root).disabled = !!src;
+      refreshStates();
+    };
+    $('.lm-srcx', root).onclick = () => root._setSrc(null);
+    $('.lm-srcfile', root).onchange = async e => {
+      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      try {
+        const frame = await lastFrameFile(f);
+        root._setSrc({ file: f, name: f.name });
+        $$('.ref:not(.filled) input', imgsEl)[0] && await putInto($$('.ref:not(.filled) input', imgsEl)[0], frame);
+        toast('Видео загружено: последний кадр встал первым референсом, добавьте остальные картинки и опишите сцену.');
+      } catch (err) { toast(err.message); }
+    };
+    root._setScenes = list => {   // from the agent: replace all scenes
+      if (!list.length) return;
+      $$('.sc', root).forEach(c => c.remove());
+      list.slice(0, 12).forEach(x => addScene(x.prompt, Math.min(15, Math.max(3, Math.round(x.sec) || 10))));
+      root._run = Math.random().toString(36).slice(2, 12); recount(); refreshStates();
+    };
+    root._partDone = item => {
+      const lg = item && item.long; if (!lg || lg.run !== root._run) return;
+      if (root._doneIds && root._doneIds.has(item.id)) return;   // the same result can arrive twice (panel and queue)
+      (root._doneIds = root._doneIds || new Set()).add(item.id);
+      if (lg.all) {   // the whole video at once: every scene is done, the last one can be continued
+        $$('.sc', root).forEach(c => { c._done = { sig: root._sig(c), url: item.url, id: item.id, text: $('textarea', c).value }; });
+        refreshStates(); toast('Ролик готов. Чтобы продлить его, добавьте сцену и нажмите «Сделать эту сцену» (режим «По частям»).'); return;
+      }
+      const c = $$('.sc', root)[lg.part]; if (!c) return;
+      c._done = { sig: (root._sent && root._sent[lg.part]) || root._sig(c), url: item.url, id: item.id, text: root._sentText && root._sentText[lg.part] != null ? root._sentText[lg.part] : $('textarea', c).value };
+      $$('.sc', root).slice(lg.part + 1).forEach(x => { x._done = null; });   // later scenes continued from the old one
+      refreshStates();
+      if (root._chainPart === lg.part) { toast(`Сцена ${lg.part + 1} готова. Запускаю следующую…`); setTimeout(root._chainNext, 800); return; }
+      toast(`Сцена ${lg.part + 1} готова` + (lg.part + 1 < lg.n ? '. Можно делать следующую.' : '. Все сцены готовы: склейте клипы в «Монтаже».'));
+    };
+    const MODE_HINT = { parts: 'Каждая сцена считается отдельно и сохраняется в Библиотеку своим клипом. Можно посмотреть первую, потом сделать следующую, а неудачную переделать, не трогая остальные. Клипы встают встык без повторов: склейте их в любом видеоредакторе.', all: 'Все сцены считаются подряд и склеиваются в один файл. Удобно, когда уверены в тексте, но если что-то не получится, ждать придётся заново целиком.' };
+    const setMode = v => { root._mode = v; $$('.lm-mode button', root).forEach(b => b.classList.toggle('on', b.dataset.m === v)); $('.lm-mode-hint', root).textContent = MODE_HINT[v]; refreshStates(); };
+    $('.lm-mode', root).onclick = e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); };
+    queueMicrotask(() => setMode('parts'));
+
+    /* --- the project survives a restart: scenes, pictures of scenes, sound choice, which scenes are done --- */
+    const PKEY = 'h3-long-projects', fsig = {};
+    const loadAll = () => { try { return JSON.parse(localStorage.getItem(PKEY) || '{}'); } catch { return {}; } };
+    const putFile = (key, f) => { const sg = f ? `${f.name}|${f.size}|${f.lastModified}` : ''; if (fsig[key] === sg) return; fsig[key] = sg; if (f) memFile('put', key, f); else memFile('delete', key); };
+    let saveT = null;
+    function saveNow() {
+      try {
+        const run = root._run, slotA = $('.rm-auds .slot', root);
+        const proj = { run, t: Date.now(), mode: root._mode, snd: root._snd, start: $('.lm-start', root).value, vocals: $('.lm-vocals', root).checked,
+          aspect: S.aspect, q: S.q, cw: S.cw || 0, ch: S.ch || 0, src: root._src ? { id: root._src.id || '', name: root._src.name } : null,
+          scenes: $$('.sc', root).map(c => ({ prompt: $('textarea', c).value, sec: +$('input[type=range]', c).value, img: c._file ? c._file.name : '',
+            done: c._done ? { sig: c._done.sig, url: c._done.url, id: c._done.id, text: c._done.text } : null })) };
+        const all = loadAll(); all[run] = proj;
+        Object.keys(all).sort((a, b) => all[b].t - all[a].t).slice(8).forEach(k => delete all[k]);   // the 8 latest projects
+        localStorage.setItem(PKEY, JSON.stringify(all)); localStorage.setItem('h3-long-last', run);
+        fetch('/api/long/project', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ run, project: proj }) }).catch(() => {});
+        $$('.ref', imgsEl).forEach((r, i) => putFile(`long/${run}/img${i}`, r._file));
+        putFile(`long/${run}/aud0`, slotA ? slotA._file : null);
+        putFile(`long/${run}/src`, root._src && root._src.file ? root._src.file : null);
+        $$('.sc', root).forEach((c, i) => putFile(`long/${run}/simg${i}`, c._file));
+      } catch {}
+    }
+    root._save = () => { clearTimeout(saveT); saveT = setTimeout(saveNow, 700); };
+    const putInto = async (input, f) => { if (!input || !(f instanceof File)) return; const dt = new DataTransfer(); dt.items.add(f); input.files = dt.files; input.dispatchEvent(new Event('change')); };
+    root._openRun = async run => {   // load a saved project (from the library: continue this video)
+      let p = loadAll()[run], onDisk = null;
+      try { onDisk = await (await fetch('/api/long/project?run=' + run)).json(); } catch {}
+      if (!p && onDisk && onDisk.project) p = onDisk.project;
+      if (!p) return false;
+      const getRef = async key => {   // a picture of the project: the browser's memory, else the copy kept by the program
+        const f = await memFile('get', `long/${run}/${key}`); if (f instanceof File) return f;
+        const nm = ((onDisk && onDisk.refs) || []).find(x => x.startsWith(key + '.')); if (!nm) return null;
+        try { const r = await fetch(`/api/long/ref/${run}/${nm}`); if (!r.ok) return null; return new File([await r.blob()], nm, { type: r.headers.get('content-type') || 'image/png' }); } catch { return null; }
+      };
+      root._run = run; root._restoring = true;
+      Object.assign(S, { aspect: p.aspect || S.aspect, q: p.q || S.q, cw: p.cw || 0, ch: p.ch || 0 });
+      $$('.ref .x', imgsEl).forEach(x => x.click());
+      for (let i = 0; i < 5; i++) await putInto($$('.ref input', imgsEl)[i], await getRef('img' + i));
+      const slotA = $('.rm-auds .slot', root); $('.x', slotA)?.click();
+      const aud = await getRef('aud0'); if (aud instanceof File) await putInto($('input', slotA), aud);
+      setSnd(p.snd || 'none'); $('.lm-start', root).value = p.start || '0'; $('.lm-vocals', root).checked = !!p.vocals;
+      $$('.sc', root).forEach(c => c.remove());
+      for (const x of p.scenes) addScene(x.prompt, x.sec);
+      const cards = $$('.sc', root);
+      for (const [i, x] of p.scenes.entries()) if (x.img) await putInto($('.sc-img input', cards[i]), await getRef('simg' + i));
+      if (p.src) { const sf = p.src.id ? null : await memFile('get', `long/${run}/src`); root._setSrc(p.src.id ? { id: p.src.id, name: p.src.name } : sf instanceof File ? { file: sf, name: p.src.name } : null, false); }
+      else root._setSrc(null, false);
+      p.scenes.forEach((x, i) => { cards[i]._done = x.done && byId(x.done.id) ? { sig: x.done.sig, url: x.done.url, id: x.done.id, text: x.done.text } : null; });
+      // the continuation point of the last finished scene must still be on the disk
+      const ready = readyUpTo();
+      if (ready) {
+        let parts = []; try { parts = (await (await fetch('/api/long/state?run=' + run)).json()).parts; } catch {}
+        if (!parts.includes(ready - 1)) { cards.forEach(c => { c._done = null; }); toast('Точка продолжения не найдена на диске: сцены нужно сделать заново.'); }
+      }
+      setMode(p.mode || 'parts'); root._restoring = false; recount(); refreshStates(); RM.long?.upd?.();
+      return true;
+    };
+    root._restoring = true;   // nothing is saved until the last project has been put back
+    setTimeout(async () => {
+      try {
+        let last = localStorage.getItem('h3-long-last');
+        if (!last) { const r = await (await fetch('/api/long/project?last=1')).json(); last = r.run || ''; }
+        if (last) await root._openRun(last);
+      } catch {}
+      root._restoring = false; root._save();
+    }, 2500);
+
+    const rst = document.createElement('button'); rst.className = 'btn lm-reset'; rst.type = 'button'; rst.hidden = true; rst.textContent = 'Начать заново';
+    rst.title = 'Забыть сделанные сцены. Нужно, если меняете картинки героя, размер или звук: следующие сцены не должны продолжать старые.';
+    rst.onclick = () => { root._run = Math.random().toString(36).slice(2, 12); $$('.sc', root).forEach(c => { c._done = null; }); refreshStates(); toast('Начинаем сначала'); };
+    $('#lmAdd', root).after(rst);
+    const addScene = (txt = '', sec = 10) => {
+      const c = document.createElement('div'); c.className = 'sc'; c.style.cssText = 'margin:0 0 10px;padding:12px;border:1px solid var(--line);border-radius:12px';
+      c.innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><b></b><input type="range" min="3" max="15" step="1" value="${sec}" style="flex:1"><output class="hint" style="min-width:34px"></output><span class="hint sc-win"></span><button class="x btn" type="button" title="Убрать сцену" style="padding:2px 9px">✕</button></div><textarea placeholder="Что происходит в этой сцене…" style="min-height:90px"></textarea>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><label class="btn sc-img" style="padding:4px 10px;font-size:12.5px;cursor:pointer" title="Необязательно: реквизит, новая одежда или новое место только для этой сцены. В тексте это следующая картинка после общих: если общих 2, то &lt;Picture 3&gt;">+ Картинка для этой сцены<input type="file" accept="image/*" hidden></label><span class="hint sc-name"></span><button class="btn sc-imgx" type="button" hidden style="padding:2px 8px">✕</button></div>`;
+      const fin = $('.sc-img input', c);
+      fin.onchange = () => { c._file = fin.files[0] || null; $('.sc-name', c).textContent = c._file ? c._file.name : ''; $('.sc-imgx', c).hidden = !c._file; };
+      $('.sc-imgx', c).onclick = () => { c._file = null; fin.value = ''; $('.sc-name', c).textContent = ''; $('.sc-imgx', c).hidden = true; };
+      $('textarea', c).value = txt; box.append(c);
+      c.insertAdjacentHTML('beforeend', `<div class="sc-act" style="display:flex;gap:10px;align-items:center;margin-top:8px"><button class="btn sc-do" type="button">Сделать эту сцену</button><button class="btn pri sc-redogo" type="button" hidden title="Эта сцена считается заново, а потом сами пересчитаются все следующие, уже продолжая новую версию">Переделать и продолжить дальше</button><span class="hint sc-state"></span></div>`);
+      $('.sc-redogo', c).onclick = () => { const i = $$('.sc', root).indexOf(c); root._chainEnd = null; root._chainPart = i; root._target = i; $('.go', $('.rm-preview', root)).click(); };
+      $('.sc-do', c).onclick = () => {
+        const i = $$('.sc', root).indexOf(c), ready = readyUpTo();
+        const active = QUEUE.some(j => j.mode === 'long' && (j.state === 'queued' || j.state === 'running'));
+        if (i > ready) {   // it continues the end of the previous scene, which is not there yet
+          if (active && root._pending && i === root._pending.k + 1) { root._chainPart = root._pending.k; root._chainEnd = i; toast(`Сцена ${i + 1} запустится сама, когда будет готова сцена ${i}.`); }
+          else toast(`Сначала сделайте сцену ${ready + 1}: сцена ${i + 1} продолжает её конец. Или нажмите «Сделать все сцены подряд».`);
+          return;
+        }
+        root._chainPart = null; root._target = i; $('.go', $('.rm-preview', root)).click(); };
+      $('textarea', c).addEventListener('input', () => refreshStates());
+      $('textarea', c).addEventListener('focus', e => { root._ta = e.target; });
+      $('input[type=range]', c).oninput = recount; $('.x', c).onclick = () => { c.remove(); recount(); };
+      fin.addEventListener('change', () => refreshStates());
+      recount();
+    };
+    $('#lmAdd', root).onclick = () => { if ($$('.sc', root).length >= 12) { toast('Не больше 12 сцен'); return; } addScene('', 10); };
+    queueMicrotask(() => { addScene('', 10); addScene('', 10); });  // after the rest of the set-up is done
+    root._addScene = addScene;
+    const mus = document.createElement('div'); mus.className = 'card';
+    root._snd = 'none';
+    mus.innerHTML = `<div class="card-h"><h3><span class="n">2</span>Звук</h3></div>
+      <div class="seg lm-snd" style="grid-template-columns:1fr 1fr"><button type="button" data-s="none">Без аудио<small>обычное видео: звук придумает модель</small></button><button type="button" data-s="own">Своё аудио<small>песня, клип или чистый голос</small></button></div>
+      <div class="hint lm-snd-hint" style="margin:8px 0"></div>
+      <div class="lm-own" hidden>
+        <div class="mus-slot"></div>
+        <div class="note warn lm-warn" hidden style="margin:8px 0"><span></span></div>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:8px"><label>Начать с <input class="lm-start" inputmode="numeric" value="0" style="width:60px"> секунды</label>
+          <button class="btn" type="button" id="lmVoice" title="Оставить в аудио только голос, без музыки (как в Lipsync)">Отделить голос от музыки</button><button class="btn" type="button" id="lmVoiceBack" hidden>Вернуть исходное аудио</button></div>
+        <label style="display:flex;gap:6px;align-items:center;margin-top:10px" title="Видео подстраивается под голос, а в готовом ролике играет музыка целиком"><input type="checkbox" class="lm-vocals"> Музыку в ролике оставить, но модель слушает только голос (точнее губы)</label>
+      </div>`;
+    $('.mus-slot', mus).append($('.rm-media', root));
+    c1.after(mus);
+    const HINT = { none: 'Выберите это для обычного ролика. Что говорят герои и какая музыка играет за кадром, напишите в описании сцен.', own: 'Видео подстроится под аудио: каждая сцена получает свой кусок по порядку (он подписан в карточке сцены). Звук итогового ролика — ваше аудио.' };
+    const setSnd = v => {
+      root._snd = v; $$('.lm-snd button', root).forEach(b => b.classList.toggle('on', b.dataset.s === v));
+      $('.lm-own', root).hidden = v !== 'own'; $('.lm-snd-hint', root).textContent = HINT[v]; recount();
+    };
+    $('.lm-snd', root).onclick = e => { const b = e.target.closest('button'); if (b) setSnd(b.dataset.s); };
+    $('.lm-start', root).oninput = () => recount();
+    const slot = $('.rm-auds .slot', root);
+    new MutationObserver(() => {   // keep the real length of the chosen audio
+      const f = slot._file; root._adur = f ? (slot._dur || 0) : 0; if (f && !slot._orig) { slot._orig = null; } recount();
+    }).observe(slot, { attributes: true, subtree: true, childList: true, characterData: true });
+    $('#lmVoice', root).onclick = async () => {
+      if (!slot._file) { toast('Сначала загрузите аудио'); return; }
+      const b = $('#lmVoice', root), old = b.textContent; b.disabled = true; b.textContent = 'Отделяем голос…';
+      try {
+        const info = await (await fetch('/api/audio/info')).json();
+        if (!info.available) throw new Error('Недоступно: ' + info.reason);
+        const fd = new FormData(); fd.append('file', slot._file, slot._file.name);
+        const r = await fetch('/api/audio/separate', { method: 'POST', body: fd });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Не удалось отделить голос');
+        const blob = await r.blob();
+        slot._orig = slot._orig || slot._file;
+        const nf = new File([blob], slot._orig.name.replace(/\.[^.]+$/, '') + '_голос.flac', { type: blob.type || 'audio/flac' });
+        slot._file = nf; $('span', slot).textContent = nf.name; $('#lmVoiceBack', root).hidden = false;
+        $('.lm-vocals', root).checked = false;
+        toast('Голос отделён: в ролике будет только он, без музыки. Не понравилось — «Вернуть исходное аудио».');
+      } catch (err) { toast(err.message); }
+      b.textContent = old; b.disabled = false;
+    };
+    $('#lmVoiceBack', root).onclick = () => {
+      if (!slot._orig) return; slot._file = slot._orig; slot._orig = null; $('span', slot).textContent = slot._file.name; $('#lmVoiceBack', root).hidden = true; toast('Исходное аудио возвращено');
+    };
+    queueMicrotask(() => setSnd('none'));
+  }
   const files = sel => $$(sel, root).filter(x => x._file);
   function changed() {
     const imgs = $$('.ref.filled', imgsEl);
@@ -3703,44 +4328,60 @@ function makeRefMode(cfg) {
     const nv = vidsEl ? files('.rm-vids .slot').length : 0, na = files('.rm-auds .slot').length;
     const total = imgs.length + nv + na;
     $('.rm-count', root).textContent = `${total} / 12`;
+    if (cfg.scenes && root._save && !root._restoring) root._save();
     $('.rm-count', root).style.color = total > 12 ? 'var(--pink)' : '';
     $('.rm-tokens', root).innerHTML = imgs.map((_, i) => `<button class="token" type="button">&lt;Picture ${i + 1}&gt;</button>`).join('') || '<span class="hint">добавьте картинки — появятся метки</span>';
-    const tooLong = [...files('.rm-vids .slot'), ...files('.rm-auds .slot')].some(s => s._dur > 15);
+    const tooLong = !cfg.scenes && [...files('.rm-vids .slot'), ...files('.rm-auds .slot')].some(s => s._dur > 15);
     if (tooLong) toast('Референс-видео и аудио — до 15 секунд');
   }
   $('.rm-tokens', root).onclick = e => {
     const t = e.target.closest('.token'); if (!t) return;
-    const ta = $('.rm-prompt', root), p = ta.selectionStart, txt = t.textContent + ' ';
+    const ta = promptEl(), p = ta.selectionStart, txt = t.textContent + ' ';
     ta.value = ta.value.slice(0, p) + txt + ta.value.slice(ta.selectionEnd); ta.focus(); ta.selectionStart = ta.selectionEnd = p + txt.length;
   };
   changed();
 
   const prev = previewPanel($('.rm-preview', root), S, {
-    extraLabel: cfg.mode === 'refs' || cfg.mode === 'actor' ? 'Шаги' : 'Схема',
-    extra: () => cfg.mode === 'actor' ? '10 · 1 проход' : cfg.mode === 'refs' ? `${S.steps} · 1 проход` : (S.faithful ? 'точная копия' : '8 + 4 шага'),
-    passes: () => cfg.mode === 'actor' ? [10] : cfg.mode === 'refs' ? [S.steps] : S.faithful ? [13] : [8, 4],
+    extraLabel: cfg.mode === 'refs' || cfg.mode === 'actor' || cfg.scenes ? 'Шаги' : 'Схема',
+    extra: () => cfg.scenes ? (root._mode === 'parts' ? `8 · Pika · сцена ${root._next() + 1} из ${$$('.sc', root).length}` : `8 · Pika · сцен: ${$$('.sc', root).length}`) : cfg.mode === 'actor' ? '10 · 1 проход' : cfg.mode === 'refs' ? `${S.steps} · 1 проход` : (S.faithful ? 'точная копия' : '8 + 4 шага'),
+    passes: () => cfg.scenes ? $$('.sc', root).map(() => 8) : cfg.mode === 'actor' ? [10] : cfg.mode === 'refs' ? [S.steps] : S.faithful ? [13] : [8, 4],
     get twoPass() { return cfg.mode === 'action' && !S.faithful; },
     target: () => $('.ref img', imgsEl),
-    meta: () => ({ mode: cfg.mode, prompt: $('.rm-prompt', root).value.trim(), sub: '' }),
-    onDone: item => addToLib(item),
+    meta: () => ({ mode: cfg.mode, prompt: promptEl().value.trim(), sub: '' }),
+    onDone: item => { addToLib(item); if (cfg.scenes && root._partDone) root._partDone(item); },
     validate: () => !$$('.ref.filled', imgsEl).length && !(vidsEl && files('.rm-vids .slot').length) ? 'Добавьте хотя бы одну референс-картинку'
       : $$('.ref.filled', imgsEl).length + (vidsEl ? files('.rm-vids .slot').length : 0) + files('.rm-auds .slot').length > 12 ? 'Всего не больше 12 референсов'
-      : !$('.rm-prompt', root).value.trim() ? 'Напишите промпт' : '',
+      : cfg.scenes ? (root._snd === 'own' && !files('.rm-auds .slot').length ? 'Загрузите аудио или выберите «Без аудио»' : sceneList().some(x => !x.prompt) ? 'Заполните описание каждой сцены или уберите лишнюю' : '') : !promptEl().value.trim() ? 'Напишите промпт' : '',
     real: {
       url: '/api/generate/' + cfg.mode,
       form: () => {
         const fd = new FormData();
-        fd.append('prompt', $('.rm-prompt', root).value.trim());
-        fd.append('aspect', S.aspect); fd.append('quality', S.q); fd.append('duration', S.dur);
+        fd.append('prompt', promptEl().value.trim());
+        sizeForm(S, fd); fd.append('aspect', S.aspect); fd.append('quality', S.q); fd.append('duration', S.dur);
         fd.append('steps', S.steps); fd.append('ref_size', S.refSize); if (cfg.mode === 'refs') fd.append('accel', S.accel);
-        loraForm(S, fd); seedForm(S, fd);
+        if (cfg.scenes && root._mode === 'parts') {
+          const all = $$('.sc', root);
+          let k = root._target; root._target = null;
+          if (k == null) k = root._ready();
+          if (k >= all.length) throw new Error('Все сцены уже сделаны. Чтобы переделать одну, нажмите «Переделать» в её карточке.');
+          if (k > root._ready()) throw new Error(`Сначала сделайте сцену ${root._ready() + 1}: следующая продолжает её конец.`);
+          fd.append('part', k); fd.append('run', root._run);
+          if (root._src) { fd.append('src_project', '1'); if (k === 0) { if (root._src.id) fd.append('src_item', root._src.id); else if (root._src.file) fd.append('srcvid', root._src.file); } }
+          root._pending = { k, sig: root._sig(all[k]) };
+          (root._sent = root._sent || {})[k] = root._pending.sig; (root._sentText = root._sentText || {})[k] = $('textarea', all[k]).value;
+        }
+        if (cfg.scenes && root._mode !== 'parts') fd.append('run', root._run);
+        if (cfg.scenes) { fd.append('scenes', JSON.stringify(sceneList())); $$('.sc', root).forEach((c, i) => { if (c._file) fd.append('simg' + i, c._file); }); fd.append('start', $('.lm-start', root).value || '0'); fd.append('vocals', root._snd === 'own' && $('.lm-vocals', root).checked ? '1' : '0'); }
+        else loraForm(S, fd);
+        seedForm(S, fd);
         $$('.ref', imgsEl).filter(r => r._file).forEach((r, i) => fd.append('img' + i, r._file));
         if (vidsEl) files('.rm-vids .slot').forEach((s, i) => fd.append('vid' + i, s._file));
-        files('.rm-auds .slot').forEach((s, i) => fd.append('aud' + i, s._file));
+        (cfg.scenes && root._snd !== 'own' ? [] : files('.rm-auds .slot')).forEach((s, i) => fd.append('aud' + i, s._file));
         return fd;
       },
     },
   });
+  onScenes = () => prev();
   const STEPS_HINT = {
     4: 'Быстро, но без запаса: в речи могут теряться слова. Для простых сцен — разговор, ходьба, предмет в руках.',
     6: 'Золотая середина: разговор на камеру, ходьба, медленные движения.',
@@ -3758,12 +4399,13 @@ function makeRefMode(cfg) {
       <div class="seg rm-rs" style="grid-template-columns:1fr 1fr"><button data-r="match">Быстро<small>картинки уменьшаются</small></button><button data-r="max">Максимум<small>лучшее сходство</small></button></div>
       <div class="hint rm-rs-hint"></div></div>
     <div class="rm-loras"></div>`
+    : cfg.scenes ? `<div class="row"><div class="row-l">Как работает</div><div class="hint" style="font-size:12.5px;line-height:1.5">Singularity Ref2V + Pika H3 Flex Turbo, 8 шагов на сцену. Первая секунда следующей сцены берётся из конца прошлой, поэтому нет резких склеек. Чем больше сцен и выше качество, тем дольше: ролик в 40 с на видеокарте с 16 ГБ может считаться полчаса и больше. Качество лучше выбрать сразу: кнопка «Увеличить» под готовым роликом есть, но увеличение очень долгое, и чем длиннее ролик, тем дольше (у длинных могут быть часы).</div></div>`
     : cfg.mode === 'actor' ? `<div class="row"><div class="row-l">Как работает</div><div class="hint" style="font-size:12.5px;line-height:1.5">Один проход, 10 шагов — настройки из вашего workflow «Direct AI Actor» (ER-SDE, разреженное внимание). Первая картинка — стартовый кадр. Голос берётся из загруженного аудио только как тембр, а слова — те, что вы напишете в промпте в &lt;d&gt;[Язык] …&lt;/d&gt;.</div></div>
     <div class="rm-loras"></div>`
     : `<div class="row"><div class="row-l">Как запускается</div><div class="status-box rm-act"><span class="hint">Проверяем ComfyUI…</span></div></div>
     <div class="rm-loras"></div>`;
   const upd = paramsCard($('.rm-params', root), S, {
-    n: 3, duration: true, extraRow,
+    n: cfg.scenes ? 4 : 3, duration: !cfg.scenes, extraRow,
     onChange: () => {
       prev();
       $$('.rm-steps button', root).forEach(b => b.classList.toggle('on', +b.dataset.s === S.steps));
@@ -3810,7 +4452,7 @@ function makeRefMode(cfg) {
     $(`.nav[data-view="action"]`).addEventListener('click', check);
     check();
   }
-  return { root, S, upd, voice: () => files('.rm-auds .slot').length, prompt: () => $('.rm-prompt', root), imgSlots: () => $$('.ref input', imgsEl) };
+  return { root, S, upd, voice: () => files('.rm-auds .slot').length, prompt: () => promptEl(), imgSlots: () => $$('.ref input', imgsEl) };
 }
 const RM = {
   refs: makeRefMode({
@@ -3824,6 +4466,12 @@ const RM = {
     sub: 'Диалоги и крупные планы: актёрская игра, эмоции и голос по образцу — лучше всего для реализма',
     refHint: 'Первая картинка — стартовый кадр видео (его композиция сохранится). Аудио — образец голоса: из него берётся только тембр и манера, а слова произносятся новые, из вашего промпта. Нужны два голоса — запишите оба в одно аудио. Промпт удобно писать в разделе «Агент» (цель «Актёрская игра»).',
     placeholder: '@image1 - keyframe, first frame of the target video… Лучше всего писать в «Агенте»: он знает формат этого режима',
+  }),
+  long: makeRefMode({
+    mode: 'long', title: 'Длинное видео', pill: 'Сцены подряд · Pika', dur: 20, maxImages: 5, videos: false, scenes: true,
+    sub: 'Клипы и ролики по сценам: каждая сцена до 15 секунд и продолжает прошлую. Можно с музыкой, можно без',
+    refHint: 'До 5 картинок-референсов: персонаж, локация, предмет, одежда, стиль — всё, что должно сохраняться. Они подаются в каждую сцену, поэтому лицо и место не «плывут». В тексте сцены ссылайтесь на них как &lt;Picture 1&gt;, &lt;Picture 2&gt;… Чем больше референсов, тем тяжелее и дольше считается сцена.',
+    placeholder: '',
   }),
   action: makeRefMode({
     mode: 'action', title: 'Экшн-сцены', pill: 'Hybrid · 8 + 4 шага', dur: 8, maxImages: 6, videos: false,
@@ -3857,19 +4505,41 @@ $('#agFile').onchange = async e => {
 };
 $('#agEmpty').onclick = e => { const s = e.target.closest('span'); if (s) { $('#agIn').value = s.textContent.replace(/[«»]/g, '').replace(/ \+ фото героинь$/, ''); $('#agIn').focus(); } };
 $('#agIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#agSend').click(); } });
-const AG_NAMES = { video: 'Генерацию видео', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрскую игру', action: 'Экшн-сцены', krea: 'Картинку по тексту', qwen: 'Правку картинки', sheet: 'Картинку по тексту' };
-const AG_IMG = ['krea', 'qwen', 'sheet'];
+const AG_NAMES = { plist: 'список кадров', long: 'сцены длинного видео', video: 'Генерацию видео', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрскую игру', action: 'Экшн-сцены', krea: 'Картинку по тексту', qwen: 'Правку картинки', sheet: 'Картинку по тексту', sheet6: 'Картинку по тексту', fluxt: 'Картинку по тексту', qwent: 'Картинку по тексту', story: 'Картинку по тексту' };
+const AG_IMG = ['plist', 'krea', 'qwen', 'sheet', 'sheet6', 'fluxt', 'qwent', 'story'];
+AG.storyModel = 'krea'; AG.storyFrames = true;
+AG.think = (() => { try { return localStorage.getItem('h3-ag-think') === 'deep' ? 'deep' : 'fast'; } catch { return 'fast'; } })();
+function agThinkPaint() {
+  $$('#agThink button').forEach(b => b.classList.toggle('on', b.dataset.k === AG.think));
+  $('#agThinkHint').textContent = AG.think === 'fast' ? 'Агент отвечает сразу. Для обычных сцен и промптов этого хватает.' : 'Агент сначала долго рассуждает, потом отвечает: на одну сцену может уйти пара минут. Включайте для сложных историй.';
+}
+$('#agThink').onclick = e => { const b = e.target.closest('button'); if (!b) return; AG.think = b.dataset.k; try { localStorage.setItem('h3-ag-think', AG.think); } catch {} agThinkPaint(); };
+agThinkPaint();
 const agTargetClick = e => {
   const b = e.target.closest('button[data-t]'); if (!b) return;
   AG.target = b.dataset.t; $$('#agTarget button, #agTarget2 button').forEach(x => x.classList.toggle('on', x === b)); agCtx();
 };
+$('#agStoryF').onclick = e => { const b = e.target.closest('button[data-f]'); if (!b) return; AG.storyFrames = b.dataset.f === '1'; agCtx(); };
+$('#agStoryM').onclick = e => { const b = e.target.closest('button[data-m]'); if (!b) return; AG.storyModel = b.dataset.m; agCtx(); };
 $('#agTarget').onclick = agTargetClick; $('#agTarget2').onclick = agTargetClick;
 function agCtx() {
   const n = agImgCount() + AG.att.length;
+  $('#agStoryF').hidden = AG.target !== 'story';
+  $('#agStoryM').hidden = AG.target !== 'story';
+  $$('#agStoryF button').forEach(b => b.classList.toggle('on', (b.dataset.f === '1') === AG.storyFrames));
+  $$('#agStoryM button').forEach(b => b.classList.toggle('on', b.dataset.m === AG.storyModel));
   $('#agCtx').textContent = AG_IMG.includes(AG.target)
     ? ({ krea: 'Опишите картинку словами: агент напишет промпт для Krea 2. Картинки в чате — только образцы настроения.',
          qwen: `Приложите картинку, которую нужно изменить (скрепка или «Из Библиотеки»), и напишите, что поменять. Картинок в чате: ${n}.`,
-         sheet: `Опишите персонажа: агент напишет промпт листа из 4 панелей. Картинок в чате: ${n}.` })[AG.target]
+         story: 'Расскажите историю по кадрам («первый кадр — …, второй кадр — …») и скажите, сколько кадров нужно. Агент напишет промпт одной картинки-раскадровки без подписей и номеров для выбранной модели.',
+         fluxt: 'Опишите картинку словами: агент напишет промпт для FLUX.2 klein (без негатива, описание по порядку: главное сначала). Картинки в чате — только образцы настроения.',
+         qwent: 'Опишите картинку словами: агент напишет промпт для Qwen 2.1. Негатив впишите отдельным полем в разделе. Картинки в чате — только образцы настроения.',
+         sheet: `Опишите персонажа: агент напишет промпт листа из 4 панелей. Картинок в чате: ${n}.`,
+         sheet6: `Опишите персонажа: агент напишет промпт листа из 6 панелей (в полный рост спереди, в три четверти, сбоку, сзади + два портрета). Картинок в чате: ${n}.` })[AG.target]
+    : AG.target === 'plist'
+    ? `Опишите историю или набор картинок («герой утром, героиня днём, вечер у моря…») и скажите, сколько нужно. Агент напишет промпт для каждой картинки, а кнопка вставит их в «Картинку по тексту» в режим «Список промптов».`
+    : AG.target === 'long'
+    ? `Опишите историю по сценам («сначала… потом… в конце…») и скажите, с песней ролик или без. Агент разобьёт её на сцены и подпишет длину каждой. Картинки в чате: ${n} — станут референсами героя и места (Picture 1, 2…).`
     : AG.target === 'video'
     ? `Длительность ${V.dur} с (как в «Генерации видео»). Картинки в чате: ${n} — 1-я станет первым кадром, 2-я последним.`
     : AG.target === 'lipsync'
@@ -3885,10 +4555,11 @@ function renderAssistant(el, m) {
   parts.forEach((p, i) => {
     if (i % 2 === 0) { if (p.trim()) html += mdLite(p.trim()); return; }
     const closed = i < parts.length - 1;
-    html += `<div class="pblock"><pre>${esc(p.replace(/\n$/, ''))}</pre>${closed ? `<div class="pb-act">
+    const text = m.edits?.[i] ?? p.replace(/\n$/, '');
+    html += `<div class="pblock"><pre${closed ? ` contenteditable="plaintext-only" spellcheck="false" data-b="${i}" title="Текст можно править прямо здесь"` : ''}>${esc(text)}</pre>${closed ? `<div class="pb-act">
       <button class="btn pri" data-send="${AG.target}">В ${AG_NAMES[AG.target]}</button>
-      <select class="pb-other"><option value="">Отправить в…</option><option value="video">Image-to-Video</option><option value="lipsync">Lipsync</option><option value="refs">Референсы</option><option value="actor">Актёрская игра</option><option value="action">Экшн-сцены</option><option value="krea">Картинка по тексту</option><option value="qwen">Правка картинки</option></select>
-      <button class="btn" data-copy>Копировать</button><small>${p.length} симв.</small></div>` : ''}</div>`;
+      <select class="pb-other"><option value="">Отправить в…</option><option value="video">Image-to-Video</option><option value="lipsync">Lipsync</option><option value="refs">Референсы</option><option value="actor">Актёрская игра</option><option value="action">Экшн-сцены</option><option value="long">Длинное видео (сцены)</option><option value="krea">Картинка по тексту</option><option value="qwen">Правка картинки</option></select>
+      <button class="btn" data-copy>Копировать</button><button class="btn" data-paste title="Вставить скопированный текст на место выделенного (или в конец)">Вставить</button><small class="pb-n">${text.length} симв.</small></div>` : ''}</div>`;
   });
   if (m.status && !m.content) html += `<div class="st">${esc(m.status)}</div>`;
   if (m.error) html += `<p style="color:var(--pink)">${esc(m.error)}</p>`;
@@ -4029,14 +4700,17 @@ async function agSend() {
   const el = $('#agMsgs .msg:last-child');
   AG.busy = true; $('#agSend').textContent = 'Стоп'; AG.ctrl = new AbortController();
   const ctx = {
+    model: AG.storyFrames && AG.storyModel === 'krea' ? 'flux' : AG.storyModel,
+    frames: AG.target === 'story' && AG.storyFrames,
     duration: AG_IMG.includes(AG.target) ? null : AG.target === 'video' ? V.dur : AG.target === 'lipsync' ? (L.dur0 ? L.len() : null) : RM[AG.target].S.dur,
     loras: (CL.items || []).filter(x => x && x.on && x.file)
   };
   if (AG.target === 'actor') ctx.voice = RM.actor.voice() ? 1 : 0;
+  if (AG.target === 'long') ctx.long = { sound: RM.long.root._snd, secs: $$('.sc input[type=range]', RM.long.root).map(r => +r.value) };
   try {
     const r = await fetch('/api/agent/chat', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AG.ctrl.signal,
-      body: JSON.stringify({ target: AG.target, ctx, messages: AG.msgs.slice(0, -1).map(m => ({ role: m.role, content: m.content, images: m.images })) }),
+      body: JSON.stringify({ target: AG.target, ctx, think: AG.think, messages: AG.msgs.slice(0, -1).map(m => ({ role: m.role, content: m.content, images: m.images })) }),
     });
     const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '';
     for (;;) {
@@ -4119,15 +4793,43 @@ async function sendPrompt(blk, to) {
   // pictures of a reopened chat exist only as data URLs; turn them back into files
   const toFile = (u, i) => { const [h, b] = u.split(','); const bin = atob(b); const a = new Uint8Array(bin.length); for (let k = 0; k < bin.length; k++) a[k] = bin.charCodeAt(k); return new File([a], `picture${i + 1}.jpg`, { type: h.slice(5, h.indexOf(';')) }); };
   const files = AG.msgs.flatMap(m => m.files || (m.images || []).map(toFile));
-  if (to === 'krea' || to === 'sheet') {
-    IMG.krea.fill({ prompt, aspect: AG.target === 'sheet' || to === 'sheet' ? '16:9' : undefined }); to = 'krea';
+  if (to === 'story' && (AG.storyFrames || (files.length && AG.storyModel !== 'krea'))) {
+    IMG.qwen.fill({ prompt, kind: 'story', engine: AG.storyFrames && AG.storyModel === 'krea' ? 'flux' : AG.storyModel, frames: AG.storyFrames });
+    for (const [i, sel] of ['#qwDrop', '#qwDrop2', '#qwDrop3'].entries()) {
+      $(sel + ' .x')?.click();
+      if (files[i]) await setDropFile($(sel + ' input'), files[i]);
+    }
+    to = 'qwen';
+  } else if (to === 'plist') {
+    IMG.krea.fillList(prompt); to = 'krea';
+  } else if (to === 'krea' || to === 'story' || to === 'sheet' || to === 'sheet6' || to === 'fluxt' || to === 'qwent') {
+    const six = AG.target === 'sheet6' || to === 'sheet6';
+    const engine = to === 'fluxt' ? 'flux' : to === 'qwent' ? 'qwen' : (AG.target === 'fluxt' ? 'flux' : AG.target === 'qwent' ? 'qwen' : AG.target === 'story' ? AG.storyModel : 'krea');
+    IMG.krea.fill({ prompt, engine, aspect: six ? '21:9' : AG.target === 'sheet' || to === 'sheet' || AG.target === 'story' ? '16:9' : undefined }); to = 'krea';
   } else if (to === 'qwen') {
     IMG.qwen.fill({ prompt });
-    if (files[0]) { $('#qwDrop .x')?.click(); await setDropFile($('#qwDrop input'), files[0]); }
+    for (const [i, sel] of ['#qwDrop', '#qwDrop2', '#qwDrop3'].entries()) {
+      $(sel + ' .x')?.click();
+      if (files[i]) await setDropFile($(sel + ' input'), files[i]);
+    }
   } else if (to === 'video') {
     $('#vPrompt').value = prompt; $('#vPrompt').oninput({ target: $('#vPrompt') });
     if (files[0]) { $('#dFirst .x')?.click(); await setDropFile($('#dFirst input'), files[0]); }
     if (files[1]) await setDropFile($('#dLast input'), files[1]);
+  } else if (to === 'long') {
+    const L2 = RM.long, list = []; let cur = null;
+    for (const line of prompt.split('\n')) {
+      const mm = line.match(/^\s*SCENE\s*(\d+)\s*\|\s*(\d+(?:\.\d+)?)\s*$/i);
+      if (mm) { cur = { sec: +mm[2], text: [] }; list.push(cur); } else if (cur) cur.text.push(line); else if (line.trim()) { cur = { sec: 10, text: [line] }; list.push(cur); }
+    }
+    const clean = t => t.split('\n').filter(l => !/^\s*(overall_soundscape|non_diegetic_music|integrated_multimodal_description)\s*:/i.test(l)).join('\n').trim();
+    L2.root._setScenes(list.map(x => ({ prompt: clean(x.text.join('\n')), sec: x.sec })).filter(x => x.prompt));
+    for (const f of files) {   // existing references (e.g. the last frame of the video being continued) stay; new pictures take the free slots
+      const have = $$('label.ref.filled', L2.root).some(r => r._file && r._file.name === f.name && r._file.size === f.size);
+      const free = $$('label.ref:not(.filled) input', L2.root)[0];
+      if (have || !free) continue;
+      await setDropFile(free, f);
+    }
   } else {
     const box = to === 'lipsync' ? refsEl : RM[to].root;
     (to === 'lipsync' ? $('#lPrompt') : RM[to].prompt()).value = prompt;
@@ -4141,9 +4843,17 @@ async function sendPrompt(blk, to) {
   const au = [...AG.msgs].reverse().find(m => m.audioFile)?.audioFile;
   if (to === 'lipsync' && au) await setDropFile($('#aFile'), au);
   goTo(to);
-  const name = { video: '«Генерацию видео»', lipsync: 'Lipsync', refs: '«Референсы»', actor: '«Актёрскую игру»', action: '«Экшн-сцены»', krea: '«Картинку по тексту»', qwen: '«Правку картинки»' }[to];
+  const name = { video: '«Генерацию видео»', lipsync: 'Lipsync', refs: '«Референсы»', actor: '«Актёрскую игру»', action: '«Экшн-сцены»', long: '«Длинное видео»', krea: '«Картинку по тексту»', qwen: '«Правку картинки»' }[to];
   toast(`Промпт перенесён в ${name}` + (files.length && to !== 'video' && to !== 'krea' ? ' вместе с картинками' : '') + (to === 'lipsync' ? (au ? ' и аудио — выделите нужный фрагмент' : ' — добавьте аудио') : ''));
 }
+// the finished prompt can be edited in place; the edit is kept when the chat is redrawn
+$('#agMsgs').addEventListener('input', e => {
+  const pre = e.target.closest?.('pre[data-b]'); if (!pre) return;
+  const m = AG.msgs[+pre.closest('.msg')?.dataset.i];
+  if (m) { (m.edits = m.edits || {})[pre.dataset.b] = pre.textContent; }
+  const n = $('.pb-n', pre.closest('.pblock')); if (n) n.textContent = pre.textContent.length + ' симв.';
+});
+$('#agMsgs').addEventListener('mousedown', e => { if (e.target.closest('[data-paste]')) e.preventDefault(); });  // keep the selection in the prompt
 $('#agMsgs').addEventListener('click', async e => {
   const uBtn = e.target.closest('.msg-u-btn');
   if (uBtn) {
@@ -4167,12 +4877,97 @@ $('#agMsgs').addEventListener('click', async e => {
     return;
   }
   const blk = e.target.closest('.pblock'); if (!blk) return;
+  if (e.target.closest('[data-paste]')) {
+    const pre = $('pre', blk), t = await clipText();
+    if (!t) { toast('Буфер обмена пуст: сначала скопируйте текст'); return; }
+    const sel = getSelection();
+    if (!sel.rangeCount || !pre.contains(sel.anchorNode)) { const r = document.createRange(); r.selectNodeContents(pre); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); }
+    pre.focus();
+    if (!document.execCommand('insertText', false, t)) { pre.textContent += t; }
+    pre.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
   if (e.target.closest('[data-copy]')) { navigator.clipboard?.writeText($('pre', blk).textContent); toast('Промпт скопирован'); return; }
   const to = e.target.closest('[data-send]')?.dataset.send; if (to) sendPrompt(blk, to);
 });
 $('#agMsgs').addEventListener('change', e => {
   const s = e.target.closest('.pb-other'); if (s && s.value) { sendPrompt(s.closest('.pblock'), s.value); s.value = ''; }
 });
+
+async function clipText() {
+  try { const t = await navigator.clipboard.readText(); if (t) return t; } catch {}
+  try { return (await (await fetch('/api/clipboard', { method: 'POST' })).json()).text || ''; } catch { return ''; }
+}
+$('#agClear').onclick = () => { const ta = $('#agIn'); ta.value = ''; ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); };
+
+// right-click menu: copy / cut / paste / select all in every text field, copy on any selectable text
+(() => {
+  let menu = null;
+  const close = () => { menu?.remove(); menu = null; };
+  const isField = el => el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && /^(text|search|url|number|password|email|)$/.test(el.type)));
+  document.addEventListener('contextmenu', e => {
+    const f = isField(e.target) ? e.target : null;
+    const selText = String(getSelection());
+    const inMsg = e.target.closest?.('.msg, .pblock');
+    if (!f && !inMsg && !selText) return;
+    e.preventDefault(); close();
+    const has = f ? f.selectionStart !== f.selectionEnd : !!selText;
+    const items = [['Копировать', !has, async () => {
+      const t = f ? f.value.slice(f.selectionStart, f.selectionEnd) : selText;
+      try { await navigator.clipboard.writeText(t); toast('Скопировано'); } catch { document.execCommand('copy'); }
+    }]];
+    if (!f && inMsg) {
+      const blk = e.target.closest('.pblock');
+      const whole = (blk ? $('pre', blk) : e.target.closest('.msg'))?.innerText || '';
+      items.push([blk ? 'Копировать весь промпт' : 'Копировать всё сообщение', !whole, async () => {
+        try { await navigator.clipboard.writeText(whole); toast('Скопировано'); } catch { toast('Не удалось скопировать'); }
+      }]);
+    }
+    const ed = !f && e.target.closest?.('pre[data-b]');
+    if (ed) {
+      items.push(['Вырезать', !has, async () => {
+        try { await navigator.clipboard.writeText(selText); } catch {}
+        ed.focus(); document.execCommand('delete');
+      }]);
+      items.push(['Вставить', false, async () => {
+        const t = await clipText(); if (!t) { toast('Буфер обмена пуст'); return; }
+        ed.focus(); document.execCommand('insertText', false, t);
+      }]);
+      items.push(['Выделить всё', false, () => { ed.focus(); getSelection().selectAllChildren(ed); }]);
+    }
+    if (f) {
+      const ro = f.readOnly || f.disabled;
+      items.push(['Вырезать', !has || ro, async () => {
+        try { await navigator.clipboard.writeText(f.value.slice(f.selectionStart, f.selectionEnd)); } catch {}
+        f.focus(); document.execCommand('delete');
+      }]);
+      items.push(['Вставить', ro, async () => {
+        f.focus();
+        try {
+          const t = await clipText();
+          if (!document.execCommand('insertText', false, t)) {
+            const s = f.selectionStart; f.value = f.value.slice(0, s) + t + f.value.slice(f.selectionEnd);
+            f.selectionStart = f.selectionEnd = s + t.length; f.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        } catch { toast('Не получилось вставить кнопкой — нажмите Ctrl+V'); }
+      }]);
+      items.push(['Выделить всё', false, () => { f.focus(); f.select(); }]);
+    }
+    menu = document.createElement('div'); menu.className = 'ctxm';
+    items.forEach(([label, off, fn]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.disabled = !!off;
+      b.onmousedown = ev => ev.preventDefault();  // keep the selection / focus of the field
+      b.onclick = () => { close(); fn(); };
+      menu.append(b);
+    });
+    document.body.append(menu);
+    menu.style.left = Math.min(e.clientX, innerWidth - menu.offsetWidth - 6) + 'px';
+    menu.style.top = Math.min(e.clientY, innerHeight - menu.offsetHeight - 6) + 'px';
+  });
+  addEventListener('mousedown', e => { if (menu && !menu.contains(e.target)) close(); }, true);
+  addEventListener('blur', close); addEventListener('scroll', close, true); addEventListener('resize', close);
+  addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+})();
 
 // model status / download
 async function agStatus() {
@@ -4248,8 +5043,9 @@ function onAgentSetup(ev) {
 
 // skills
 const SK_MODES = { always: 'Всегда', auto: 'Авто', off: 'Выкл' };
-const AG_SK_IMG = { 'krea-2': 'Картинка по тексту', 'qwen-image-2-1-director-prompt': 'Правка картинки', 'karta-personazha': 'Лист персонажа' };
+const AG_SK_IMG = { 'storyboard': 'Раскадровка', 'krea-2': 'Картинка по тексту', 'flux2-klein': 'Картинка: FLUX.2 klein', 'qwen-image-2-1-director-prompt': 'Правка картинки', 'karta-personazha': 'Лист персонажа' };
 function renderSkills(list) {
+  $('#skCnt').textContent = `(${list.length})`;
   $('#skList').innerHTML = list.map(s => `<div class="sk" data-id="${esc(s.id)}">
     <div class="sk-top"><b title="${esc(s.name)}">${esc(s.name)}</b>
       ${AG_SK_IMG[s.id] ? `<span class="hint" title="Подключается сама, когда выбрана кнопка «${AG_SK_IMG[s.id]}» в «Промпт для»">${AG_SK_IMG[s.id]}</span>` : `<select>${Object.entries(SK_MODES).map(([k, v]) => `<option value="${k}" ${k === s.mode ? 'selected' : ''}>${v}</option>`).join('')}</select>`}
@@ -4258,6 +5054,9 @@ function renderSkills(list) {
     ${s.mode === 'auto' && !AG_SK_IMG[s.id] ? `<input value="${esc(s.keywords.join(', '))}" placeholder="слова через запятую">` : ''}
     <small class="hint">${s.refs.length ? `+ справочники: ${s.refs.length}` : ''}</small></div>`).join('');
 }
+function skShow(on) { $('#skList').hidden = !on; $('#skArr').textContent = on ? '▾' : '▸'; try { localStorage.setItem('h3-sk-open', on ? '1' : ''); } catch {} }
+$('#skToggle').onclick = () => skShow($('#skList').hidden);
+try { skShow(localStorage.getItem('h3-sk-open') === '1'); } catch {}
 $('#skList').addEventListener('change', async e => {
   const card = e.target.closest('.sk'); if (!card) return;
   const body = e.target.tagName === 'SELECT' ? { mode: e.target.value } : { keywords: e.target.value.split(',') };
@@ -4329,6 +5128,9 @@ $('.nav[data-view="agent"]').addEventListener('click', () => { agStatus(); agCtx
 
 // download page / file name of a model
 $('#mlist').addEventListener('click', async e => {
+  const dn = e.target.closest('[data-dlnow]'); if (dn) { mdStart([dn.dataset.dlnow]); return; }
+  const cu = e.target.closest('[data-copyurl]');
+  if (cu) { const u = cu.dataset.copyurl; navigator.clipboard?.writeText(u).then(() => toast('Ссылка скопирована: вставьте её в менеджер загрузок'), () => toast(u)); return; }
   const d = e.target.closest('[data-dlmodel]'), c = e.target.closest('[data-copyname]'), f = e.target.closest('.mf');
   if (d) { try { await postJSON('/api/models/open', { role: d.dataset.dlmodel }); toast('Страница скачивания открыта в браузере'); } catch (err) { toast(err.message); } return; }
   const name = c ? c.dataset.copyname : f ? f.textContent : ''; if (!name) return;
@@ -4395,9 +5197,11 @@ async function openUpscale(it) {
     + (it.kind === 'image'
       ? `<div class="note"><span>Картинка станет крупнее и чётче (с деталями). Это занимает от десятков секунд до нескольких минут. Задание пойдёт в очередь, а готовая картинка появится в Библиотеке отдельным файлом, исходная останется.</span></div>`
       : `<div class="note"><span>Видео станет крупнее и чётче, звук останется прежним. Это долго: от нескольких минут до часа на видео. Задание пойдёт в очередь, вы можете заниматься другим, а готовое видео появится в Библиотеке отдельным файлом. Если ждать не хочется — просто закройте это окно.</span></div>`)
-    + (have ? `<div style="display:grid;gap:10px;margin-top:14px">${opt(1.5, 'Увеличить в 1,5 раза')}${opt(2, 'Увеличить в 2 раза')}</div>`
-      : `<div class="hint" style="margin:14px 0">Для этого нужна модель SeedVR2 (около 4 ГБ). ${st.engine === 'managed' ? 'Нажмите, чтобы скачать, и вернитесь сюда.' : 'Если файлов seedvr2_3b_int8_convrot и seedvr2_ema_vae_fp16 нет в вашем ComfyUI, положите их в его папки моделей.'}</div>`
-        + (st.engine === 'managed' ? '<button class="btn pri" data-dl type="button">Скачать модель</button>' : '')) + '</div>';
+    + (have && it.kind === 'image' ? (() => { const k2 = w ? Math.max(1, 2048 / Math.max(w, h)) : 1.5; const tw = w ? Math.round(w * k2 / 2) * 2 : 0, th = w ? Math.round(h * k2 / 2) * 2 : 0;
+        return `<div style="display:grid;gap:10px;margin-top:14px"><button class="btn pri up-s" data-k="2k" data-m="soft2k" type="button">До 2К, мягко${tw ? ` · ${tw}×${th}` : ''}<small style="display:block;opacity:.8">добавляет чёткость, но без «цифровой» резкости; быстро</small></button></div>`; })() : '')
+    + (have ? `<div style="display:grid;gap:10px;margin-top:14px">${opt(1.5, (it.kind === 'image' ? 'Чётче (SeedVR2): ' : '') + 'Увеличить в 1,5 раза')}${opt(2, (it.kind === 'image' ? 'Чётче (SeedVR2): ' : '') + 'Увеличить в 2 раза')}</div>`
+      : (`<div class="hint" style="margin:14px 0">Для этого нужна модель SeedVR2 (около 4 ГБ). ${st.engine === 'managed' ? 'Нажмите, чтобы скачать, и вернитесь сюда.' : 'Если файлов seedvr2_3b_int8_convrot и seedvr2_ema_vae_fp16 нет в вашем ComfyUI, положите их в его папки моделей.'}</div>`
+        + (st.engine === 'managed' ? '<button class="btn pri" data-dl type="button">Скачать модель</button>' : ''))) + '</div>';
   m.onclick = async e => {
     if (e.target === m || e.target.closest('[data-x]')) { m.hidden = true; return; }
     if (e.target.closest('[data-dl]')) {
@@ -4409,7 +5213,7 @@ async function openUpscale(it) {
     }
     const b = e.target.closest('.up-s'); if (!b) return;
     try {
-      const r = await postJSON('/api/upscale', { id: it.id, scale: b.dataset.k });
+      const r = await postJSON('/api/upscale', { id: it.id, scale: b.dataset.k, method: b.dataset.m || '' });
       qAdd(r.prompt_id, 'upscale', it.prompt || 'Увеличение');
       m.hidden = true; closeViewer(); toast(`Задание в очереди: готовая ${it.kind === 'image' ? 'картинка' : 'видео'} появится в Библиотеке`); goTo('queue');
     } catch (err) { toast(err.message); }
@@ -4548,9 +5352,10 @@ function cwRender() {
   const models = W.filter(w => CW_MODEL(w) && !w.missing);
   const other = W.filter(w => w.role === 'other' && !w.missing && !CW_MODEL(w));
   let status = '';
-  if (r.missing_nodes.length) status += `<div class="note warn"><span><b>В вашем ComfyUI нет нод:</b> ${[...new Set(r.missing_nodes.map(m => esc(m.cls)))].join(', ')}. Установите их (например, через ComfyUI Manager), перезапустите ComfyUI и откройте раздел снова. Пока их нет, запустить нельзя.</span></div>`;
+  if (r.missing_nodes.length) status += `<div class="note warn"><span><b>В вашем ComfyUI нет нод:</b> ${[...new Set(r.missing_nodes.map(m => esc(m.cls)))].join(', ')}. Установите их (например, через ComfyUI Manager), перезапустите ComfyUI и откройте раздел снова. Пока их нет, запустить нельзя.</span></div>`
+    + `<div class="cw-bg3">${[...new Set(r.missing_nodes.map(m => m.cls))].map(c => `<div class="cw-f"><span>Нода <b style="color:var(--pink)">${esc(c)}</b></span><button class="btn mini" type="button" data-websearch="${esc('ComfyUI custom node ' + c + ' github')}">Найти в интернете</button></div>`).join('')}</div>`;
   if (missing.length) status += `<div class="note warn"><span><b>Не найдены файлы.</b> Выберите замену из того, что есть в вашем ComfyUI.</span></div><div class="cw-bg3">${missing.map(w =>
-    `<label class="cw-f"><span>${esc(w.title)} · не найден: <b style="color:var(--pink)">${esc(w.value)}</b></span>${cwField(w)}</label>`).join('')}</div>`;
+    `<label class="cw-f"><span>${esc(w.title)} · не найден: <b style="color:var(--pink)">${esc(w.value)}</b> <button class="btn mini" type="button" data-websearch="${esc('"' + String(w.value).split(/[\/]/).pop() + '" huggingface download')}">Найти в интернете</button></span>${cwField(w)}</label>`).join('')}</div>`;
   r.notes.forEach(n => status += `<div class="note"><span>${esc(n)}</span></div>`);
   let html = '';
   if (status) html += `<div class="card cw-status"><div class="card-h"><h3>Что нашлось в «${esc(r.name)}»</h3></div>${status}</div>`;
@@ -4570,7 +5375,7 @@ function cwRender() {
   tl += params.map(w => `<div class="cw-t"><span>${esc(w.title)}</span>${cwField(w)}</div>`).join('');
   if (tl) main += `<div class="cw-tiles">${tl}</div>`;
   if (toggles.length) main += `<div class="cw-toggles">${toggles.map(w => `<label class="cw-sw"><input type="checkbox" data-k="${esc(w.key)}"${CW.vals[w.key] ? ' checked' : ''}><b>${esc(w.title)}</b></label>`).join('')}</div>`;
-  html += `<div class="card"><div class="card-h"><h3>Основное</h3></div><div style="display:grid;gap:14px">${main || '<div class="hint">Основных полей не нашлось. Всё остальное внизу.</div>'}</div></div>`;
+  html += `<div class="card"><div class="card-h"><h3>Основное <small style="color:var(--muted);font-weight:500">· промпт, размер, шаги, seed</small></h3></div><div style="display:grid;gap:10px">${main || '<div class="hint">Основных полей не нашлось. Всё остальное внизу.</div>'}</div></div>`;
 
   const det = (title, n, body) => `<details class="card cw-det"><summary>${title} <small>${n}</small></summary><div class="cw-boxes">${body}</div></details>`;
   if (models.length) html += det('Модели и файлы', `${models.length} · обычно менять не нужно`, cwGroupBy(models).map(ws => cwBox(ws[0].title, ws)).join(''));
@@ -4595,6 +5400,13 @@ $('#cwBody').addEventListener('input', e => {
   const w = CW.rep.widgets.find(x => x.key === k); if (!w) return;
   CW.vals[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
   try { localStorage.setItem('h3-cw-' + CW.id, JSON.stringify(CW.vals)); } catch {}
+});
+// width / height are rounded to a multiple of 32 (what the video and picture models accept)
+$('#cwBody').addEventListener('change', e => {
+  const inp = e.target, k = inp.dataset?.k; if (!k || !inp.closest('.cw-pair')) return;
+  const v = parseInt(inp.value, 10); if (!(v > 0)) return;
+  const r = Math.max(64, Math.round(v / 32) * 32);
+  if (r !== v) { inp.value = r; CW.vals[k] = String(r); try { localStorage.setItem('h3-cw-' + CW.id, JSON.stringify(CW.vals)); } catch {} toast(`Размер округлён: ${v} → ${r} (кратно 32)`); }
 });
 $('#cwBody').addEventListener('change', e => {
   const k = e.target.dataset?.f; if (!k) return;
@@ -4703,7 +5515,7 @@ async function libToFile(it) {
 }
 
 /* ---------- Library -> workflow: "Use in…" button and the side tray to drag from ---------- */
-const USE_TARGETS = [['video', 'Image-to-Video'], ['lipsync', 'Lipsync / клип'], ['refs', 'Референсы'], ['actor', 'Актёрская игра'], ['action', 'Экшн-сцены'], ['qwen', 'Правка картинки'], ['agent', 'Агент (в чат)']];
+const USE_TARGETS = [['video', 'Image-to-Video'], ['lipsync', 'Lipsync / клип'], ['refs', 'Референсы'], ['actor', 'Актёрская игра'], ['action', 'Экшн-сцены'], ['long', 'Длинное видео'], ['qwen', 'Правка картинки'], ['agent', 'Агент (в чат)']];
 function freeSlot(view) {
   const root = $('#view-' + view); if (!root) return null;
   const s = $$('label.drop:not(.disabled):not(.filled), label.ref:not(.filled)', root)[0];
@@ -4725,12 +5537,15 @@ function useMenu(it) {
   if (!m) { m = document.createElement('div'); m.className = 'modal'; m.id = 'useMenu'; document.body.append(m); }
   m.hidden = false;
   m.innerHTML = '<div class="box" style="padding:20px;max-width:360px"><div class="card-h"><h3>Куда отправить?</h3><button class="btn" data-x type="button">Закрыть</button></div><div style="display:grid;gap:8px">'
-    + USE_TARGETS.filter(t => !$(`.nav[data-view="${t[0]}"]`)?.disabled).map(t => `<button class="btn" data-v="${t[0]}" type="button">${t[1]}</button>`).join('') + '</div>'
-    + (it.kind === 'image' ? '' : '<div class="hint" style="margin-top:10px">Из видео берётся последний кадр.</div>') + '</div>';
+    + (it.kind !== 'image' && it.url && !it.missing ? '<button class="btn pri" data-v="__continue" type="button">Длинное видео: продолжить это видео</button>' : '')
+    + USE_TARGETS.filter(t => !$(`.nav[data-view="${t[0]}"]`)?.disabled).map(t => `<button class="btn" data-v="${t[0]}" type="button">${t[1]}${t[0] === 'long' && it.kind !== 'image' ? ': кадр как референс' : ''}</button>`).join('') + '</div>'
+    + (it.kind === 'image' ? '' : '<div class="hint" style="margin-top:10px">Из видео берётся последний кадр. «Продолжить это видео» берёт последние секунды клипа, и новая сцена продолжает их.</div>') + '</div>';
   m.onclick = async e => {
     if (e.target === m || e.target.closest('[data-x]')) { m.hidden = true; return; }
     const b = e.target.closest('[data-v]'); if (!b) return;
-    m.hidden = true; await useInWorkflow(it, b.dataset.v);
+    m.hidden = true;
+    if (b.dataset.v === '__continue') { if (openId) closeViewer(); await continueLong(it); return; }
+    await useInWorkflow(it, b.dataset.v);
   };
 }
 // the tray: the latest library pictures, drag one onto any picture slot
@@ -4741,7 +5556,7 @@ function useMenu(it) {
   const st = document.createElement('style');
   st.textContent = '#libTray{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:30;display:flex;align-items:center}#libTray[hidden]{display:none}'
     + '.lt-tab{writing-mode:vertical-rl;padding:12px 6px;border-radius:10px 0 0 10px;background:var(--card,#222);border:1px solid var(--line-2);border-right:0;color:var(--text);font-size:12px;font-weight:700;cursor:pointer}'
-    + '.lt-body{width:130px;max-height:70vh;overflow:auto;padding:8px;display:grid;gap:8px;background:var(--bg-2);border:1px solid var(--line-2);border-radius:12px 0 0 12px}'
+    + '.lt-body{width:130px;max-height:calc(var(--vh,1vh)*70);overflow:auto;padding:8px;display:grid;gap:8px;background:var(--bg-2);border:1px solid var(--line-2);border-radius:12px 0 0 12px}'
     + '.lt-body img,.lt-body video{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer;display:block}';
   document.head.append(st);
   const body = $('.lt-body', tray);
@@ -4896,41 +5711,81 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
 
 /* --- Krea 2: by text --- */
 (() => {
-  const root = $('#view-krea'), S = { aspect: '16:9', style: 'plain', scale: '2k' };
+  const root = $('#view-krea'), S = { aspect: '16:9', style: 'plain', scale: '2k', engine: 'krea' };
   root.innerHTML = `
     <div class="head"><div><h1>Картинка по тексту</h1><p>Опишите картинку словами — модель Krea 2 нарисует её. Загрузить свою картинку здесь нельзя: для этого раздел «Правка картинки»</p></div>
       <div class="mode-pill"><i></i><span>Krea 2 · 1 МП</span></div></div>
     <div class="grid"><div class="col">
       <div class="card"><div class="card-h"><h3><span class="n">1</span>Промпт</h3><span class="counter kr-count">0 символов</span></div>
+        <div class="seg kr-bm" style="grid-template-columns:1fr 1fr;margin-bottom:8px"><button type="button" data-b="0" class="on">Один промпт</button><button type="button" data-b="1">Список промптов<small>серия картинок</small></button></div>
         <textarea class="kr-prompt" placeholder="Опишите картинку: кто или что в кадре, где, какой свет, какой стиль (фото, иллюстрация, постер)…"></textarea>
+        <div class="kr-batch" hidden style="margin-top:10px">
+          <div class="hint" style="margin-bottom:6px">Вставьте промпты одним куском: каждый отделите <b>пустой строкой</b> (или пронумеруйте: «1.», «Кадр 2:»). Приложение само разделит текст и поставит каждую картинку в очередь. Модель, формат и размер общие для всех.</div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><b class="kr-bcount"></b></div>
+          <div class="kr-bl" style="max-height:220px;overflow:auto;margin:6px 0"></div>
+          <div class="note warn kr-bwarn" hidden><span></span></div>
+          <label style="display:flex;gap:8px;align-items:flex-start;margin:8px 0;cursor:pointer" title="Если нужна серия похожих кадров, включите. Для разных картинок оставьте выключенным: у каждой будет свой случайный seed."><input type="checkbox" class="kr-same" style="margin-top:3px"><span>Одинаковый seed для всей серии <span class="hint">(для серии кадров; для разных картинок не нужно). Если ниже задан фиксированный seed, возьмётся он.</span></span></label>
+          <button class="go kr-bgo" type="button" disabled><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg><span>Сгенерировать</span></button>
+          <div class="status kr-bstatus" style="margin-top:6px"></div>
+        </div>
         <div class="ta-foot"><span class="hint">Лучше писать подробно, одним абзацем. Помощник в разделе «Агент» умеет писать такие промпты</span></div></div>
       <div class="card"><div class="card-h"><h3><span class="n">2</span>Параметры</h3></div>
-        <div class="row"><div class="row-l">Стиль</div>
+        <div class="row"><div class="row-l">Модель</div>
+          <div class="seg kr-eng" style="grid-template-columns:repeat(3,1fr)"><button data-e="krea">Krea 2<small>лучшее качество, можно в коммерцию</small></button><button data-e="flux">FLUX.2 klein<small>можно в коммерцию</small></button><button data-e="qwen">Qwen 2.1<small>текст на картинке, не для коммерции</small></button></div>
+          <div class="hint kr-enghint" hidden></div>
+          <div class="hint" style="margin-top:6px">Лицензии: <b>Krea 2</b> и <b>FLUX.2 klein</b> можно использовать в коммерции (Krea 2 — если годовой доход компании меньше 1 млн $). <b>Qwen 2.1</b> только для творчества, не для коммерции.</div></div>
+        <div class="row kr-neg" hidden><div class="row-l">Негативный промпт <span class="hint">что не должно быть на картинке</span></div>
+          <textarea class="kr-negtxt" rows="2">blurry, low quality, deformed hands, extra fingers, text, watermark</textarea></div>
+        <div class="row kr-stylerow"><div class="row-l">Стиль</div>
           <div class="seg" style="grid-template-columns:1fr 1fr"><button data-st="plain">Обычный<small>быстро, любые картинки</small></button><button data-st="real">Реализм<small>люди и фото как с камеры, 2 прохода</small></button></div>
           <div class="hint kr-realhint" hidden></div></div>
         <div class="row kr-scale" hidden><div class="row-l">Размер результата</div>
           <div class="seg" style="grid-template-columns:1fr 1fr"><button data-sc="2k">Около 2K<small>быстрее</small></button><button data-sc="4k">4K<small>дольше и нужно больше видеопамяти</small></button></div></div>
         <div class="row"><div class="row-l">Формат <span class="resv"></span></div><div class="chips kr-asp"></div></div>
+        ${SZ_ROW}
         ${imgSeedBox()}</div>
     </div><div class="preview kr-prev"></div></div>`;
   gridResize($('.grid', root));
   $('.kr-asp', root).innerHTML = IMG_ASPECTS.map(([id, name, w, h]) => { const k = 18 / Math.max(w, h);
     return `<button class="chip" data-a="${id}"><i class="ar" style="width:${w * k}px;height:${h * k}px"></i>${name}${name !== id ? ` <small>${id}</small>` : ''}</button>`; }).join('');
+  const krForm = text => { const fd = new FormData(); fd.append('prompt', text);
+    fd.append('aspect', S.aspect); fd.append('style', S.engine === 'krea' ? S.style : 'plain'); fd.append('scale', S.scale); fd.append('engine', S.engine); if (S.cw && S.ch) { fd.append('width', S.cw); fd.append('height', S.ch); } if (S.engine === 'qwen') fd.append('negative', $('.kr-negtxt', root).value.trim()); imgSeedForm(S, fd); return fd; };
   const P = imgPanel($('.kr-prev', root), {
     mode: 'krea', url: '/api/generate/krea', promptText: () => $('.kr-prompt', root).value.trim(),
     validate: () => $('.kr-prompt', root).value.trim() ? '' : 'Напишите промпт',
-    form: () => { const fd = new FormData(); fd.append('prompt', $('.kr-prompt', root).value.trim()); fd.append('aspect', S.aspect); fd.append('style', S.style); fd.append('scale', S.scale); imgSeedForm(S, fd); return fd; },
-    two: () => S.style === 'real',
+    form: () => { const fd = new FormData(); fd.append('prompt', $('.kr-prompt', root).value.trim()); fd.append('aspect', S.aspect); fd.append('style', S.engine === 'krea' ? S.style : 'plain'); fd.append('scale', S.scale); fd.append('engine', S.engine); if (S.cw && S.ch) { fd.append('width', S.cw); fd.append('height', S.ch); } if (S.engine === 'qwen') fd.append('negative', $('.kr-negtxt', root).value.trim()); imgSeedForm(S, fd); return fd; },
+    two: () => S.engine === 'krea' && S.style === 'real',
   });
   const upd = () => {
     $$('.kr-asp .chip', root).forEach(c => c.classList.toggle('on', c.dataset.a === S.aspect));
-    const [w, h] = IMG_SIZES[S.aspect], k = S.style === 'real' ? (S.scale === '4k' ? 2.5 : 1.5) : 1;
+    const [w, h] = S.cw && S.ch ? [S.cw, S.ch] : IMG_SIZES[S.aspect], k = S.style === 'real' ? (S.scale === '4k' ? 2.5 : 1.5) : 1;
     $('.resv', root).textContent = `${Math.round(w * k)}×${Math.round(h * k)}`; P.ratio(w, h);
     $$('[data-st]', root).forEach(b => b.classList.toggle('on', b.dataset.st === S.style));
     $$('[data-sc]', root).forEach(b => b.classList.toggle('on', b.dataset.sc === S.scale));
-    $('.kr-scale', root).hidden = S.style !== 'real';
+    $('.kr-scale', root).hidden = !(S.engine === 'krea' && S.style === 'real');
+    $$('.kr-eng button', root).forEach(b => b.classList.toggle('on', b.dataset.e === S.engine));
+    $('.kr-stylerow', root).hidden = S.engine !== 'krea'; $('.kr-neg', root).hidden = S.engine !== 'qwen';
+    $('.mode-pill span', root).textContent = { krea: 'Krea 2 · 1 МП', flux: 'FLUX.2 klein · 1 МП', qwen: 'Qwen Image 2.1 · 1 МП' }[S.engine];
   };
+  async function krEngCheck() {
+    const hint = $('.kr-enghint', root); hint.hidden = true;
+    if (S.engine === 'krea') return;
+    const role = S.engine === 'flux' ? 'flux' : 'qwen';
+    try {
+      const st = await (await fetch('/api/status')).json();
+      const miss = (st.models || []).filter(m => m.role.startsWith(role) && !m.have);
+      if (!(st.modes || []).includes(role) || miss.length) {
+        hint.hidden = false;
+        hint.textContent = st.engine === 'managed'
+          ? `Для этой модели нужны ещё файлы. Откройте «Модели» и нажмите «Добавить ${role === 'flux' ? 'Правка картинки: FLUX.2' : 'Правка картинки'}».`
+          : role === 'flux'
+            ? 'Положите в папки моделей вашего ComfyUI: flux-2-klein-4b-fp8.safetensors (diffusion_models), qwen_3_4b.safetensors (text_encoders) и flux2-vae.safetensors (vae). Потом обновите раздел «Модели».'
+            : 'Для Qwen 2.1 нужны её модели (раздел «Правка картинки»). Проверьте «Модели».';
+      }
+    } catch {}
+  }
   root.addEventListener('click', async e => {
+    const en = e.target.closest('.kr-eng button'); if (en) { S.engine = en.dataset.e; upd(); krEngCheck(); return; }
     const sc = e.target.closest('[data-sc]'); if (sc) { S.scale = sc.dataset.sc; upd(); return; }
     const b = e.target.closest('[data-st]'); if (!b) return;
     S.style = b.dataset.st; upd();
@@ -4947,29 +5802,96 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
       }
     } catch {}
   });
-  $('.kr-asp', root).onclick = e => { const c = e.target.closest('.chip'); if (c) { S.aspect = c.dataset.a; upd(); } };
+  $('.kr-asp', root).onclick = e => { const c = e.target.closest('.chip'); if (c) { S.aspect = c.dataset.a; S.cw = S.ch = 0; $('.sz-w', root).value = $('.sz-h', root).value = ''; $('.sz-reset', root).hidden = true; upd(); } };
+  szWire(root, S, () => upd(), () => IMG_SIZES[S.aspect]);
   $('.kr-prompt', root).oninput = e => $('.kr-count', root).textContent = e.target.value.length + ' символов';
+
+  /* --- list of prompts: a series of pictures, one queue job per prompt --- */
+  const K = { batch: false, items: [], removed: new Set() };
+  const splitList = text => {
+    const t = text.replace(/\r/g, '').trim(); if (!t) return [];
+    let parts = t.split(/\n\s*\n/).map(x => x.trim()).filter(Boolean);
+    if (parts.length < 2) { const m = t.split(/\n(?=\s*(?:кадр|frame|scene|сцена)?\s*\d+\s*[:.)\-–]\s)/i).map(x => x.trim()).filter(Boolean); if (m.length > 1) parts = m; }
+    return parts.map(x => x.replace(/^\s*(?:кадр|frame|scene|сцена)?\s*\d+\s*[:.)\-–]\s*/i, '').replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean);
+  };
+  const BATCH_MAX = 50;
+  const kbRender = () => {
+    const all = splitList($('.kr-prompt', root).value);
+    K.items = all.filter(x => !K.removed.has(x));
+    const over = K.items.length > BATCH_MAX;
+    $('.kr-bl', root).innerHTML = K.items.map((x, i) => `<div class="kr-bi" style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--line)"><b style="min-width:26px">${i + 1}</b><span style="flex:1;font-size:12.5px">${esc(x.length > 120 ? x.slice(0, 120) + '…' : x)}</span><button class="btn" type="button" data-rm="${i}" title="Убрать из списка" style="padding:1px 8px">✕</button></div>`).join('')
+      || '<div class="hint">Вставьте текст выше: промпты, разделённые пустой строкой.</div>';
+    const n = K.items.length;
+    $('.kr-bcount', root).textContent = n ? `Промптов: ${n}` : '';
+    const w = $('.kr-bwarn', root); w.hidden = !over; w.textContent = over ? `Не больше ${BATCH_MAX} промптов за раз: уберите лишние или разбейте на части.` : '';
+    const go = $('.kr-bgo', root); go.disabled = !n || over; go.querySelector('span').textContent = n ? `Сгенерировать ${n} ${n % 10 === 1 && n % 100 !== 11 ? 'картинку' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? 'картинки' : 'картинок'}` : 'Сгенерировать';
+  };
+  const kbMode = on => {
+    K.batch = on; root.classList.toggle('kr-batching', on);
+    $$('.kr-bm button', root).forEach(b => b.classList.toggle('on', (b.dataset.b === '1') === on));
+    $('.kr-batch', root).hidden = !on;
+    $('.kr-prompt', root).placeholder = on ? 'Вставьте сюда список промптов. Каждый промпт отделите пустой строкой: из каждого получится отдельная картинка.' : 'Опишите картинку: кто или что в кадре, где, какой свет, какой стиль (фото, иллюстрация, постер)…';
+    if (on) kbRender();
+  };
+  $('.kr-bm', root).onclick = e => { const b = e.target.closest('button'); if (b) kbMode(b.dataset.b === '1'); };
+  $('.kr-bl', root).onclick = e => { const b = e.target.closest('[data-rm]'); if (!b) return; K.removed.add(K.items[+b.dataset.rm]); kbRender(); };
+  $('.kr-prompt', root).addEventListener('input', () => { if (K.batch) { K.removed.clear(); kbRender(); } });
+  $('.kr-bgo', root).onclick = async () => {
+    const st = $('.kr-bstatus', root), n = K.items.length; if (!n || n > BATCH_MAX) return;
+    const same = $('.kr-same', root).checked, fixed = S.seedFixed && S.seed;
+    const seed = same ? (fixed ? S.seed : String(Math.floor(Math.random() * 1e12))) : null;
+    const go = $('.kr-bgo', root); go.disabled = true; let ok = 0;
+    for (let i = 0; i < n; i++) {
+      st.textContent = `Отправляем в очередь: ${i + 1} из ${n}…`;
+      try {
+        const fd = krForm(K.items[i]);
+        if (seed) fd.set('seed', seed); else fd.delete('seed');   // every picture its own random seed unless it is a series
+        fd.append('batch_label', `${i + 1} из ${n}`);
+        const r = await fetch('/api/generate/krea', { method: 'POST', body: fd }); const txt = await r.text(); let res; try { res = JSON.parse(txt); } catch { res = { error: txt }; }
+        if (!r.ok) throw new Error(res.error || r.statusText);
+        qAdd(res.prompt_id, 'krea', K.items[i]); ok++;
+      } catch (err) { st.textContent = `Ошибка на промпте ${i + 1}: ${err.message}. В очередь поставлено: ${ok}.`; go.disabled = false; return; }
+    }
+    const pl = k => k % 10 === 1 && k % 100 !== 11 ? 'картинка' : (k % 10 >= 2 && k % 10 <= 4 && (k % 100 < 10 || k % 100 >= 20)) ? 'картинки' : 'картинок';
+    st.innerHTML = `В очереди ${ok} ${pl(ok)}. Они появятся в Библиотеке по мере готовности; следить за ходом можно в разделе «Очередь».`; go.disabled = false;
+  };
+  const fillList = text => { kbMode(true); $('.kr-prompt', root).value = text; $('.kr-prompt', root).oninput({ target: $('.kr-prompt', root) }); K.removed.clear(); kbRender(); };
   imgSeedWire(root, S); upd();
-  IMG.krea = { fill: it => { $('.kr-prompt', root).value = it.prompt || ''; $('.kr-prompt', root).oninput({ target: $('.kr-prompt', root) }); if (IMG_SIZES[it.aspect]) S.aspect = it.aspect; upd(); } };
+  IMG.krea = { fillList, fill: it => { if (it.engine) S.engine = it.engine; else if (it.sub === 'Картинка (FLUX.2)') S.engine = 'flux'; else if (it.sub === 'Картинка (Qwen 2.1)') S.engine = 'qwen'; else S.engine = 'krea'; $('.kr-prompt', root).value = it.prompt || ''; $('.kr-prompt', root).oninput({ target: $('.kr-prompt', root) }); if (IMG_SIZES[it.aspect]) S.aspect = it.aspect; upd(); } };
 })();
 
 /* --- Qwen Image 2.1: edit a picture, character sheet --- */
 (() => {
-  const root = $('#view-qwen'), S = { kind: 'edit', size: '1', aspect: '', headless: true, bg: 'grey' };
+  const root = $('#view-qwen'), S = { kind: 'edit', size: '1', aspect: '', headless: true, bg: 'grey', panels: 4, engine: 'qwen', frames: true, line: 'white' };
   root.innerHTML = `
     <div class="head"><div><h1>Правка картинки</h1><p>Загрузите картинку и напишите, что изменить: поменять место, одежду, свет, поставить персонажа в новую сцену. Или соберите лист персонажа</p></div>
       <div class="mode-pill"><i></i><span>Qwen Image 2.1</span></div></div>
     <div class="grid"><div class="col">
       <div class="card"><div class="card-h"><h3><span class="n">1</span>Картинка</h3></div>
-        <label class="drop" id="qwDrop" style="--fh:240px"><input type="file" accept="image/*"><div class="ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.6"/><path d="m21 15-5-5L5 21"/></svg><b>Ваша картинка</b><span>перетащите, нажмите или возьмите из Библиотеки</span></div><span class="tag" hidden>Исходная</span><button class="x" type="button">✕</button></label></div>
+        <div class="qw-slots">
+          <label class="drop" id="qwDrop"><input type="file" accept="image/*"><div class="ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.6"/><path d="m21 15-5-5L5 21"/></svg><b>Ваша картинка</b><span>перетащите или нажмите</span></div><span class="tag" hidden>Исходная</span><button class="x" type="button">✕</button></label>
+          <label class="drop qw-s2" id="qwDrop2" title="Ещё одна картинка (референс, по желанию)"><input type="file" accept="image/*"><div class="ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div><span class="tag" hidden>2</span><button class="x" type="button">✕</button></label>
+          <label class="drop qw-s3" id="qwDrop3" title="Ещё одна картинка (референс, по желанию)"><input type="file" accept="image/*"><div class="ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div><span class="tag" hidden>3</span><button class="x" type="button">✕</button></label>
+        </div>
+        <div class="hint qw-morehint" style="margin-top:8px"></div></div>
       <div class="card"><div class="card-h"><h3><span class="n">2</span>Что делаем</h3></div>
-        <div class="seg qw-kind" style="grid-template-columns:1fr 1fr"><button data-k="edit">Править картинку<small>изменить по описанию</small></button><button data-k="sheet">Лист персонажа<small>4 вида: спереди, сзади, портреты</small></button></div>
-        <div class="qw-edit" style="margin-top:14px"><textarea class="qw-prompt" placeholder="Что изменить и что оставить. Например: Этот человек сидит в кафе у окна и пьёт кофе. Лицо, причёска и одежда как на картинке."></textarea>
+        <div class="seg qw-kind" style="grid-template-columns:repeat(3,1fr)"><button data-k="edit">Править картинку<small>изменить по описанию</small></button><button data-k="sheet">Лист персонажа<small>4 или 6 видов с разных сторон</small></button><button data-k="story">Раскадровка<small>история по картинкам героя и места</small></button></div>
+        <div class="qw-edit" style="margin-top:14px">
+          <div class="row qw-storyopts" hidden style="margin-bottom:12px"><div class="row-l">Как рисовать</div>
+            <div class="seg qw-fr" style="grid-template-columns:1fr 1fr"><button data-fr="1">По кадрам<small>каждый кадр отдельно, лист склеит программа</small></button><button data-fr="0">Одним листом<small>одна картинка сразу</small></button></div>
+            <div class="row qw-lnrow" style="margin-top:10px"><div class="row-l">Линия между кадрами</div>
+              <div class="seg qw-ln" style="grid-template-columns:repeat(3,1fr)"><button data-ln="white">Тонкая белая</button><button data-ln="black">Тонкая чёрная</button><button data-ln="none">Без линии</button></div></div>
+            <div class="hint" style="margin-top:6px">Кадры пишите по одному в строке: «1: ...», «2: ...» (2, 3, 4, 6, 8 или 9 кадров). Каждый кадр сохраняется отдельно в Библиотеку в полном размере. FLUX.2 рисует кадр за секунды, Qwen 2.1 заметно дольше (минуты на кадр).</div></div>
+          <div class="row" style="margin-bottom:12px"><div class="row-l">Модель</div><div class="seg qw-eng" style="grid-template-columns:1fr 1fr"><button data-e="qwen">Qwen 2.1<small>для творчества, не для коммерции</small></button><button data-e="flux">FLUX.2 klein<small>можно в коммерцию</small></button></div>
+            <div class="hint qw-fluxhint" hidden></div></div>
+          <textarea class="qw-prompt" placeholder="Что изменить и что оставить. Например: Этот человек сидит в кафе у окна и пьёт кофе. Лицо, причёска и одежда как на картинке."></textarea>
           <div class="ta-foot"><span class="hint">Скажите и что поменять, и что оставить прежним — так результат точнее</span></div>
-          <div class="row" style="margin-top:12px"><div class="row-l">Формат кадра <span class="hint">по умолчанию как у вашей картинки</span></div><div class="chips qw-asp"></div></div>
-          <div class="row" style="margin-top:12px"><div class="row-l">Размер результата</div><div class="seg qw-size" style="grid-template-columns:1fr 1fr"><button data-s="1">Обычный<small>~1 МП, быстро</small></button><button data-s="2">Крупный<small>~2 МП, дольше</small></button></div></div></div>
+          <div class="row qw-editonly" style="margin-top:12px"><div class="row-l">Формат кадра <span class="hint">по умолчанию как у вашей картинки</span></div><div class="chips qw-asp"></div></div>
+          <div class="qw-szwrap" style="margin-top:12px">${SZ_ROW}</div>
+          <div class="row qw-editonly" style="margin-top:12px"><div class="row-l">Размер результата</div><div class="seg qw-size" style="grid-template-columns:1fr 1fr"><button data-s="1">Обычный<small>~1 МП, быстро</small></button><button data-s="2">Крупный<small>~2 МП, дольше</small></button></div></div></div>
         <div class="qw-sheet" style="margin-top:14px" hidden>
-          <div class="note"><span>Нужен персонаж на картинке (лучше в полный рост, но портрет тоже подойдёт). Получится лист из 4 панелей: в полный рост спереди и сзади, портрет анфас и в профиль. Потом его можно взять как референс в других разделах.</span></div>
+          <div class="note"><span>Нужен персонаж на картинке (лучше в полный рост, но портрет тоже подойдёт). Потом лист можно взять как референс в других разделах.</span></div>
+          <div class="row"><div class="row-l">Сколько видов</div><div class="seg qw-pn" style="grid-template-columns:1fr 1fr"><button data-p="4">4 панели<small>полный рост спереди и сзади, два портрета</small></button><button data-p="6">6 панелей<small>полный рост спереди, в 3/4, сбоку, сзади + 2 портрета</small></button></div></div>
           <div class="row"><div class="row-l">Первая панель</div><div class="seg qw-head" style="grid-template-columns:1fr 1fr"><button data-h="1">Без головы<small>видна вся одежда</small></button><button data-h="0">С головой<small>для животных — так</small></button></div></div>
           <div class="row"><div class="row-l">Фон</div><div class="seg qw-bg" style="grid-template-columns:repeat(3,1fr)"><button data-b="grey">Серый</button><button data-b="white">Белый</button><button data-b="black">Чёрный</button></div></div>
           <div class="row"><div class="row-l">Особые приметы <span class="hint">необязательно</span></div><div class="path on"><input class="qw-marks" spellcheck="false" placeholder="например: жёлтые очки, шрам на брови"></div></div></div>
@@ -4979,13 +5901,19 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
   gridResize($('.grid', root));
   const drop = $('#qwDrop');
   wireDrop(drop, () => {});
+  const drop2 = $('#qwDrop2'), drop3 = $('#qwDrop3');
+  szWire($('.qw-szwrap', root), S, () => upd(), () => IMG_SIZES[S.aspect] || [1376, 768]);
+  wireDrop(drop2, () => {}); wireDrop(drop3, () => {});
   const P = imgPanel($('.qw-prev', root), {
     mode: 'qwen', url: '/api/generate/qwen',
     promptText: () => S.kind === 'sheet' ? 'Лист персонажа' : $('.qw-prompt', root).value.trim(),
-    validate: () => !drop._file ? 'Загрузите картинку' : S.kind === 'edit' && !$('.qw-prompt', root).value.trim() ? 'Напишите, что изменить на картинке' : '',
+    validate: () => !drop._file && !(S.kind === 'story' && S.frames) ? 'Загрузите картинку' : S.kind === 'edit' && !$('.qw-prompt', root).value.trim() ? 'Напишите, что изменить на картинке' : S.kind === 'story' && !$('.qw-prompt', root).value.trim() ? 'Опишите историю по кадрам' : '',
     form: () => {
-      const fd = new FormData(); fd.append('image', drop._file); fd.append('kind', S.kind);
-      if (S.kind === 'sheet') { fd.append('headless', S.headless ? '1' : '0'); fd.append('background', S.bg); fd.append('marks', $('.qw-marks', root).value.trim()); }
+      const fd = new FormData(); if (drop._file) fd.append('image', drop._file); fd.append('kind', S.kind);
+      if (S.kind === 'story') { fd.append('frames', S.frames ? '1' : '0'); fd.append('line', S.line); } fd.append('engine', S.kind === 'sheet' ? 'qwen' : S.engine);
+      if (S.kind !== 'sheet' && S.cw && S.ch) { fd.append('width', S.cw); fd.append('height', S.ch); }
+      if (S.kind !== 'sheet') { if (drop2._file) fd.append('image2', drop2._file); if (drop3._file) fd.append('image3', drop3._file); }
+      if (S.kind === 'sheet') { fd.append('panels', S.panels); fd.append('headless', S.headless ? '1' : '0'); fd.append('background', S.bg); fd.append('marks', $('.qw-marks', root).value.trim()); }
       else { fd.append('prompt', $('.qw-prompt', root).value.trim()); fd.append('size', S.size); fd.append('aspect', S.aspect); }
       imgSeedForm(S, fd); return fd;
     },
@@ -4995,20 +5923,52 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
   const upd = () => {
     $$('.qw-asp .chip', root).forEach(c => c.classList.toggle('on', c.dataset.qa === S.aspect));
     $$('.qw-kind button', root).forEach(b => b.classList.toggle('on', b.dataset.k === S.kind));
-    $('.qw-edit', root).hidden = S.kind !== 'edit'; $('.qw-sheet', root).hidden = S.kind !== 'sheet';
+    $('.qw-edit', root).hidden = S.kind === 'sheet'; $('.qw-sheet', root).hidden = S.kind !== 'sheet';
+    $$('.qw-s2, .qw-s3', root).forEach(x => x.hidden = S.kind === 'sheet'); $('.qw-slots', root).classList.toggle('one', S.kind === 'sheet'); $('.qw-morehint', root).hidden = S.kind === 'sheet';
+    $('.qw-morehint', root).innerHTML = S.kind === 'story'
+      ? 'Раскадровка: 1-я картинка — герой (или лист персонажа), 2-я — локация, 3-я — по желанию. В тексте они называются <b>&lt;image1&gt;</b>, <b>&lt;image2&gt;</b>, <b>&lt;image3&gt;</b> (для FLUX.2: «image 1», «image 2»).'
+      : 'Референсы (по желанию): 1-я картинка — та, что меняем, 2-я и 3-я — например, герой, предмет или одежда. В тексте они называются <b>&lt;image2&gt;</b>, <b>&lt;image3&gt;</b> (для FLUX.2: «image 2», «image 3»).';
+    $('.qw-storyopts', root).hidden = S.kind !== 'story';
+    $('.qw-lnrow', root).hidden = !S.frames;
+    $$('.qw-fr button', root).forEach(b => b.classList.toggle('on', (b.dataset.fr === '1') === S.frames));
+    $$('.qw-ln button', root).forEach(b => b.classList.toggle('on', b.dataset.ln === S.line));
+    $$('.qw-editonly', root).forEach(r => r.hidden = S.kind === 'story' || (S.engine === 'flux' && r.contains($('.qw-asp', root))));
+    $('.qw-prompt', root).placeholder = S.kind === 'story' && S.frames ? '1: первый кадр по-английски...\n2: второй кадр...\n(героя и место называйте image 1, image 2). Или попросите Агента (Раскадровка → По кадрам).' : S.kind === 'story' ? 'Расскажите историю по кадрам: первый кадр — …, второй кадр — …. Героя и место называйте <image1>, <image2>. Или попросите Агента (Раскадровка) написать промпт.' : 'Что изменить и что оставить. Например: Этот человек сидит в кафе у окна и пьёт кофе. Лицо, причёска и одежда как на картинке.';
     $$('.qw-size button', root).forEach(b => b.classList.toggle('on', b.dataset.s === S.size));
     $$('.qw-head button', root).forEach(b => b.classList.toggle('on', (b.dataset.h === '1') === S.headless));
     $$('.qw-bg button', root).forEach(b => b.classList.toggle('on', b.dataset.b === S.bg));
-    if (S.kind === 'sheet') P.ratio(1920, 1088);
+    $$('.qw-eng button', root).forEach(b => b.classList.toggle('on', b.dataset.e === S.engine));
+    $$('.qw-pn button', root).forEach(b => b.classList.toggle('on', +b.dataset.p === S.panels));
+    if (S.kind === 'sheet') S.panels === 6 ? P.ratio(2112, 960) : P.ratio(1920, 1088);
+    else if (S.kind === 'story') P.ratio(1920, 1088);
+    if (S.kind !== 'sheet' && S.cw && S.ch) P.ratio(S.cw, S.ch);
   };
   root.addEventListener('click', e => {
+    const fr = e.target.closest('.qw-fr button'), ln = e.target.closest('.qw-ln button');
+    if (fr) { S.frames = fr.dataset.fr === '1'; upd(); return; }
+    if (ln) { S.line = ln.dataset.ln; upd(); return; }
     const qa = e.target.closest('.qw-asp .chip'); if (qa) { S.aspect = qa.dataset.qa; upd(); return; }
-    const k = e.target.closest('.qw-kind button'), s = e.target.closest('.qw-size button'), h = e.target.closest('.qw-head button'), b = e.target.closest('.qw-bg button');
-    if (k) S.kind = k.dataset.k; else if (s) S.size = s.dataset.s; else if (h) S.headless = h.dataset.h === '1'; else if (b) S.bg = b.dataset.b; else return;
+    const k = e.target.closest('.qw-kind button'), s = e.target.closest('.qw-size button'), h = e.target.closest('.qw-head button'), b = e.target.closest('.qw-bg button'), pn = e.target.closest('.qw-pn button'), en = e.target.closest('.qw-eng button');
+    if (en) { S.engine = en.dataset.e; upd(); qwFluxCheck(); return; }
+    if (pn) S.panels = +pn.dataset.p; else if (k) S.kind = k.dataset.k; else if (s) S.size = s.dataset.s; else if (h) S.headless = h.dataset.h === '1'; else if (b) S.bg = b.dataset.b; else return;
     upd();
   });
+  async function qwFluxCheck() {
+    const hint = $('.qw-fluxhint', root); hint.hidden = true;
+    if (S.engine !== 'flux') return;
+    try {
+      const st = await (await fetch('/api/status')).json();
+      const miss = (st.models || []).filter(m => m.role.startsWith('flux') && !m.have);
+      if (!(st.modes || []).includes('flux') || miss.length) {
+        hint.hidden = false;
+        hint.textContent = st.engine === 'managed'
+          ? 'Для этой модели нужны ещё три файла (около 12 ГБ). Откройте «Модели» и нажмите «Добавить Правка картинки: FLUX.2».'
+          : 'Положите в папки моделей вашего ComfyUI: flux-2-klein-4b-fp8.safetensors (diffusion_models), qwen_3_4b.safetensors (text_encoders) и flux2-vae.safetensors (vae). Потом обновите раздел «Модели».';
+      }
+    } catch {}
+  }
   imgSeedWire(root, S); upd();
-  IMG.qwen = { fill: it => { if (it.sub === 'Лист персонажа') S.kind = 'sheet'; else { S.kind = 'edit'; $('.qw-prompt', root).value = it.prompt || ''; } upd(); } };
+  IMG.qwen = { fill: it => { if (it.engine) S.engine = it.engine; if (it.frames !== undefined) S.frames = !!it.frames; if (String(it.sub || '').startsWith('Раскадровка по кадрам')) S.frames = true; else if (String(it.sub || '').startsWith('Раскадровка')) S.frames = false; if (it.kind === 'story' || String(it.sub || '').startsWith('Раскадровка')) { S.kind = 'story'; $('.qw-prompt', root).value = it.prompt || ''; } else if (it.sub === 'Лист персонажа') S.kind = 'sheet'; else { S.kind = 'edit'; $('.qw-prompt', root).value = it.prompt || ''; } upd(); } };
 })();
 
 
@@ -5047,7 +6007,7 @@ try { const rw = +localStorage.getItem('h3-cw-rw'); if (rw >= 300) $('#cwBody').
 const cwMine = () => LIB.filter(x => x.mode === 'custom' && (x.wf ? x.wf === CW.id : x.sub === CW.rep.name)).sort((a, b) => b.date - a.date);
 function cwFit(w, h) {  // the window takes the shape of the picture, never taller than 68% of the screen
   const f = $('#cwFrame'); if (!f || !w || !h) return;
-  f.style.aspectRatio = `${w} / ${h}`; f.style.width = `min(100%, ${(68 * w / h).toFixed(1)}vh)`; f.style.minHeight = '0'; f.style.margin = '0 auto';
+  f.style.aspectRatio = `${w} / ${h}`; f.style.width = `min(100%, calc(var(--vh,1vh)*${(68 * w / h).toFixed(1)}))`; f.style.minHeight = '0'; f.style.margin = '0 auto';
 }
 function cwShow(it) {
   const f = $('#cwFrame'); if (!f || !it) return;
@@ -5244,6 +6204,101 @@ if (API) {
     const b = e.target.closest('button'); if (!b) return;
     apply(b.dataset.t); try { localStorage.setItem(KEY, b.dataset.t); } catch {}
   });
+})();
+
+/* interface zoom and library card size (buttons and Ctrl + mouse wheel) */
+const UI_Z = { ui: 1, lib: 230 };
+try { UI_Z.ui = +localStorage.getItem('h3-ui-zoom') || 1; UI_Z.lib = +localStorage.getItem('h3-lib-size') || 230; } catch {}
+// with a zoomed page the browser's vh units stay those of the real window: windows stopped above the bottom edge. --vh is 1/100 of the visible height in page units.
+function setVh() { document.documentElement.style.setProperty('--vh', (innerHeight / (UI_Z.ui || 1) / 100) + 'px'); }
+addEventListener('resize', setVh);
+function applyZoom() {
+  UI_Z.ui = Math.min(1.5, Math.max(0.6, Math.round(UI_Z.ui * 20) / 20));
+  UI_Z.lib = Math.min(420, Math.max(110, Math.round(UI_Z.lib / 10) * 10));
+  document.documentElement.style.zoom = UI_Z.ui;
+  setVh();
+  $('#lib').style.setProperty('--lib-min', UI_Z.lib + 'px');
+  $('#uiPct').textContent = Math.round(UI_Z.ui * 100) + '%';
+  try { localStorage.setItem('h3-ui-zoom', UI_Z.ui); localStorage.setItem('h3-lib-size', UI_Z.lib); } catch {}
+}
+$('#uiSm').onclick = () => { UI_Z.ui -= 0.1; applyZoom(); };
+$('#uiLg').onclick = () => { UI_Z.ui += 0.1; applyZoom(); };
+$('#uiPct').onclick = () => { UI_Z.ui = 1; applyZoom(); };
+$('#libSm').onclick = () => { UI_Z.lib -= 30; applyZoom(); };
+$('#libLg').onclick = () => { UI_Z.lib += 30; applyZoom(); };
+window.addEventListener('wheel', e => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  const up = e.deltaY < 0;
+  if (e.target.closest && e.target.closest('#view-library')) UI_Z.lib += up ? 20 : -20; else UI_Z.ui += up ? 0.05 : -0.05;
+  applyZoom();
+}, { passive: false });
+applyZoom();
+
+/* ---------- MONTAGE: join library clips in a chosen order (ComfyUI does the work, no ffmpeg) ---------- */
+(function mountMontage() {
+  const root = $('#view-montage'), MT = { ids: [], drag: null, busy: false };
+  root.innerHTML = `
+    <div class="head"><div><h1>Монтаж</h1><p>Склейте клипы из Библиотеки в один ролик: добавьте их по порядку, при необходимости поменяйте местами и нажмите «Склеить»</p></div></div>
+    <div class="grid"><div class="col">
+      <div class="card"><div class="card-h"><h3><span class="n">1</span>Клипы из Библиотеки</h3><span class="hint">нажмите на клип, чтобы добавить</span></div><div class="mt-lib"></div></div>
+      <div class="card"><div class="card-h"><h3><span class="n">2</span>Порядок склейки</h3><span class="counter mt-total"></span></div>
+        <div class="mt-strip"></div>
+        <div class="hint mt-hint" style="margin-top:8px">Порядок можно менять: перетащите клип или нажмите стрелки под ним. Клипы разного размера приводятся к размеру первого.</div></div>
+    </div><div class="preview">
+      <div class="screen"><div class="frame" style="aspect-ratio:16/9;width:100%"><div class="res mt-empty"><b>Монтаж</b>готовый ролик появится здесь</div><video class="result mt-res" controls loop playsinline hidden></video></div></div>
+      <button class="go mt-go"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>Склеить</button>
+      <div class="status mt-status"></div>
+    </div></div>`;
+  const lenTxt = it => it.len ? it.len.toFixed(1).replace('.0', '') + ' с' : '';
+  function render() {
+    MT.ids = MT.ids.filter(id => byId(id) && !byId(id).missing);
+    const vids = LIB.filter(it => it.kind !== 'image' && !it.missing && it.url);
+    $('.mt-lib', root).innerHTML = vids.length ? vids.map(it => `<button type="button" class="mt-card" data-id="${it.id}" title="${esc(it.prompt || '')}"><video src="${it.url}#t=0.5" preload="metadata" muted playsinline></video><span class="mt-plus">+</span><span class="mt-len">${lenTxt(it)}</span><small>${esc(it.prompt || MODE_NAME[it.mode] || '')}</small></button>`).join('')
+      : '<div class="hint">В Библиотеке пока нет видео. Сначала сгенерируйте клипы.</div>';
+    $('.mt-strip', root).innerHTML = MT.ids.length ? MT.ids.map((id, i) => { const it = byId(id); return `<div class="mt-item" draggable="true" data-i="${i}"><video src="${it.url}#t=0.5" preload="metadata" muted playsinline></video><span class="mt-n">${i + 1}</span><span class="mt-len">${lenTxt(it)}</span><div class="mt-b"><button type="button" data-mv="-1" title="Влево">◀</button><button type="button" data-rm title="Убрать">✕</button><button type="button" data-mv="1" title="Вправо">▶</button></div></div>`; }).join('')
+      : '<div class="hint">Пока пусто: нажмите на клипы сверху.</div>';
+    const total = MT.ids.reduce((a, id) => a + (byId(id).len || 0), 0);
+    $('.mt-total', root).textContent = MT.ids.length ? `${MT.ids.length} клипов · ≈ ${Math.round(total)} с` : '';
+  }
+  const move = (i, j) => { if (j < 0 || j >= MT.ids.length) return; const [x] = MT.ids.splice(i, 1); MT.ids.splice(j, 0, x); render(); };
+  root.addEventListener('click', e => {
+    const c = e.target.closest('.mt-card'); if (c) { MT.ids.push(c.dataset.id); render(); return; }
+    const it = e.target.closest('.mt-item'); if (!it) return; const i = +it.dataset.i;
+    if (e.target.closest('[data-rm]')) { MT.ids.splice(i, 1); render(); }
+    const mv = e.target.closest('[data-mv]'); if (mv) move(i, i + +mv.dataset.mv);
+  });
+  root.addEventListener('dragstart', e => { const it = e.target.closest('.mt-item'); if (!it) return; MT.drag = +it.dataset.i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'mt'); });
+  root.addEventListener('dragover', e => { const it = e.target.closest('.mt-item'); if (it && MT.drag != null) { e.preventDefault(); $$('.mt-item', root).forEach(x => x.classList.toggle('over', x === it)); } });
+  root.addEventListener('drop', e => { const it = e.target.closest('.mt-item'); if (!it || MT.drag == null) return; e.preventDefault(); const from = MT.drag; MT.drag = null; move(from, +it.dataset.i); });
+  root.addEventListener('dragend', () => { MT.drag = null; $$('.mt-item', root).forEach(x => x.classList.remove('over')); });
+
+  $('.mt-go', root).onclick = async () => {
+    const st = $('.mt-status', root);
+    if (MT.busy) return;
+    if (MT.ids.length < 2) { st.textContent = 'Добавьте хотя бы два клипа'; return; }
+    MT.busy = true; $('.mt-go', root).disabled = true; st.textContent = 'Отправляем клипы в ComfyUI…';
+    try {
+      const fd = new FormData(); fd.append('ids', JSON.stringify(MT.ids));
+      const r = await fetch('/api/montage', { method: 'POST', body: fd });
+      const txt = await r.text(); let res; try { res = JSON.parse(txt); } catch { res = { error: txt }; }
+      if (!r.ok) throw new Error(res.error || r.statusText);
+      qAdd(res.prompt_id, 'montage', `Монтаж: ${MT.ids.length} клипов`);
+      st.textContent = 'Склеиваем…';
+      onPrompt(res.prompt_id, ev => {
+        if (ev.prompt_id !== res.prompt_id) return;
+        if (ev.type === 'done') {
+          offPrompt(res.prompt_id); MT.busy = false; $('.mt-go', root).disabled = false;
+          const v = $('.mt-res', root); v.src = ev.item.url; v.hidden = false; v.muted = true; v.play().catch(() => {}); $('.mt-empty', root).hidden = true;
+          st.innerHTML = 'Готово: ролик в Библиотеке. <button class="btn pri" id="mtUp" type="button" style="padding:4px 12px;font-size:12px" title="Увеличить разрешение (долго)">Увеличить</button>';
+          $('#mtUp', root).onclick = () => openUpscale(byId(ev.item.id) || normItem(ev.item));
+        } else if (ev.type === 'error') { offPrompt(res.prompt_id); MT.busy = false; $('.mt-go', root).disabled = false; st.textContent = 'Ошибка ComfyUI: ' + ev.message; }
+        else if (ev.type === 'interrupted') { offPrompt(res.prompt_id); MT.busy = false; $('.mt-go', root).disabled = false; st.textContent = 'Остановлено'; }
+      });
+    } catch (err) { MT.busy = false; $('.mt-go', root).disabled = false; st.textContent = 'Ошибка: ' + err.message; }
+  };
+  IMG_PANELS.push(render);
+  render();
 })();
 </script>
 </body>

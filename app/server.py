@@ -18,6 +18,7 @@ import struct
 import subprocess
 import sys
 import uuid
+import urllib.parse
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -35,6 +36,59 @@ import report
 import speech
 import updater
 from version import APP_VERSION
+
+def split_frames(text):
+    """One frame per line / numbered item: "1: ...", "Frame 2. ...", "Кадр 3 - ..."."""
+    parts = re.split(r"(?m)^\s*(?:frame|кадр)?\s*\d+\s*[:.)\-–]\s*", text.strip(), flags=re.I)
+    frames = [p.strip().replace("\n", " ") for p in parts if p.strip()]
+    if len(frames) < 2:
+        frames = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    return frames
+
+
+def _ssl_context():
+    # Windows store + the bundled certifi list: helps PCs with an outdated root-certificate store
+    import ssl
+    ctx = ssl.create_default_context()
+    try:
+        import certifi
+        ctx.load_verify_locations(cafile=certifi.where())
+    except Exception:
+        pass
+    return ctx
+
+
+class JobStore(dict):
+    """prompt_id -> job; every change is written to disk so a closed program or a power cut does not lose the queue."""
+
+    def __init__(self, on_change):
+        super().__init__()
+        self.on_change = on_change
+
+    def __setitem__(self, k, v):
+        super().__setitem__(k, v)
+        self.on_change()
+
+    def pop(self, k, *a):
+        r = super().pop(k, *a)
+        self.on_change()
+        return r
+
+
+def round_size(form, step=32, low=256, high=2048, max_px=2200000):
+    """The user's own width/height from the form, rounded to the model's step (None when not given)."""
+    w, h = str(form.get("width", "")), str(form.get("height", ""))
+    if not (w.isdigit() and h.isdigit()):
+        return None
+    w, h = int(w), int(h)
+    if min(w, h) < 64:
+        return None
+    k = (max_px / (w * h)) ** 0.5 if w * h > max_px else 1.0
+    r = lambda v: min(high, max(low, round(v * k / step) * step))
+    return r(w), r(h)
+
+
+SUPPORT_URL = "https://pay.cloudtips.ru/p/0e4d4824"
 import workflows as wf
 
 # frozen builds keep code inside the bundle but user data next to the exe
@@ -42,7 +96,9 @@ ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 HOME = Path(sys.executable).parent if getattr(sys, "frozen", False) else ROOT
 UI_DIR = ROOT / "ui"
 DATA_DIR = Path(os.environ.get("H3STUDIO_DATA", HOME / "data"))
+LONG_DIR = DATA_DIR / "long"   # saved scene states of the long video made scene by scene
 LIBRARY_FILE = DATA_DIR / "library.json"
+QUEUE_FILE = DATA_DIR / "queue.json"
 WORKFLOWS_DIR = DATA_DIR / "workflows"
 MAX_SECONDS = 25.0  # H3 itself is made for up to 15 s; longer clips are allowed, quality is the user's call
 
@@ -84,7 +140,8 @@ class App:
         self.comfy_override = comfy_override.rstrip("/") if comfy_override else None
         self.session = None
         self.browsers = set()
-        self.jobs = {}  # prompt_id -> job dict
+        self.saved_queue = self.load_queue()  # unfinished jobs of the previous run (asked about at start)
+        self.jobs = JobStore(self.save_queue)  # prompt_id -> job dict
         self.library = Library(LIBRARY_FILE)
         self.output_dir = None
         self.comfy_online = False
@@ -145,8 +202,38 @@ class App:
 
     # ---------- ComfyUI connection ----------
 
+    def apply_mirror(self):
+        engine.HF_MIRROR = "hf-mirror.com" if self.config.get("hf_mirror") else ""
+
+    async def h_mirror(self, req):
+        on = bool((await req.json()).get("on"))
+        self.config.update(hf_mirror=on)
+        self.apply_mirror()
+        return web.json_response({"ok": True, "on": on})
+
+    def awake_loop(self):
+        """While generations are queued or running (and for ten minutes after the last one), Windows is not allowed to go to sleep:
+        a long video made scene after scene overnight must not be stopped by the power plan. The screen may still switch off."""
+        import ctypes
+        import time
+        ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
+        last_busy = 0.0
+        while True:
+            if self.jobs:
+                last_busy = time.time()
+            keep = time.time() - last_busy < 600
+            try:
+                ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if keep else 0))
+            except Exception:
+                return
+            time.sleep(15)
+
     async def start(self, _app):
-        self.session = aiohttp.ClientSession()
+        if sys.platform == "win32":
+            import threading
+            threading.Thread(target=self.awake_loop, daemon=True, name="keep-awake").start()
+        self.apply_mirror()
+        self.session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=_ssl_context()))
         if self.config.get("engine") == "managed" and self.config.get("setup_done") and not self.comfy_override:
             self.start_managed()
         self.ws_task = asyncio.create_task(self.comfy_ws_loop())
@@ -198,7 +285,8 @@ class App:
             entry = entries[role] = catalog.model_entry(role, variant)
             picked = (self.config.get("model_pick") or {}).get(role)  # a file the user chose by hand
             def seen(file):
-                return next((n for n in visible[entry["category"]] if n.replace("/", "\\").split("\\")[-1] == file), None)
+                ok = {file, *catalog.FILE_ALIASES.get(file, ())}  # same file under another name (e.g. upscaler from Hugging Face)
+                return next((n for n in visible[entry["category"]] if n.replace("/", "\\").split("\\")[-1] in ok), None)
             others = {v["file"] for r, vs in catalog.VARIANTS.items() if r != role for v in vs.values()}
             if picked and picked.replace("/", "\\").split("\\")[-1] in others:  # the file of ANOTHER model of the app: never feed it to this role
                 picked = None
@@ -209,7 +297,7 @@ class App:
             if hit:
                 found.add(role)
         # modes added after a set-up was made: with your own ComfyUI they switch on by themselves when the files are there
-        self.auto_modes = {m for m in ("krea", "kreareal", "qwen", "upscale") if self.config.get("engine") == "external"
+        self.auto_modes = {m for m in ("krea", "kreareal", "qwen", "flux", "upscale", "long") if self.config.get("engine") == "external"
                            and all(r in found for r in catalog.MODE_ROLES[m])}
         needed = catalog.roles_for(self.modes())
         missing = [entries[r] for r in needed if r in entries and r not in found]
@@ -287,6 +375,12 @@ class App:
 
     async def on_comfy_event(self, msg):
         t, d = msg.get("type"), msg.get("data") or {}
+        if t == "kj_preview_override":   # animated live preview of KJNodes (no prompt id in it: it belongs to the running job)
+            run = next((j for j in self.jobs.values() if j["state"] == "running"), None)
+            if run and d.get("image"):
+                await self.broadcast({"type": "preview_anim", "prompt_id": run["prompt_id"], "image": d["image"],
+                                      "mime": d.get("mime") or "image/jpeg", "step": d.get("step"), "total": d.get("total")})
+            return
         job = self.jobs.get(d.get("prompt_id"))
         if not job:
             return
@@ -297,11 +391,11 @@ class App:
         elif t == "executing" and d.get("node"):
             stage = job["stages"].get(d["node"])
             if stage:
-                await self.send_stage(job, stage)
+                await self.send_stage(job, stage, node=d["node"])
         elif t == "progress":
             stage = job["stages"].get(str(d.get("node")), job.get("stage"))
             if stage in ("sample", "sample2"):
-                await self.send_stage(job, stage, d.get("value"), d.get("max"))
+                await self.send_stage(job, stage, d.get("value"), d.get("max"), node=str(d.get("node")))
         elif t == "execution_success":
             await self.finish_job(job)
         elif t == "execution_error":
@@ -315,10 +409,15 @@ class App:
             await self.broadcast({"type": "interrupted", "prompt_id": pid})
             self.jobs.pop(pid, None)
 
-    async def send_stage(self, job, stage, step=None, total=None):
+    async def send_stage(self, job, stage, step=None, total=None, node=None):
         job["stage"] = stage
-        await self.broadcast({"type": "stage", "prompt_id": job["prompt_id"],
-                              "stage": stage, "step": step, "max": total})
+        msg = {"type": "stage", "prompt_id": job["prompt_id"], "stage": stage, "step": step, "max": total}
+        sc = job.get("scenes")
+        if sc and node is not None and str(node) in sc.get("map", {}):
+            job["scene_now"] = sc["map"][str(node)] + 1
+        if sc and job.get("scene_now"):
+            msg.update(scene=job["scene_now"], scenes=sc["n"])
+        await self.broadcast(msg)
 
     async def finish_job(self, job):
         pid = job["prompt_id"]
@@ -330,6 +429,21 @@ class App:
         files = [f for _, f in tagged]
         node_of = {id(f): nid for nid, f in tagged}
         videos = [f for f in files if f["filename"].lower().endswith((".mp4", ".webm", ".mkv", ".mov"))]
+        videos = [f for f in videos if f.get("type", "output") == "output"] or videos  # not the previews of loaded clips
+        lg = (job.get("meta") or {}).get("long")
+        if lg:  # a scene of the long video: keep the tail of its latent for the next scene
+            lat = next((f for f in files if f["filename"].lower().endswith(".latent")), None)
+            if lat and videos:
+                try:
+                    async with self.session.get(self.comfy + "/view", params={
+                            "filename": lat["filename"], "subfolder": lat.get("subfolder", ""), "type": lat.get("type", "output")}) as r:
+                        body = await r.read()
+                    if r.status == 200 and body:
+                        d = LONG_DIR / lg["run"]
+                        d.mkdir(parents=True, exist_ok=True)
+                        (d / f"state_{lg['part']}.latent").write_bytes(body)
+                except Exception as e:
+                    self.note_error(f"Не удалось сохранить состояние сцены: {e}")
         images = [f for f in files if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
                   and f.get("type", "output") == "output"]
         if not videos and not images:
@@ -339,7 +453,11 @@ class App:
         if videos:
             picked = [videos[-1] if job.get("last_output") else videos[0]]
         else:  # a workflow that makes pictures: every saved picture goes to the library
-            picked = images[:8]
+            picked = images[:12]
+            def order(f):  # the glued sheet first, then the frames 1, 2, 3...
+                t = str((job.get("titles") or {}).get(node_of.get(id(f)), ""))
+                return (0 if t.startswith("Лист") else 1, t)
+            picked.sort(key=order)
         items = []
         for f in picked:
             item = dict(job["meta"], id=uuid.uuid4().hex[:12], prompt_id=pid,
@@ -381,17 +499,31 @@ class App:
             return None
         return self.output_dir / item["file"].get("subfolder", "") / item["file"]["filename"]
 
+    async def upload_state(self, path, name):
+        """Put a saved scene state (.latent) into ComfyUI's input folder, where its LoadLatent node looks for it."""
+        data = aiohttp.FormData()
+        data.add_field("image", path.read_bytes(), filename=name, content_type="application/octet-stream")
+        data.add_field("type", "input")
+        data.add_field("overwrite", "true")
+        status, res = await self.comfy_json("POST", "/upload/image", data=data)
+        if status != 200:
+            raise web.HTTPBadGateway(text="Не удалось передать состояние сцены в ComfyUI")
+        return res["name"]
+
     async def upload_input(self, field, rh=None):
         """Put an image/audio/video file into ComfyUI's input/h3studio folder (or upload it to RunningHub)."""
         data = aiohttp.FormData()
         name = f"h3s_{uuid.uuid4().hex[:8]}{Path(field.filename or 'img.png').suffix or '.png'}"
         content_type = field.headers.get("Content-Type", "application/octet-stream")
+        raw = await field.read()
+        if getattr(self, "_capture", None) is not None:
+            self._capture[field.name] = (Path(field.filename or "x.png").suffix.lower() or ".png", raw)
         if rh:
             try:
-                return await rh.upload(name, await field.read(), content_type)
+                return await rh.upload(name, raw, content_type)
             except cloud.CloudError as e:
                 raise web.HTTPBadGateway(text=str(e))
-        data.add_field("image", await field.read(), filename=name, content_type=content_type)
+        data.add_field("image", raw, filename=name, content_type=content_type)
         data.add_field("subfolder", "h3studio")
         data.add_field("type", "input")
         status, res = await self.comfy_json("POST", "/upload/image", data=data)
@@ -415,7 +547,7 @@ class App:
         models = [{"role": role, "title": catalog.ROLE_TITLES[role], "name": self.model_names[role],
                    "category": catalog.VARIANTS[role][variant]["category"],
                    "folder": catalog.VARIANTS[role][variant]["category"], "marks": catalog.marks_text(role),
-                   "file": catalog.VARIANTS[role][variant]["file"], "url": catalog.VARIANTS[role][variant]["url"],
+                   "file": catalog.VARIANTS[role][variant]["file"], "url": engine.mirrored(catalog.VARIANTS[role][variant]["url"]),
                    "size": catalog.VARIANTS[role][variant]["size"], "have": role not in missing,
                    "needed": role in needed, "picked": role in (self.config.get("model_pick") or {}),
                    "modes": [m for m, roles in catalog.MODE_ROLES.items() if role in roles],
@@ -427,12 +559,15 @@ class App:
         add_modes = {m: round(catalog.plan_size(choice, self.modes() + [m]) - catalog.plan_size(choice, self.modes()))
                      for m in catalog.MODE_ROLES if m not in self.modes()}
         return web.json_response({
-            **base, "online": True, "modes": self.modes(), "add_modes": add_modes,
+            **base, "online": True, "modes": self.modes(), "add_modes": add_modes, "hf_mirror": bool(self.config.get("hf_mirror")),
+            "offer_modes": [{"mode": m, "gb": add_modes[m]} for m in catalog.OFFER_MODES
+                            if m in add_modes and m not in (self.config.get("offered_modes") or [])],
             "gpu": gpu_name(dev.get("name", "")),
             "vram_total": dev.get("vram_total"), "vram_free": dev.get("vram_free"),
             "comfy_version": stats["system"].get("comfyui_version"),
             "output_dir": str(self.output_dir) if self.output_dir else None,
             "paths": {"install": self.config.get("install_dir"), "models": self.config.get("models_dir"),
+                      "ext_models": self.config.get("ext_models_dir"),
                       "assistant": str(self.llm.root), "data": str(DATA_DIR)},
             "models": models,
         })
@@ -475,6 +610,67 @@ class App:
             raise web.HTTPServiceUnavailable(text="ComfyUI не отвечает")
         return web.json_response({"files": lst or [], "folder": cat})
 
+    async def h_models_download(self, req):
+        """Own ComfyUI: download missing model files of the app's catalog into the user's models folder (resumable)."""
+        body = await req.json()
+        managed = self.config.get("engine") == "managed"
+        if managed:  # the app's own ComfyUI: the folder is known
+            folder = str(Path(self.config.get("install_dir") or "") / catalog.COMFY_DIRNAME / "ComfyUI" / "models")
+        else:
+            folder = (body.get("folder") or self.config.get("ext_models_dir") or "").strip()
+        p = Path(folder) if folder else None
+        if not p or not p.is_dir():
+            raise web.HTTPBadRequest(text="Папка не найдена. Укажите папку models вашего ComfyUI.")
+        if not any((p / sub).is_dir() for sub in ("diffusion_models", "loras", "vae", "text_encoders", "checkpoints")):
+            raise web.HTTPBadRequest(text="Это не похоже на папку models ComfyUI: внутри нет diffusion_models, loras, vae. Выберите папку, где они лежат.")
+        if getattr(self, "dl_task", None) and not self.dl_task.done():
+            raise web.HTTPConflict(text="Скачивание уже идёт. Дождитесь окончания или остановите его.")
+        choice = self.choice()
+        roles = [r for r in (body.get("roles") or [body.get("role")]) if r in catalog.VARIANTS and r in choice]
+        if not roles:
+            raise web.HTTPBadRequest(text="Неизвестная модель")
+        if not managed:
+            self.config.update(ext_models_dir=str(p))
+        entries = [catalog.model_entry(r, choice[r]) for r in roles]
+
+        async def emit(ev):
+            await self.broadcast({"type": "mdl", "state": ev.get("state"), "label": ev.get("label"),
+                                  "done": ev.get("overall_done", ev.get("done")), "total": ev.get("overall_total", ev.get("total")),
+                                  "index": ev.get("index"), "count": ev.get("count")})
+
+        inst = engine.Installer(ROOT, self.session, emit)
+        self.dl_installer = inst
+
+        async def run():
+            total = sum(e["size"] for e in entries)
+            base = 0
+            try:
+                for i, e in enumerate(entries):
+                    dest = p / e["category"] / Path(e["name"].replace("\\", "/"))
+                    label = catalog.ROLE_TITLES.get(e["role"], e["role"])
+
+                    async def emit_overall(ev, base=base, idx=i, label=label):
+                        if ev.get("done") is not None:
+                            ev = dict(ev, overall_done=base + ev["done"], overall_total=total, index=idx + 1, count=len(entries), label=label)
+                        await emit(ev)
+                    inst.emit = emit_overall
+                    await inst.download(e["url"], dest, "models", label, e["size"])
+                    base += e["size"]
+                await self.resolve_models()
+                await self.broadcast({"type": "mdl", "state": "done", "label": "Готово: файлы скачаны и лежат в вашей папке моделей"})
+            except engine.Cancelled:
+                await self.broadcast({"type": "mdl", "state": "error", "label": "Скачивание остановлено. Скачанное сохранено: нажмите «Скачать» снова, и оно продолжится."})
+            except Exception as ex:
+                await self.broadcast({"type": "mdl", "state": "error", "label": str(ex)[:300]})
+        self.dl_task = asyncio.create_task(run())
+        return web.json_response({"ok": True, "folder": str(p), "count": len(entries), "size": sum(e["size"] for e in entries)})
+
+    async def h_models_download_cancel(self, _req):
+        inst = getattr(self, "dl_installer", None)
+        if inst:
+            inst.cancelled = True
+        return web.json_response({"ok": True})
+
     async def h_models_open(self, req):
         """Open the download page of a model in the browser (only links of the app's own catalog)."""
         body = await req.json()
@@ -482,6 +678,7 @@ class App:
         if role not in catalog.VARIANTS:
             raise web.HTTPBadRequest(text="Неизвестная модель")
         url = catalog.VARIANTS[role][self.choice().get(role) or next(iter(catalog.VARIANTS[role]))]["url"]
+        url = engine.mirrored(url)
         webbrowser.open(url)
         return web.json_response({"ok": True, "url": url})
 
@@ -632,6 +829,21 @@ class App:
         return web.json_response({"ok": True, "version": stats["system"].get("comfyui_version"),
                                   "missing": [m["file"] for m in missing], "nodes_missing": nodes})
 
+    async def h_mode_offered(self, req):
+        mode = (await req.json()).get("mode")
+        self.config.update(offered_modes=sorted(set(self.config.get("offered_modes") or []) | {mode}))
+        return web.json_response({"ok": True})
+
+    async def h_mode_add(self, req):
+        """Own ComfyUI: switch on a mode added after the set-up, so its model files show up in Models (with download buttons)."""
+        mode = (await req.json()).get("mode")
+        if mode not in catalog.MODE_ROLES:
+            return web.json_response({"error": "Неизвестный режим"}, status=400)
+        modes = sorted(set(self.modes()) | {mode}, key=list(catalog.MODE_ROLES).index)
+        self.config.update(modes=modes)
+        await self.resolve_models()
+        return web.json_response({"ok": True})
+
     async def h_setup_install(self, req):
         if self.installer:
             return web.json_response({"error": "Установка уже идёт"}, status=409)
@@ -734,6 +946,91 @@ class App:
     async def h_open_driver(self, _req):
         webbrowser.open("https://www.nvidia.com/Download/index.aspx?lang=ru")
         return web.json_response({"ok": True})
+
+    async def h_search_web(self, req):
+        """Open a web search in the user's browser (missing model file / custom node in 'Свои workflow')."""
+        body = await req.json()
+        q = str(body.get("q", "")).strip()[:200]
+        if not q:
+            raise web.HTTPBadRequest(text="Пустой запрос")
+        webbrowser.open("https://www.google.com/search?q=" + urllib.parse.quote_plus(q))
+        return web.json_response({"ok": True})
+
+    def load_queue(self):
+        try:
+            data = json.loads(QUEUE_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        week = datetime.now().timestamp() - 7 * 86400
+        return [j for j in data if isinstance(j, dict) and j.get("graph") and j.get("saved", 0) > week]
+
+    def save_queue(self):
+        items = list(self.saved_queue) + [
+            {"graph": j["graph"], "stages": j.get("stages") or {}, "meta": j.get("meta") or {}, "last_output": j.get("last_output", False),
+             "titles": j.get("titles") or {}, "pid": j.get("prompt_id"), "saved": datetime.now().timestamp()}
+            for j in dict.values(self.jobs) if j.get("graph")]
+        try:
+            if items:
+                QUEUE_FILE.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+            elif QUEUE_FILE.exists():
+                QUEUE_FILE.unlink()
+        except OSError:
+            pass
+
+    async def h_queue_saved(self, _req):
+        return web.json_response({"count": len(self.saved_queue),
+                                  "items": [{"mode": j["meta"].get("mode"), "prompt": (j["meta"].get("prompt") or "")[:80]} for j in self.saved_queue]})
+
+    async def h_queue_resume(self, _req):
+        items, self.saved_queue = list(self.saved_queue), []
+        self.save_queue()
+        out = []
+        try:  # a job that ComfyUI still has (or already finished) while only the program was closed is not run twice
+            _, q = await self.comfy_json("GET", "/queue")
+            alive = {str(x[1]) for key in ("queue_running", "queue_pending") for x in (q or {}).get(key, []) if len(x) > 1}
+        except Exception:
+            alive = set()
+        for j in items:
+            if j.get("pid") and (j["pid"] in alive):
+                continue
+            resp = await self.queue(j["graph"], j.get("stages") or {}, j.get("meta") or {}, j.get("last_output", False), j.get("titles"))
+            pid = json.loads(resp.text)["prompt_id"]
+            out.append({"prompt_id": pid, "mode": j["meta"].get("mode"), "prompt": j["meta"].get("prompt", "")})
+        return web.json_response({"jobs": out})
+
+    async def h_queue_discard(self, _req):
+        self.saved_queue = []
+        self.save_queue()
+        return web.json_response({"ok": True})
+
+    async def h_support(self, _req):
+        """Open the author's donation page (a fixed address, never taken from the request)."""
+        webbrowser.open(SUPPORT_URL)
+        return web.json_response({"ok": True})
+
+    async def h_clipboard(self, _req):
+        """Text from the Windows clipboard (the web view may refuse to let the page read it)."""
+        text = ""
+        try:
+            import ctypes
+            u, k = ctypes.windll.user32, ctypes.windll.kernel32
+            u.GetClipboardData.restype = ctypes.c_void_p
+            k.GlobalLock.restype = ctypes.c_void_p
+            k.GlobalLock.argtypes = [ctypes.c_void_p]
+            k.GlobalUnlock.argtypes = [ctypes.c_void_p]
+            if u.OpenClipboard(0):
+                try:
+                    h = u.GetClipboardData(13)  # CF_UNICODETEXT
+                    if h:
+                        p = k.GlobalLock(h)
+                        if p:
+                            text = ctypes.wstring_at(p)
+                            k.GlobalUnlock(h)
+                finally:
+                    u.CloseClipboard()
+        except Exception:
+            pass
+        return web.json_response({"text": text})
 
     async def h_setup_cancel(self, _req):
         if self.installer:
@@ -880,6 +1177,7 @@ class App:
         return form, files, prompt, aspect, quality, seed
 
     async def queue(self, graph, stages, meta, last_output=False, titles=None):
+        scenes = stages.pop("__scenes__", None)   # which sampler is which scene (long video), for the progress text
         rh = self.rh()
         if rh:
             return await self.queue_cloud(rh, graph, stages, meta)
@@ -890,7 +1188,8 @@ class App:
         if status != 200:
             return web.json_response({"error": comfy_error_text(res)}, status=400)
         pid = res["prompt_id"]
-        self.jobs[pid] = {"prompt_id": pid, "state": "queued", "stages": stages, "stage": None, "meta": meta, "last_output": last_output, "titles": titles or {}}
+        self.jobs[pid] = {"prompt_id": pid, "state": "queued", "stages": stages, "stage": None, "meta": meta, "last_output": last_output, "titles": titles or {},
+                          "graph": graph, "scenes": scenes}
         return web.json_response({"prompt_id": pid, "seed": meta["seed"], "queue_number": res.get("number")})
 
     async def need_models(self, mode):
@@ -993,30 +1292,54 @@ class App:
         """Multipart form of the picture sections: text fields plus one optional file `image`."""
         if self.rh():
             raise web.HTTPBadRequest(text="Картинки работают только на своём ComfyUI (не в облаке RunningHub).")
-        form, image = {}, None
+        form, image, extra = {}, None, []
         async for field in await req.multipart():
             if field.name == "image" and field.filename:
                 image = await self.upload_input(field)
+            elif field.name in ("image2", "image3") and field.filename:
+                extra.append(await self.upload_input(field))
             else:
                 form[field.name] = await field.text()
+        form["_extra"] = extra
         seed = int(form["seed"]) if form.get("seed", "").isdigit() else random.randrange(2 ** 50)
         return form, image, seed
 
     async def h_upscale(self, req):
         """Improve the quality of a finished video or picture from the library (SeedVR2), the sound stays."""
+        peek = await req.json()
+        soft = peek.get("method") == "soft2k"  # "up to 2K", soft (pictures only)
         await self.need_models("upscale")
         if self.rh():
             raise web.HTTPBadRequest(text="Увеличение работает только на своём ComfyUI (не в облаке RunningHub).")
-        body = await req.json()
+        body = peek
         item = self.library.get(body.get("id", ""))
-        path = self.file_path(item) if item else None
-        if not item or not path or not path.exists():
-            raise web.HTTPBadRequest(text="Файл не найден на диске")
+        if not item:
+            raise web.HTTPBadRequest(text="Файл не найден")
+        if soft and item.get("kind") != "image":
+            raise web.HTTPBadRequest(text="«До 2К» работает для картинок. Для видео выберите «Увеличить в 1,5 или 2 раза».")
+        path = self.file_path(item)
+        content = None
+        if path and path.exists():
+            content = path.read_bytes()
+            suffix = path.suffix
+        else:
+            # output folder unknown (own ComfyUI without --output-directory): take the file from ComfyUI itself
+            f = item["file"]
+            params = {"filename": f.get("filename", ""), "subfolder": f.get("subfolder", ""), "type": f.get("type", "output")}
+            try:
+                async with self.session.get(self.comfy + "/view", params=params) as r:
+                    if r.status == 200:
+                        content = await r.read()
+            except aiohttp.ClientError:
+                content = None
+            suffix = Path(f.get("filename", "")).suffix
+        if not content:
+            raise web.HTTPBadRequest(text="Файл не найден")
         pic = item.get("kind") == "image"
         scale = wf.UPSCALE_SCALES.get(str(body.get("scale")), 1.5)
         data = aiohttp.FormData()
-        name = f"h3s_{uuid.uuid4().hex[:8]}{path.suffix or ('.png' if pic else '.mp4')}"
-        data.add_field("image", path.read_bytes(), filename=name, content_type="image/png" if pic else "video/mp4")
+        name = f"h3s_{uuid.uuid4().hex[:8]}{suffix or ('.png' if pic else '.mp4')}"
+        data.add_field("image", content, filename=name, content_type="image/png" if pic else "video/mp4")
         data.add_field("subfolder", "h3studio")
         data.add_field("type", "input")
         status, res = await self.comfy_json("POST", "/upload/image", data=data)
@@ -1029,6 +1352,16 @@ class App:
             res = f"{round(w * scale / 2) * 2}×{round(h * scale / 2) * 2}"
         except ValueError:
             res = ""
+        if soft:  # long side 2048, SeedVR2 mixed half with the plain enlarge
+            try:
+                w0, h0 = (int(x) for x in str(item.get("res", "")).split("×"))
+            except ValueError:
+                raise web.HTTPBadRequest(text="Не знаю размер картинки, увеличить до 2К не получится.")
+            scale = max(1.0, 2048 / max(w0, h0))
+            graph, stages = wf.upscale_image_graph(self.model_names, video, scale, seed, soften=0.5)
+            return await self.queue(graph, stages, {
+                "mode": "upscale", "sub": "До 2К, мягко", "prompt": item.get("prompt", "") or "Увеличение до 2К",
+                "aspect": item.get("aspect", ""), "q": "2K", "len": 0.0, "res": f"{round(w0 * scale / 2) * 2}×{round(h0 * scale / 2) * 2}", "seed": seed, "src": item["id"]})
         graph, stages = (wf.upscale_image_graph if pic else wf.upscale_graph)(self.model_names, video, scale, seed)
         return await self.queue(graph, stages, {
             "mode": "upscale", "sub": f"Увеличение ×{body.get('scale', '1.5')}", "prompt": item.get("prompt", "") or "Увеличение",
@@ -1041,40 +1374,94 @@ class App:
         prompt = form.get("prompt", "").strip()
         if not prompt:
             raise web.HTTPBadRequest(text="Напишите промпт")
+        lab = {"label": form["batch_label"][:20]} if form.get("batch_label") else {}  # "3 из 8" for a series from a prompt list
         aspect = form.get("aspect", "16:9")
         if aspect not in wf.KREA_SIZES:
             raise web.HTTPBadRequest(text="Неизвестный формат")
         width, height = wf.KREA_SIZES[aspect]
+        custom = round_size(form)
+        if custom:
+            width, height = custom
+        engine = form.get("engine", "krea")
+        if engine == "flux":
+            await self.need_models("flux")
+            graph, stages = wf.flux_t2i_graph(self.model_names, prompt, width, height, seed)
+            return await self.queue(graph, stages, {
+                "mode": "krea", "sub": "Картинка (FLUX.2)", "prompt": prompt, "aspect": aspect, "q": "1K",
+                "len": 0.0, "res": f"{width}×{height}", "seed": seed, **lab})
+        if engine == "qwen":
+            await self.need_models("qwen")
+            graph, stages = wf.qwen_t2i_graph(self.model_names, prompt, form.get("negative", "").strip()[:600], width, height, seed)
+            return await self.queue(graph, stages, {
+                "mode": "krea", "sub": "Картинка (Qwen 2.1)", "prompt": prompt, "aspect": aspect, "q": "1K",
+                "len": 0.0, "res": f"{width}×{height}", "seed": seed, **lab})
         if form.get("style") == "real":
             await self.need_models("kreareal")
             scale = wf.KREA_REAL_SCALES.get(form.get("scale", "2k"), 1.5)
             graph, stages = wf.krea_real_graph(self.model_names, prompt, width, height, seed, scale)
             return await self.queue(graph, stages, {
                 "mode": "krea", "sub": "Картинка: реализм", "prompt": prompt, "aspect": aspect, "q": "4K" if scale > 2 else "2K",
-                "len": 0.0, "res": f"{int(width * scale)}×{int(height * scale)}", "seed": seed})
+                "len": 0.0, "res": f"{int(width * scale)}×{int(height * scale)}", "seed": seed, **lab})
         graph, stages = wf.krea_graph(self.model_names, prompt, width, height, seed)
         return await self.queue(graph, stages, {
             "mode": "krea", "sub": "Картинка по тексту", "prompt": prompt, "aspect": aspect, "q": "1K",
-            "len": 0.0, "res": f"{width}×{height}", "seed": seed})
+            "len": 0.0, "res": f"{width}×{height}", "seed": seed, **lab})
 
     async def h_generate_qwen(self, req):
-        await self.need_models("qwen")
         form, image, seed = await self.read_image_form(req)
+        flux = form.get("kind") != "sheet" and form.get("engine") == "flux"
+        await self.need_models("flux" if flux else "qwen")
+        if form.get("kind") == "story" and form.get("frames") == "1":
+            # storyboard frame by frame (FLUX.2 klein): every frame is its own picture, the sheet is glued from them
+            use_qwen = form.get("engine") == "qwen"
+            await self.need_models("qwen" if use_qwen else "flux")
+            frames = split_frames(form.get("prompt", ""))
+            if len(frames) not in wf.FRAME_COLS:
+                raise web.HTTPBadRequest(text=f"Нужно 2, 3, 4, 6, 8 или 9 кадров, а в описании их {len(frames)}. Напишите каждый кадр с новой строки: «1: ...», «2: ...».")
+            refs = [x for x in ([image] if image else []) + list(form.get("_extra") or [])]
+            build = wf.qwen_frames_graph if use_qwen else wf.flux_frames_graph
+            graph, stages, titles = build(self.model_names, refs, frames, seed, size=round_size(form) or wf.FRAME_SIZE, line=form.get("line", "white"))
+            return await self.queue(graph, stages, {
+                "mode": "qwen", "sub": "Раскадровка по кадрам", "prompt": form.get("prompt", "").strip(), "aspect": "",
+                "q": "", "len": 0.0, "res": "", "seed": seed}, titles=titles)
         if not image:
             raise web.HTTPBadRequest(text="Загрузите картинку")
+        if form.get("kind") == "story":
+            prompt = form.get("prompt", "").strip()
+            if not prompt:
+                raise web.HTTPBadRequest(text="Опишите историю по кадрам")
+            refs = [image] + list(form.get("_extra") or [])
+            sz = round_size(form) or wf.STORY_SIZE
+            if flux:
+                graph, stages = wf.flux_story_graph(self.model_names, refs, prompt, seed, sz)
+            else:
+                graph, stages = wf.qwen_story_graph(self.model_names, refs, prompt, seed, sz)
+            return await self.queue(graph, stages, {
+                "mode": "qwen", "sub": "Раскадровка по картинкам", "prompt": prompt, "aspect": "",
+                "q": "", "len": 0.0, "res": "%d×%d" % wf.STORY_SIZE, "seed": seed})
+        if flux:
+            prompt = form.get("prompt", "").strip()
+            if not prompt:
+                raise web.HTTPBadRequest(text="Напишите, что изменить на картинке")
+            mp = wf.QWEN_MP.get(form.get("size", "1"), 1.0)
+            graph, stages = wf.flux_edit_graph(self.model_names, prompt, image, mp, seed, form.get("_extra") or (), round_size(form))
+            return await self.queue(graph, stages, {
+                "mode": "qwen", "sub": "Правка картинки (FLUX.2)", "prompt": prompt, "aspect": "",
+                "q": "", "len": 0.0, "res": "", "seed": seed})
         if form.get("kind") == "sheet":
+            panels = 6 if form.get("panels") == "6" else 4
             graph, stages, prompt = wf.qwen_sheet_graph(
                 self.model_names, image, seed, headless=form.get("headless", "1") != "0",
-                background=form.get("background", "grey"), marks=form.get("marks", "")[:300])
-            sub, res = "Лист персонажа", "%d×%d" % wf.SHEET_SIZE
-            prompt = "Лист персонажа" + (": " + form["marks"].strip()[:80] if form.get("marks", "").strip() else "")
+                background=form.get("background", "grey"), marks=form.get("marks", "")[:300], panels=panels)
+            sub, res = "Лист персонажа", "%d×%d" % (wf.SHEET6_SIZE if panels == 6 else wf.SHEET_SIZE)
+            prompt = "Лист персонажа" + (" (6 панелей)" if panels == 6 else "") + (": " + form["marks"].strip()[:80] if form.get("marks", "").strip() else "")
         else:
             prompt = form.get("prompt", "").strip()
             if not prompt:
                 raise web.HTTPBadRequest(text="Напишите, что изменить на картинке")
             mp = wf.QWEN_MP.get(form.get("size", "1"), 1.0)
-            size = wf.qwen_edit_size(form.get("aspect", ""), mp)
-            graph, stages = wf.qwen_edit_graph(self.model_names, prompt, image, mp, seed, size)
+            size = round_size(form) or wf.qwen_edit_size(form.get("aspect", ""), mp)
+            graph, stages = wf.qwen_edit_graph(self.model_names, prompt, image, mp, seed, size, form.get("_extra") or ())
             sub, res = "Правка картинки", ("%d×%d" % size if size else "")
         return await self.queue(graph, stages, {
             "mode": "qwen", "sub": sub, "prompt": prompt, "aspect": form.get("aspect", "") if form.get("kind") != "sheet" else "",
@@ -1084,12 +1471,24 @@ class App:
         await self.need_models("video")
         form, images, prompt, aspect, quality, seed = await self.read_form(req, ("first", "last"))
         seconds = min(MAX_SECONDS, max(3.0, float(form.get("duration", 5))))
-        width, height = wf.resolution(aspect, quality)
+        width, height = wf.resolution(aspect, quality, form)
         first, last = images.get("first"), images.get("last") if images.get("first") else None
+        loop = bool(first) and form.get("loop") == "1"
+        if loop:  # seamless loop (live wallpaper): the video ends on the same picture it starts with
+            last = first
 
+        fast = None
+        if form.get("accel") == "sla":
+            miss = {mm["role"] for mm in self.missing}
+            if "sla_lora" in miss or "sla_lora" not in self.model_names:
+                raise web.HTTPBadRequest(text="Для быстрого режима нужен файл Turbo-SLA (около 2 ГБ). Нажмите «Скачать» под переключателем «Ускорение» "
+                                              "или выберите «Обычное».")
+            fast = self.model_names["sla_lora"]
         extra = self.optional_loras(form, (("realism", "realism_lora"),)) + self.custom_loras(form)
-        graph, stages = wf.video_graph(self.model_names, prompt, width, height, seconds, seed, first, last, extra)
-        sub = "Кадр → кадр" if last else "Картинка → видео" if first else "Текст → видео"
+        graph, stages = wf.video_graph(self.model_names, prompt, width, height, seconds, seed, first, last, extra, fast)
+        sub = "Зацикленное видео" if loop else "Кадр → кадр" if last else "Картинка → видео" if first else "Текст → видео"
+        if fast:
+            sub += " · быстрый черновик"
         return await self.queue(graph, stages, {
             "mode": "video", "sub": sub, "prompt": prompt, "aspect": aspect, "q": quality,
             "len": seconds, "res": f"{width}×{height}", "seed": seed})
@@ -1109,7 +1508,7 @@ class App:
 
         ref_size = form.get("ref_size") if form.get("ref_size") in ("match", "max") else "max"
         scale = wf.lipsync_scale(quality)
-        out_w, out_h = wf.resolution(aspect, quality)
+        out_w, out_h = wf.resolution(aspect, quality, form)
         width, height = wf.r32(out_w / scale), wf.r32(out_h / scale)
         extra = self.optional_loras(form, (("realism", "realism_lora"),)) + self.custom_loras(form)
         graph, stages = wf.lipsync_graph(self.model_names, wf.lipsync_prompt(prompt, len(refs)), width, height,
@@ -1384,7 +1783,7 @@ class App:
         steps = min(8, max(4, steps))
         ref_size = form.get("ref_size") if form.get("ref_size") in ("match", "max") else "max"
         extra = self.optional_loras(form, (("realism", "realism_lora"), ("motion", "motion_repair_lora"))) + self.custom_loras(form)
-        width, height = wf.resolution(aspect, quality)
+        width, height = wf.resolution(aspect, quality, form)
         pika = None
         if form.get("accel") == "pika":
             if "pika_lora" in {m["role"] for m in self.missing}:
@@ -1399,6 +1798,241 @@ class App:
             "mode": "refs", "sub": sub, "prompt": prompt, "aspect": aspect, "q": quality, "len": seconds,
             "res": f"{width}×{height}", "seed": seed, "steps": steps, "ref_size": ref_size})
 
+    async def long_source(self, item_id, uploaded, first_sec):
+        """A video the user already has (from the library, or a file from the computer) to continue from: put it into ComfyUI and
+        find out how many frames it has. Returns (file name in ComfyUI input, frames)."""
+        if uploaded:
+            name = uploaded   # read_form already uploaded it to ComfyUI
+        else:
+            it = self.library.get(item_id)
+            if not it or it.get("kind") == "image":
+                raise web.HTTPBadRequest(text="Видео для продолжения не найдено в Библиотеке")
+            data = await self.item_bytes(it)
+            fd = aiohttp.FormData()
+            nm = f"h3s_c_{uuid.uuid4().hex[:10]}.{it.get('ext') or 'mp4'}"
+            fd.add_field("image", data, filename=nm, content_type="video/mp4")
+            fd.add_field("type", "input")
+            status, res = await self.comfy_json("POST", "/upload/image", data=fd)
+            if status != 200:
+                raise web.HTTPBadGateway(text="Не удалось передать видео в ComfyUI")
+            name = res["name"]
+        # how long is it: a tiny job that only opens the video and reports its number of frames
+        probe = {"L": {"class_type": "LoadVideo", "inputs": {"file": name}},
+                 "G": {"class_type": "GetVideoComponents", "inputs": {"video": ["L", 0]}},
+                 "Z": {"class_type": "GetImageSize", "inputs": {"image": ["G", 0]}},
+                 "N": {"class_type": "PreviewAny", "inputs": {"source": ["Z", 2]}},
+                 "F": {"class_type": "PreviewAny", "inputs": {"source": ["G", 2]}}}
+        status, res = await self.comfy_json("POST", "/prompt", json={"prompt": probe, "client_id": CLIENT_ID})
+        if status != 200:
+            raise web.HTTPBadRequest(text="ComfyUI не смог открыть это видео: " + comfy_error_text(res))
+        pid = res["prompt_id"]
+        loop = asyncio.get_running_loop()
+        end = loop.time() + 180
+        meta = None
+        while loop.time() < end and not meta:
+            await asyncio.sleep(0.7)
+            _, hist = await self.comfy_json("GET", f"/history/{pid}")
+            e = (hist or {}).get(pid)
+            if e:
+                if e.get("status", {}).get("status_str") == "error":
+                    break
+                try:
+                    meta = {"frame_count": int(float(e["outputs"]["N"]["text"][0])), "fps": float(e["outputs"]["F"]["text"][0])}
+                except (KeyError, IndexError, ValueError):
+                    break
+        if not meta:
+            raise web.HTTPBadRequest(text="Не удалось прочитать это видео. Подойдёт обычный mp4.")
+        frames = int(meta["frame_count"])
+        need = wf.long_plan([first_sec], cont_first=True)[0]["ov"]
+        if frames < need:
+            raise web.HTTPBadRequest(text=f"Видео слишком короткое для продолжения: в нём {frames} кадров, нужно не меньше {need} (около 2,5 секунд).")
+        return (name, frames)
+
+    async def preview_opts(self):
+        """Settings for the animated live preview, or None when ComfyUI has no KJNodes' Model Preview Override."""
+        return None   # switched off: the animated preview made generation noticeably slower; the usual single-frame preview is used
+        try:
+            status, oi = await self.comfy_json("GET", "/object_info/ModelPreviewOverrideKJ")
+        except Exception:
+            return None
+        node = (oi or {}).get("ModelPreviewOverrideKJ") if status == 200 else None
+        if not node:
+            return None
+        tiny = "none"
+        try:
+            spec = node["input"].get("optional", {}).get("tiny_vae") or []
+            options = (spec[1] or {}).get("options") if len(spec) > 1 and isinstance(spec[1], dict) else spec[0]
+            tiny = next((o for o in options or [] if o.replace("\\", "/").split("/")[-1].startswith("taeh3")), "none")
+        except Exception:
+            pass
+        return {"tiny_vae": tiny}
+
+    def keep_long_refs(self, run, captured):
+        """The reference pictures (and the sound) of a long video project, next to its saved scene states."""
+        if not run:
+            return
+        d = LONG_DIR / run / "refs"
+        d.mkdir(parents=True, exist_ok=True)
+        for key, (ext, raw) in captured.items():
+            if key.startswith(("img", "aud", "simg")) and len(raw) < 80_000_000:
+                for old in d.glob(key + ".*"):
+                    old.unlink(missing_ok=True)
+                (d / (key + ext)).write_bytes(raw)
+
+    async def h_long_project(self, req):
+        """The project of a long video (scenes, settings) is kept on disk too, so it survives anything that happens to the browser storage."""
+        if req.method == "POST":
+            body = await req.json()
+            run = re.sub(r"[^A-Za-z0-9]", "", str(body.get("run", "")))[:32]
+            if not run or not isinstance(body.get("project"), dict):
+                raise web.HTTPBadRequest(text="bad project")
+            d = LONG_DIR / run
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "project.json").write_text(json.dumps(body["project"], ensure_ascii=False), encoding="utf-8")
+            return web.json_response({"ok": True})
+        run = re.sub(r"[^A-Za-z0-9]", "", req.query.get("run", ""))[:32]
+        if not run and req.query.get("last"):   # the most recently saved project
+            files = sorted(LONG_DIR.glob("*/project.json"), key=lambda f: f.stat().st_mtime, reverse=True) if LONG_DIR.is_dir() else []
+            run = files[0].parent.name if files else ""
+        f = LONG_DIR / run / "project.json" if run else None
+        if not f or not f.exists():
+            return web.json_response({})
+        refs = sorted(p.name for p in (LONG_DIR / run / "refs").glob("*")) if (LONG_DIR / run / "refs").is_dir() else []
+        return web.json_response({"run": run, "project": json.loads(f.read_text(encoding="utf-8")), "refs": refs})
+
+    async def h_long_ref(self, req):
+        run = re.sub(r"[^A-Za-z0-9]", "", req.match_info["run"])[:32]
+        name = Path(req.match_info["name"]).name
+        f = LONG_DIR / run / "refs" / name
+        if not f.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(f)
+
+    async def h_generate_long(self, req):
+        await self.need_models("long")
+        self._capture = {}
+        try:
+            return await self.generate_long(req)
+        finally:
+            captured, self._capture = self._capture or {}, None
+            run = getattr(self, "_long_run", None)
+            if run:
+                self.keep_long_refs(run, captured)
+                self._long_run = None
+
+    async def generate_long(self, req):
+        form, files, prompt, aspect, quality, seed = await self.read_form(req, ("img0", "img1", "img2", "img3", "img4", "aud0", "srcvid") + tuple(f"simg{i}" for i in range(12)))
+        self._long_run = re.sub(r"[^A-Za-z0-9]", "", form.get("run", ""))[:32]   # the references are kept even if the request is refused later
+        try:
+            scenes = [(str(x.get("prompt", "")).strip(), float(x.get("sec", 10))) for x in json.loads(form.get("scenes") or "[]")]
+        except (ValueError, TypeError, AttributeError):
+            scenes = []
+        scenes = [(p, min(wf.LONG_MAX_SCENE, max(3.0, sec)), files.get(f"simg{i}")) for i, (p, sec) in enumerate(scenes) if p][:12]
+        if not scenes:
+            raise web.HTTPBadRequest(text="Напишите хотя бы одну сцену")
+        images = [files[f"img{i}"] for i in range(5) if f"img{i}" in files]
+        audio = files.get("aud0")
+        try:
+            start = max(0.0, float(form.get("start") or 0))
+        except ValueError:
+            start = 0.0
+        vocals = None
+        if audio and form.get("vocals") == "1":
+            if "vocal_model" in {m["role"] for m in self.missing} or "vocal_model" not in self.model_names:
+                raise web.HTTPBadRequest(text="Для «Только вокал» нужна модель MelBand. Скачайте её в разделе «Модели».")
+            vocals = self.model_names["vocal_model"]
+        if "pika_lora" in {m["role"] for m in self.missing}:
+            raise web.HTTPBadRequest(text="Файл Pika (pika_h3_flex_turbo_8step_hd_ref2va) не найден. Скачайте его в разделе «Модели».")
+        width, height = wf.resolution(aspect, quality, form)
+        scenes = [(wf.lipsync_prompt(p, len(images) + (1 if extra else 0)), sec, extra) for p, sec, extra in scenes]
+        part = form.get("part", "")
+        if part.isdigit():  # one scene at a time: scene k continues from the saved tail of scene k-1
+            k = int(part)
+            run = re.sub(r"[^A-Za-z0-9]", "", form.get("run", ""))[:32]
+            self._long_run = run
+            if not run or k >= len(scenes):
+                raise web.HTTPBadRequest(text="Неверный номер сцены")
+            state, cont = None, None
+            if k == 0 and (form.get("src_item") or files.get("srcvid")):
+                cont = await self.long_source(form.get("src_item"), files.get("srcvid"), scenes[0][1])
+            if k:
+                src = LONG_DIR / run / f"state_{k - 1}.latent"
+                if not src.exists():
+                    raise web.HTTPBadRequest(text=f"Сначала сделайте сцену {k}: следующая продолжает её конец.")
+                state = await self.upload_state(src, f"h3s_long_{run}_{k - 1}.latent")
+            graph, stages = wf.long_part_graph(self.model_names, scenes, k, width, height, seed, images, audio, start,
+                                               self.model_names["pika_lora"], self.custom_loras(), "match", vocals, state,
+                                               await self.preview_opts(), cont, form.get("src_project") == "1")
+            plan = wf.long_plan([sc[1] for sc in scenes], cont_first=bool(cont) or form.get("src_project") == "1")
+            sub = f"сцена {k + 1} из {len(scenes)}" + (" · музыка" if audio else " · звук от модели")
+            return await self.queue(graph, stages, {
+                "mode": "long", "sub": sub, "prompt": scenes[k][0], "aspect": aspect, "q": quality,
+                "len": round((plan[k]["total"] - plan[k]["ov"]) / wf.FPS, 1), "res": f"{width}×{height}", "seed": seed,
+                "long": {"run": run, "part": k, "n": len(scenes)}})
+        graph, stages = wf.long_graph(self.model_names, scenes, width, height, seed, images, audio, start,
+                                      self.model_names["pika_lora"], self.custom_loras(), "match", vocals, await self.preview_opts())
+        run = re.sub(r"[^A-Za-z0-9]", "", form.get("run", ""))[:32]
+        self._long_run = run
+        total = wf.long_plan([sc[1] for sc in scenes])[-1]["acc"] / wf.FPS
+        sub = f"{len(scenes)} сцен · {len(images)} карт." + (", музыка" if audio else ", звук от модели")
+        meta = {"mode": "long", "sub": sub, "prompt": "\n\n".join(sc[0] for sc in scenes), "aspect": aspect, "q": quality,
+                "len": round(total, 1), "res": f"{width}×{height}", "seed": seed}
+        if run:
+            meta["long"] = {"run": run, "part": len(scenes) - 1, "n": len(scenes), "all": True}
+        return await self.queue(graph, stages, meta)
+
+    async def h_long_state(self, req):
+        """Which scenes of a long video project have a saved continuation point (so the project can go on after a restart)."""
+        run = re.sub(r"[^A-Za-z0-9]", "", req.query.get("run", ""))[:32]
+        d = LONG_DIR / run
+        parts = sorted(int(m.group(1)) for f in d.glob("state_*.latent") if (m := re.match(r"state_(\d+)\.latent$", f.name))) if run and d.is_dir() else []
+        return web.json_response({"parts": parts})
+
+    async def item_bytes(self, item):
+        """The file of a library item: from disk, or from ComfyUI when its output folder is not known to the app."""
+        p = self.file_path(item)
+        if p and p.exists():
+            return await asyncio.to_thread(p.read_bytes)
+        f = item["file"]
+        async with self.session.get(self.comfy + "/view", params={
+                "filename": f["filename"], "subfolder": f.get("subfolder", ""), "type": f.get("type", "output")}) as r:
+            if r.status != 200:
+                raise web.HTTPBadRequest(text="Не удалось найти один из клипов: он удалён с диска?")
+            return await r.read()
+
+    async def h_montage(self, req):
+        """Join library clips in the given order with ComfyUI (no ffmpeg in the app)."""
+        form = {}
+        async for field in await req.multipart():
+            form[field.name] = await field.text()
+        try:
+            ids = [i for i in json.loads(form.get("ids") or "[]") if isinstance(i, str)][:30]
+        except ValueError:
+            ids = []
+        items = [self.library.get(i) for i in ids]
+        if len(items) < 2 or any(not it or it.get("kind") == "image" for it in items):
+            raise web.HTTPBadRequest(text="Добавьте хотя бы два видео")
+        if self.rh():
+            raise web.HTTPBadRequest(text="Монтаж работает только с локальным ComfyUI, не с облаком.")
+        names, sizes = [], []
+        for it in items:
+            data = await self.item_bytes(it)
+            name = f"h3s_m_{uuid.uuid4().hex[:10]}.{it.get('ext') or 'mp4'}"
+            fd = aiohttp.FormData()
+            fd.add_field("image", data, filename=name, content_type="video/mp4")
+            fd.add_field("type", "input")
+            status, res = await self.comfy_json("POST", "/upload/image", data=fd)
+            if status != 200:
+                raise web.HTTPBadGateway(text="Не удалось передать клип в ComfyUI")
+            names.append(res["name"])
+            mm = re.match(r"\s*(\d+)\D+(\d+)", it.get("res") or "")
+            sizes.append((int(mm.group(1)), int(mm.group(2))) if mm else None)
+        graph, stages = wf.montage_graph(names, sizes)
+        total = sum(float(it.get("len") or 0) for it in items)
+        return await self.queue(graph, stages, {
+            "mode": "montage", "sub": f"{len(items)} клипов", "prompt": "", "aspect": items[0].get("aspect", ""), "q": "",
+            "len": round(total, 1), "res": items[0].get("res", ""), "seed": 0}, last_output=True)
+
     async def h_generate_actor(self, req):
         await self.need_models("actor")
         form, prompt, aspect, quality, seed, images, videos, audios, seconds = await self.read_ref_form(req, 3)
@@ -1407,7 +2041,7 @@ class App:
         missing = {m["role"] for m in self.missing}
         if v is not None and "realism_lora" not in missing and "realism_lora" in self.model_names:
             realism = (self.model_names["realism_lora"], v)
-        width, height = wf.resolution(aspect, quality)
+        width, height = wf.resolution(aspect, quality, form)
         graph, stages = wf.actor_graph(self.model_names, wf.lipsync_prompt(prompt, len(images)), width, height, seconds, seed,
                                        images, audios, realism, self.custom_loras(form))
         sub = f"{len(images)} карт." + (f", голос ({len(audios)})" if audios else ", без голоса") + " · 10 шагов"
@@ -1459,7 +2093,7 @@ class App:
                 loras.append((name, v))
         loras += self.custom_loras(form)
         names = dict(self.model_names)
-        width, height = wf.resolution(aspect, quality)
+        width, height = wf.resolution(aspect, quality, form)
         graph, stages = wf.action_graph(names, wf.lipsync_prompt(prompt, len(images)), width, height, seconds, seed, images, audios,
                                         s["faithful"], loras)
         if s["faithful"]:
@@ -1801,6 +2435,11 @@ class App:
             thinking = False
             payload = {"messages": [{"role": "system", "content": system}] + ag.to_openai(messages),
                        "stream": True, "temperature": 0.6, "cache_prompt": True}
+            if body.get("think") != "deep":
+                # "fast" (default): no hidden reasoning before the answer. On the user's machine a light request took 17 s with it
+                # (about 2000 characters of thoughts) and 1.5 s without; the long-video rules took minutes with it
+                payload["chat_template_kwargs"] = {"enable_thinking": False}
+                payload["thinking_budget_tokens"] = 0
             async with self.session.post(self.llm.url + "/v1/chat/completions", json=payload,
                                          timeout=aiohttp.ClientTimeout(total=None, sock_read=600)) as r:
                 if r.status != 200:
@@ -1947,8 +2586,17 @@ def build_app(comfy_override=None):
         web.get("/api/setup/info", state.h_setup_info),
         web.post("/api/setup/external", state.h_setup_external),
         web.post("/api/setup/install", state.h_setup_install),
+        web.post("/api/mode/add", state.h_mode_add),
+        web.post("/api/settings/mirror", state.h_mirror),
+        web.post("/api/mode/offered", state.h_mode_offered),
         web.post("/api/setup/cancel", state.h_setup_cancel),
         web.post("/api/open-driver-page", state.h_open_driver),
+        web.post("/api/clipboard", state.h_clipboard),
+        web.post("/api/support", state.h_support),
+        web.get("/api/queue/saved", state.h_queue_saved),
+        web.post("/api/queue/resume", state.h_queue_resume),
+        web.post("/api/queue/discard", state.h_queue_discard),
+        web.post("/api/search-web", state.h_search_web),
         web.post("/api/report", state.h_report),
         web.post("/api/setup/reset", state.h_setup_reset),
         web.post("/api/generate/video", state.h_generate_video),
@@ -1963,6 +2611,8 @@ def build_app(comfy_override=None):
         web.get("/api/models/files", state.h_models_files),
         web.post("/api/models/pick", state.h_models_pick),
         web.post("/api/models/open", state.h_models_open),
+        web.post("/api/models/download", state.h_models_download),
+        web.post("/api/models/download/cancel", state.h_models_download_cancel),
         web.post("/api/models/variant", state.h_models_variant),
         web.get("/api/wf/list", state.h_wf_list),
         web.post("/api/wf/add", state.h_wf_add),
@@ -1983,6 +2633,12 @@ def build_app(comfy_override=None):
         web.post("/api/loras/tokens", state.h_loras_tokens_save),
         web.post("/api/generate/refs", state.h_generate_refs),
         web.post("/api/generate/actor", state.h_generate_actor),
+        web.post("/api/generate/long", state.h_generate_long),
+        web.post("/api/montage", state.h_montage),
+        web.get("/api/long/state", state.h_long_state),
+        web.get("/api/long/project", state.h_long_project),
+        web.post("/api/long/project", state.h_long_project),
+        web.get("/api/long/ref/{run}/{name}", state.h_long_ref),
         web.post("/api/generate/action", state.h_generate_action),
         web.get("/api/action/info", state.h_action_info),
         web.get("/api/cloud", state.h_cloud_get),

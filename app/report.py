@@ -51,7 +51,7 @@ def windows_version():
 def nvidia_smi_info():
     try:
         out = subprocess.run(["nvidia-smi", "--query-gpu=name,driver_version,memory.total,compute_cap",
-                              "--format=csv,noheader"], capture_output=True, text=True, timeout=10,
+                              "--format=csv,noheader"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=10,
                              creationflags=NO_WINDOW).stdout.strip()
         return out or "nvidia-smi ничего не вернул (нет видеокарты NVIDIA или не установлен драйвер)"
     except FileNotFoundError:

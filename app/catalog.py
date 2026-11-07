@@ -55,6 +55,11 @@ def _m(repo, path, size_gb, category, name=None, sub=SUB):
             "file": fname, "name": f"{sub}\\{fname}" if sub else fname}
 
 
+# the same file is published under two names; either one counts as present
+FILE_ALIASES = {
+    "minimax_h3_latent_upscaler_3d_bf16.safetensors": ("minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors",),
+}
+
 VARIANTS = {
     "fast_unet": {
         "int8": _m("FastVideo/FastVideo-FastH3-Comfy",
@@ -94,6 +99,11 @@ VARIANTS = {
         "bf16": _m("LBH-123-AI/Minimax_h3_latent_Upscaler",
                    "minimax_h3_latent_upscaler_3d_conv_v1/minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors",
                    0.69, "latent_upscale_models", name="minimax_h3_latent_upscaler_3d_bf16.safetensors", sub=None),
+    },
+    # Turbo-SLA (lightx2v): 4-step LoRA for the first/last frame model; used on top of FastH3 for the "fast" switch
+    "sla_lora": {
+        "bf16": _m("lightx2v/Minimax-h3-Turbo-SLA", "minimax_h3_fl2v_turbo_4step_v0.1_768p_sla_comfyui_bf16.safetensors",
+                   1.96, "loras"),
     },
     "preview": {
         "taeh3": _m("Alissonerdx/Minimax-H3-ComfyUI", "vae_approx/taeh3.safetensors", 0.02, "vae_approx", sub=None),
@@ -166,6 +176,18 @@ VARIANTS = {
     "qwen_vae": {
         "bf16": _m("Comfy-Org/Qwen-Image-2.1", "vae/qwen_image_2.1_vae_bf16.safetensors", 0.68, "vae", sub=IMG_SUB),
     },
+    # FLUX.2 klein 4B (Apache 2.0, free for commercial use): edit a picture by text
+    "flux_unet": {
+        "fp8": _m("black-forest-labs/FLUX.2-klein-4b-fp8", "flux-2-klein-4b-fp8.safetensors", 4.07,
+                  "diffusion_models", sub=IMG_SUB),
+    },
+    "flux_clip": {
+        "bf16": _m("Comfy-Org/z_image_turbo", "split_files/text_encoders/qwen_3_4b.safetensors", 8.04,
+                   "text_encoders", sub=IMG_SUB),
+    },
+    "flux_vae": {
+        "bf16": _m("Comfy-Org/flux2-dev", "split_files/vae/flux2-vae.safetensors", 0.34, "vae", sub=IMG_SUB),
+    },
 }
 
 # What a file name of each role must contain (any of these words, any case). Used only to warn when a file is picked
@@ -175,10 +197,11 @@ ROLE_MARKS = {
     "video_vae": ["video_vae"], "audio_vae": ["audio_vae"], "ref2v_turbo_lora": ["turbo"],
     "upscaler": ["upscaler"], "preview": ["taeh3"], "action_unet": ["hybrid", "fl2va"],
     "speed_slider_lora": ["speed"], "action_upscaler": ["upscaler"], "vocal_model": ["melband"],
-    "realism_lora": ["realism"], "motion_repair_lora": ["motion"], "pika_lora": ["pika"],
+    "realism_lora": ["realism"], "motion_repair_lora": ["motion"], "pika_lora": ["pika"], "sla_lora": ["sla"],
     "seedvr_unet": ["seedvr"], "seedvr_vae": ["seedvr"], "krea_clip": ["qwen3vl", "qwen3-vl"],
     "krea_vae": ["qwen_image", "qwen-image"], "kreareal_unet": ["krea"], "kreareal_lora": ["realism"],
     "qwen_unet": ["qwen"], "qwen_clip": ["qwen3vl", "qwen3-vl"], "qwen_vae": ["qwen"],
+    "flux_unet": ["flux"], "flux_clip": ["qwen_3", "qwen3"], "flux_vae": ["flux"],
 }
 
 
@@ -220,6 +243,7 @@ ROLE_TITLES = {
     "realism_lora": "LoRA «Реализм людей» (по желанию)",
     "motion_repair_lora": "LoRA «Исправление движения» (по желанию)",
     "pika_lora": "LoRA Pika H3 Flex Turbo (ускорение для Референсов, хороший звук)",
+    "sla_lora": "LoRA Turbo-SLA (быстрое ускорение для Image-to-Video)",
     "seedvr_unet": "Увеличение видео и картинок — модель SeedVR2 (3B)",
     "seedvr_vae": "Увеличение видео и картинок — VAE SeedVR2",
     "krea_unet": "Основная модель — Картинка по тексту (Krea 2)",
@@ -230,10 +254,14 @@ ROLE_TITLES = {
     "qwen_unet": "Основная модель — Правка картинки (Qwen Image 2.1)",
     "qwen_clip": "Текстовый энкодер Qwen (Qwen3-VL 8B)",
     "qwen_vae": "VAE для Qwen Image 2.1",
+    "flux_unet": "Основная модель — Правка картинки для коммерции (FLUX.2 klein 4B)",
+    "flux_clip": "Текстовый энкодер FLUX.2 klein (Qwen3 4B)",
+    "flux_vae": "VAE для FLUX.2",
 }
 
 MODE_TITLES = {"video": "Image-to-Video", "lipsync": "Lipsync", "refs": "Референсы", "actor": "Актёрская игра", "action": "Экшн-сцены",
-               "krea": "Картинка по тексту", "kreareal": "Картинка: реализм", "qwen": "Правка картинки", "upscale": "Увеличение видео и картинок"}
+               "krea": "Картинка по тексту", "kreareal": "Картинка: реализм", "qwen": "Правка картинки", "flux": "Правка картинки: FLUX.2 (можно в коммерцию)",
+               "upscale": "Увеличение видео и картинок", "long": "Длинное видео"}
 
 # Which roles each mode needs.
 MODE_ROLES = {
@@ -243,17 +271,22 @@ MODE_ROLES = {
     # same models as references: dialogue scenes with a voice sample, acting-first prompts
     "actor": ["lipsync_unet", "text_encoder", "video_vae", "audio_vae", "ref2v_turbo_lora"],
     "action": ["action_unet", "text_encoder", "video_vae", "audio_vae", "upscaler"],
+    # long video / clips: scenes that continue each other (Singularity Ref2V + Pika LoRA, same files as References)
+    "long": ["lipsync_unet", "text_encoder", "video_vae", "audio_vae", "pika_lora"],
     "krea": ["krea_unet", "krea_clip", "krea_vae"],
     "kreareal": ["kreareal_unet", "kreareal_lora", "krea_clip", "krea_vae"],
     "qwen": ["qwen_unet", "qwen_clip", "qwen_vae"],
+    "flux": ["flux_unet", "flux_clip", "flux_vae"],
     "upscale": ["seedvr_unet", "seedvr_vae"],
 }
 # Small extras downloaded with a mode but not required to run it.
 MODE_OPTIONAL = {
+    "video": ["sla_lora"],
     "lipsync": ["realism_lora", "vocal_model"],
     "refs": ["pika_lora", "realism_lora", "motion_repair_lora"],
     "actor": ["realism_lora"],
     "action": ["speed_slider_lora", "action_upscaler"],
+    "long": ["vocal_model"],
 }
 ALL_ROLES = list(VARIANTS)
 
@@ -261,9 +294,10 @@ ALL_ROLES = list(VARIANTS)
 DEFAULT_CHOICE = {"fast_unet": "int8", "lipsync_unet": "full", "text_encoder": "nvfp4", "video_vae": "int8",
                   "audio_vae": "fp32", "ref2v_turbo_lora": "bf16", "upscaler": "bf16", "preview": "taeh3",
                   "action_unet": "int8", "speed_slider_lora": "v1.1", "action_upscaler": "lms", "vocal_model": "fp16",
-                  "realism_lora": "v1", "motion_repair_lora": "v1", "pika_lora": "hd8",
+                  "realism_lora": "v1", "motion_repair_lora": "v1", "pika_lora": "hd8", "sla_lora": "bf16",
                   "krea_unet": "int8", "krea_clip": "fp8", "krea_vae": "bf16", "kreareal_unet": "fp8", "kreareal_lora": "v2",
                   "qwen_unet": "int8", "qwen_clip": "int8", "qwen_vae": "bf16",
+                  "flux_unet": "fp8", "flux_clip": "bf16", "flux_vae": "bf16",
                   "seedvr_unet": "int8", "seedvr_vae": "fp16"}
 
 
@@ -316,9 +350,19 @@ def choose_models(hw, profile=None):
     if hw.get("nvidia") and 0 < (hw.get("driver") or 0) < MIN_DRIVER:
         notes.insert(0, f"Драйвер видеокарты устарел ({hw['driver']:g}). Нужен {MIN_DRIVER} или новее, иначе ComfyUI не запустится — обновите драйвер.")
 
-    if vram < 8 or not hw.get("nvidia"):
+    cap = hw.get("compute_cap") or 0
+    if not hw.get("nvidia"):
         verdict = "unsupported"
-        notes.insert(0, "Нужна видеокарта NVIDIA минимум с 8 ГБ памяти.")
+        notes.insert(0, "Приложение работает только с видеокартами NVIDIA (RTX 20-й серии и новее, от 8 ГБ памяти). "
+                        "Видеокарты AMD Radeon, встроенная графика Intel и компьютеры Mac не поддерживаются.")
+    elif 0 < cap < 7.5:
+        verdict = "unsupported"
+        notes.insert(0, "Ваша видеокарта слишком старая для этой программы. Нужна NVIDIA RTX 20-й серии или новее "
+                        "(например, RTX 2060, 3060, 4060) с памятью от 8 ГБ.")
+    elif vram < 8:
+        verdict = "unsupported"
+        notes.insert(0, f"Видеопамяти {vram:g} ГБ — для работы нужно минимум 8 ГБ (лучше 16). "
+                        "На такой видеокарте генерация видео не поместится в память.")
     elif vram < 12 or ram < 32:
         verdict = "weak"
         if vram < 12:
@@ -333,3 +377,7 @@ def choose_models(hw, profile=None):
 
 def model_entry(role, variant):
     return dict(VARIANTS[role][variant], role=role, variant=variant, title=ROLE_TITLES[role])
+
+
+# modes that appeared after the first release: the app offers them once after an update
+OFFER_MODES = ["flux", "long"]

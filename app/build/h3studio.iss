@@ -1,6 +1,6 @@
-﻿; Inno Setup script: ISCC.exe app\build\h3studio.iss  (after the PyInstaller build)
+; Inno Setup script: ISCC.exe app\build\h3studio.iss  (after the PyInstaller build)
 #define AppName "Minimax H3 Workspace"
-#define AppVersion "1.1.8"
+#define AppVersion "1.1.9"
 #define AppExe "MinimaxH3Workspace.exe"
 
 [Setup]
@@ -11,10 +11,12 @@ AppPublisher={#AppName}
 DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
+; always show the folder page (by default Inno skips it on a re-install and silently reuses the old folder)
+DisableDirPage=no
 ; per-user install: no admin rights needed, and the app can write next to itself
 PrivilegesRequired=lowest
 OutputDir=output
-OutputBaseFilename=Minimax.H3.Workspace.Uncensored-Setup_v1.1.8
+OutputBaseFilename=Minimax.H3.Workspace.Uncensored-Setup_v1.1.9
 SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\{#AppExe}
 Compression=lzma2/ultra64

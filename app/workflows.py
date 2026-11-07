@@ -19,7 +19,12 @@ def r32(v):
     return max(32, round(v / 32) * 32)
 
 
-def resolution(aspect, quality):
+def resolution(aspect, quality, form=None):
+    """Size from the format + quality, or the user's own width/height (rounded to a multiple of 32)."""
+    if form and str(form.get("width", "")).isdigit() and str(form.get("height", "")).isdigit():
+        cw, ch = int(form["width"]), int(form["height"])
+        if cw >= 64 and ch >= 64:
+            return min(2048, r32(cw)), min(2048, r32(ch))
     w, h = ASPECTS[aspect]
     px = QUALITY[quality]
     return r32(math.sqrt(px * w / h)), r32(math.sqrt(px * h / w))
@@ -31,7 +36,7 @@ def frames(seconds):
     return f + (5 - f % 17) % 17
 
 
-def video_graph(m, prompt, width, height, seconds, seed, first=None, last=None, extra_loras=()):
+def video_graph(m, prompt, width, height, seconds, seed, first=None, last=None, extra_loras=(), fast=None):
     """MINIMAXH3_FASTvideo_I2V: text / first frame / first + last frame."""
     g = {
         "1": {"class_type": "UNETLoader", "inputs": {
@@ -78,8 +83,16 @@ def video_graph(m, prompt, width, height, seconds, seed, first=None, last=None, 
             "image": [load_id, 0], "upscale_method": "lanczos",
             "width": width, "height": height, "crop": "center"}}
         g["8"]["inputs"][slot] = [scale_id, 0]
-    if extra_loras:  # the user's own LoRAs go right after the model loader
-        g["2"]["inputs"]["model"] = _lora_chain(g, ["1", 0], list(extra_loras))
+    loras = ([(fast, 1.0)] if fast else []) + list(extra_loras)  # Turbo-SLA first, then the user's own LoRAs
+    if loras:
+        g["2"]["inputs"]["model"] = _lora_chain(g, ["1", 0], loras)
+    if fast:  # "fast draft": Turbo-SLA 4 steps, flow shifts 6 / 3; block-sparse attention is switched OFF (it left square
+        # mosaic artifacts on busy scenes: debris, explosions), dense attention is cleaner and still about 1.3x faster
+        g["2"]["inputs"].update(shift_video=6, shift_audio=3)
+        g["11"]["inputs"]["model"] = ["3", 0]
+        g["12"]["inputs"]["model"] = ["3", 0]
+        g.pop("4", None)
+        g["11"]["inputs"]["steps"] = 4
 
     stages = {n: "load" for n in ("1", "2", "3", "4", "5", "6", "7")}
     stages.update({n: "encode" for n in ("8", "20", "21", "22", "23")})
@@ -209,6 +222,294 @@ def actor_graph(m, prompt, width, height, seconds, seed, images, audios, realism
     stages = {n: "load" for n in ["1", "2", "3", "4", "5", "6", "7"] + [k for k in g if k.isdigit() and 60 <= int(k) < 70]}
     stages.update({n: "encode" for n in ["8"] + loaders})
     stages.update({"14": "sample", "15": "decode", "16": "decode", "17": "save", "18": "save"})
+    return g, stages
+
+
+# ---------- long video: scenes continue each other (Music-Video / Long-Shot workflow) ----------
+
+def montage_graph(names, sizes):
+    """Join clips end to end with ComfyUI's own nodes (no ffmpeg). Clips of another size than the first one are scaled to it
+    first: the join node refuses clips of different sizes. `sizes`: (width, height) per clip or None when unknown."""
+    g, ins, stages = {}, {}, {}
+    first = next((s for s in sizes[:1] if s), None)
+    for i, name in enumerate(names):
+        g[f"L{i}"] = {"class_type": "LoadVideo", "inputs": {"file": name}}
+        stages[f"L{i}"] = "encode"
+        src = [f"L{i}", 0]
+        if first and sizes[i] and tuple(sizes[i]) != tuple(first):
+            g[f"G{i}"] = {"class_type": "GetVideoComponents", "inputs": {"video": src}}
+            g[f"Z{i}"] = {"class_type": "ImageScale", "inputs": {"image": [f"G{i}", 0], "upscale_method": "lanczos",
+                                                                 "width": first[0], "height": first[1], "crop": "center"}}
+            g[f"V{i}"] = {"class_type": "CreateVideo", "inputs": {"images": [f"Z{i}", 0], "fps": [f"G{i}", 2], "audio": [f"G{i}", 1]}}
+            stages.update({f"G{i}": "encode", f"Z{i}": "encode", f"V{i}": "decode"})
+            src = [f"V{i}", 0]
+        ins[f"videos.video{i}"] = src
+    g["C"] = {"class_type": "ConcatenateVideo", "inputs": {**ins, "codec": "auto"}}
+    g["S"] = {"class_type": "SaveVideo", "inputs": {"video": ["C", 0], "filename_prefix": "H3Workspace/montage",
+                                                    "format": "auto", "codec": "auto"}}
+    stages.update({"C": "decode", "S": "save"})
+    return g, stages
+
+
+LONG_MAX_SCENE = 15      # seconds per scene (the model is trained for about 5-15 s)
+LONG_OVERLAP = 1.0       # seconds of the previous scene that the next one continues from
+
+
+def _snap(f):
+    f = int(round(f))
+    return f + (5 - f % 17) % 17
+
+
+def _tokens(f):
+    return round((f - 5) / 17 * 5 + 2)
+
+
+def long_plan(scene_seconds, overlap=LONG_OVERLAP, cont_first=False):
+    """Frame arithmetic of the original workflow: per scene (frames to generate, overlap frames, frames kept so far).
+    `cont_first`: the first scene continues an existing video, so it is planned like a later scene."""
+    plan, acc = [], 0
+    for i, sec in enumerate(scene_seconds):
+        seg = frames(min(LONG_MAX_SCENE, max(1, sec)))
+        if i == 0 and not cont_first:
+            plan.append({"total": seg, "ov": 0, "acc_before": 0, "acc": seg})
+            acc = seg
+        else:
+            total = _snap(seg + _snap(max(5, round(overlap * FPS))))
+            ov = _snap(total - seg)
+            plan.append({"total": total, "ov": ov, "acc_before": acc, "acc": acc - ov + total})
+            acc = acc - ov + total
+    return plan
+
+
+def _with_preview(g, model, preview):
+    """KJNodes' Model Preview Override: an ANIMATED live preview (a few frames of the video latent per step), like in the
+    ComfyUI workflow. Without it ComfyUI shows only the first frame. `preview` is None when that node is not installed."""
+    if not preview:
+        return model
+    g["14"] = {"class_type": "ModelPreviewOverrideKJ", "inputs": {
+        "model": model, "max_resolution": 512, "jpeg_quality": 75, "suppress_default_preview": False,
+        "preview_frames": 12, "preview_fps": 8, "tiny_vae": preview.get("tiny_vae", "none")}}
+    return ["14", 0]
+
+
+def _long_base(m, pika, extra_loras):
+    """Model chain shared by the long-video graphs: Singularity Ref2V + memory savers + Pika (or the quality route)."""
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["lipsync_unet"], "weight_dtype": "default"}},
+        "2": {"class_type": "ModelAttentionBackend", "inputs": {"model": ["1", 0], "attention": "comfy kitchen attention"}},
+        "3": {"class_type": "MiniMaxChunkFeedForward", "inputs": {"model": ["2", 0], "chunks": 2, "seq_threshold": 4096}},
+        "4": {"class_type": "MiniMaxLowVRAMAttention", "inputs": {"model": ["3", 0], "head_chunks": 4}},
+        "5": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["text_encoder"], "type": "minimax", "device": "default"}},
+        "6": {"class_type": "VAELoader", "inputs": {"vae_name": m["video_vae"]}},
+        "7": {"class_type": "VAELoader", "inputs": {"vae_name": m["audio_vae"]}},
+    }
+    steps = 8
+    if pika:
+        model = _lora_chain(g, ["4", 0], list(extra_loras) + [(pika, 1.0)])
+        sched, sampler_name = "simple", "euler"
+    else:  # quality route without a speed LoRA, as in the original (er_sde, beta, 12 steps)
+        model = _lora_chain(g, ["4", 0], list(extra_loras)) if extra_loras else ["4", 0]
+        g["8"] = {"class_type": "MiniMaxH3SigmaShift", "inputs": {"model": model, "shift_video": 12.0, "shift_audio": 4.0}}
+        model, sched, sampler_name, steps = ["8", 0], "beta", "er_sde", 12
+    return g, model, sched, sampler_name, steps
+
+
+def long_graph(m, scenes, width, height, seed, images, audio=None, start=0.0, pika=None, extra_loras=(), ref_size="match", vocals=None, preview=None):
+    """Scenes [(prompt, seconds), ...] rendered one after another; every next scene continues the last second of the
+    previous one (latent cut + noise mask), with the same reference pictures, and optionally follows a music track.
+
+    Singularity Ref2V + Pika H3 Flex Turbo (8 steps), as chosen for the app. Without `audio` the model makes its own sound
+    for every scene (voices and music are written in the prompts).
+    """
+    g, model, sched, sampler_name, steps = _long_base(m, pika, extra_loras)
+    model = _with_preview(g, model, preview)
+    g["9"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": sampler_name}}
+    g["10"] = {"class_type": "BasicScheduler", "inputs": {"model": model, "scheduler": sched, "steps": steps, "denoise": 1.0}}
+    heard = ["11", 0]  # what the model hears; the finished video always carries the full track
+    if audio:
+        g["11"] = {"class_type": "LoadAudio", "inputs": {"audio": audio}}
+        if vocals:  # voice only: helps lip sync, the music in the result stays complete
+            g["12"] = {"class_type": "MelBandRoFormerModelLoader", "inputs": {"model_name": vocals}}
+            g["13"] = {"class_type": "MelBandRoFormerSampler", "inputs": {"model": ["12", 0], "audio": ["11", 0]}}
+            heard = ["13", 0]
+    stages = {n: "load" for n in g}
+    plan = long_plan([sc[1] for sc in scenes])
+    nid = [200]
+
+    def add(cls, **inputs):
+        nid[0] += 1
+        g[str(nid[0])] = {"class_type": cls, "inputs": inputs}
+        return str(nid[0])
+
+    prev_lat = prev_img = prev_aud = None
+    scene_of = {}
+    for i, (sc, p) in enumerate(zip(scenes, plan)):
+        prompt = sc[0]
+        extra = sc[2] if len(sc) > 2 else None  # optional picture for this scene only (prop, new clothes, new place)
+        total, ov = p["total"], p["ov"]
+        ref = add("MiniMaxH3ReferenceToVideo", clip=["5", 0], vae=["6", 0], audio_vae=["7", 0], prompt=prompt,
+                  width=width, height=height, length=total, ref_image_size=ref_size)
+        _refs(g, ref, images, base=100 + 0)  # same LoadImage nodes are reused below
+        if extra:
+            g[f"15{i}"] = {"class_type": "LoadImage", "inputs": {"image": extra}}
+            g[ref]["inputs"][f"ref_images.ref_image_{len(images[:9])}"] = [f"15{i}", 0]
+            stages[f"15{i}"] = "encode"
+        new = add("LTXVSeparateAVLatent", av_latent=[ref, 1])
+        if audio:
+            ptr = start + (p["acc_before"] - ov) / FPS if i else start
+            trim = add("TrimAudioDuration", audio=heard, start_index=round(ptr, 3), duration=round(total / FPS, 3))
+            enc = add("VAEEncodeAudio", audio=[trim, 0], vae=["7", 0])
+            amask = add("SolidMask", value=0.0, width=round(total * 5 / 3), height=2)
+            a_lat = [add("SetLatentNoiseMask", samples=[enc, 0], mask=[amask, 0]), 0]
+        else:
+            a_lat = [new, 1]
+        if i == 0:
+            v_lat = [new, 0]
+        else:
+            old = add("LTXVSeparateAVLatent", av_latent=prev_lat)
+            t_ov, t_tot = _tokens(ov), _tokens(total)
+            cut = add("LatentCut", samples=[old, 0], dim="t", index=-t_ov, amount=t_ov)
+            cat = add("LatentConcat", samples1=[cut, 0], samples2=[new, 0], dim="t")
+            cut2 = add("LatentCut", samples=[cat, 0], dim="t", index=0, amount=t_tot)
+            lw, lh = round(width / 16), round(height / 16)
+            black = add("EmptyImage", width=lw, height=lh, batch_size=t_ov, color=0)
+            white = add("EmptyImage", width=lw, height=lh, batch_size=max(1, t_tot - t_ov), color=16777215)
+            both = add("ImageBatch", image1=[black, 0], image2=[white, 0])
+            vmask = add("ImageToMask", image=[both, 0], channel="red")
+            v_lat = [add("SetLatentNoiseMask", samples=[cut2, 0], mask=[vmask, 0]), 0]
+        lat = add("LTXVConcatAVLatent", video_latent=v_lat, audio_latent=a_lat)
+        noise = add("RandomNoise", noise_seed=seed + 100 * i)
+        guider = add("BasicGuider", model=model, conditioning=[ref, 0])
+        smp = add("SamplerCustomAdvanced", noise=[noise, 0], guider=[guider, 0], sampler=["9", 0], sigmas=["10", 0],
+                  latent_image=[lat, 0])
+        img = add("VAEDecode", samples=[smp, 1], vae=["6", 0])
+        if i == 0:
+            all_img = [img, 0]
+        else:
+            keep = add("ImageFromBatch", image=prev_img, batch_index=0, length=p["acc_before"] - ov)
+            all_img = [add("ImageBatch", image1=[keep, 0], image2=[img, 0]), 0]
+        if not audio:
+            aud = add("VAEDecodeAudio", samples=[smp, 1], vae=["7", 0])
+            if i == 0:
+                all_aud = [aud, 0]
+            else:
+                kept = add("TrimAudioDuration", audio=prev_aud, start_index=0.0, duration=round((p["acc_before"] - ov) / FPS, 3))
+                all_aud = [add("AudioConcat", audio1=[kept, 0], audio2=[aud, 0], direction="after"), 0]
+            prev_aud = all_aud
+            stages[aud] = "decode"
+        stages.update({ref: "encode", smp: "sample", img: "decode"})
+        scene_of[smp] = i
+        prev_lat, prev_img = [smp, 1], all_img
+    if audio:
+        final_a = add("TrimAudioDuration", audio=["11", 0], start_index=float(start), duration=round(plan[-1]["acc"] / FPS, 3))
+        final_a = [final_a, 0]
+    else:
+        final_a = prev_aud
+    vid = add("CreateVideo", images=prev_img, audio=final_a, fps=float(FPS), bit_depth="auto", color_space="sRGB", codec="none")
+    save = add("SaveVideo", video=[vid, 0], filename_prefix="H3Workspace/long", format="auto", **{"format.codec": "auto"})
+    # the tail of the last scene's latent: lets the finished video be continued with one more scene later
+    sep2 = add("LTXVSeparateAVLatent", av_latent=prev_lat)
+    tail = add("LatentCut", samples=[sep2, 0], dim="t", index=-LONG_STATE_TOKENS, amount=LONG_STATE_TOKENS)
+    keep = add("SaveLatent", samples=[tail, 0], filename_prefix="H3Workspace/long_state")
+    stages.update({vid: "save", save: "save", sep2: "save", tail: "save", keep: "save"})
+    stages["__scenes__"] = {"n": len(scenes), "map": scene_of}   # progress text "scene 2 of 4"
+    return g, stages
+
+
+LONG_STATE_TOKENS = 17   # latent tokens of the last second(s) of a scene that the next scene continues from
+
+
+def long_part_graph(m, scenes, k, width, height, seed, images, audio=None, start=0.0, pika=None, extra_loras=(),
+                    ref_size="match", vocals=None, state=None, preview=None, src=None, cont_plan=False):
+    """Scene number `k` (0-based) of the long video as its own job. Scene 0 starts fresh; scene k > 0 continues from the saved
+    latent tail of scene k-1 (`state`, a .latent file in ComfyUI's input folder). The clip it saves has the overlap with the
+    previous scene cut off, so the clips join end to end. Also saves the tail of its own latent for scene k+1."""
+    g, model, sched, sampler_name, steps = _long_base(m, pika, extra_loras)
+    model = _with_preview(g, model, preview)
+    g["9"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": sampler_name}}
+    g["10"] = {"class_type": "BasicScheduler", "inputs": {"model": model, "scheduler": sched, "steps": steps, "denoise": 1.0}}
+    heard = ["11", 0]
+    if audio:
+        g["11"] = {"class_type": "LoadAudio", "inputs": {"audio": audio}}
+        if vocals:
+            g["12"] = {"class_type": "MelBandRoFormerModelLoader", "inputs": {"model_name": vocals}}
+            g["13"] = {"class_type": "MelBandRoFormerSampler", "inputs": {"model": ["12", 0], "audio": ["11", 0]}}
+            heard = ["13", 0]
+    stages = {n: "load" for n in g}
+    cont = bool(src) and k == 0   # the first scene continues a video the user already has (src = (file in ComfyUI input, frames))
+    plan = long_plan([sc[1] for sc in scenes], cont_first=bool(src) or cont_plan)   # a project that continues an existing video
+    p, sc = plan[k], scenes[k]
+    total, ov = p["total"], p["ov"]
+    nid = [200]
+
+    def add(cls, **inputs):
+        nid[0] += 1
+        g[str(nid[0])] = {"class_type": cls, "inputs": inputs}
+        return str(nid[0])
+
+    ref = add("MiniMaxH3ReferenceToVideo", clip=["5", 0], vae=["6", 0], audio_vae=["7", 0], prompt=sc[0],
+              width=width, height=height, length=total, ref_image_size=ref_size)
+    _refs(g, ref, images, base=100)
+    extra = sc[2] if len(sc) > 2 else None
+    if extra:
+        g["150"] = {"class_type": "LoadImage", "inputs": {"image": extra}}
+        g[ref]["inputs"][f"ref_images.ref_image_{len(images[:9])}"] = ["150", 0]
+        stages["150"] = "encode"
+    new = add("LTXVSeparateAVLatent", av_latent=[ref, 1])
+    if audio:
+        ptr = max(0.0, start - ov / FPS) if cont else start + ((p["acc_before"] - ov) / FPS if k else 0)
+        trim = add("TrimAudioDuration", audio=heard, start_index=round(ptr, 3), duration=round(total / FPS, 3))
+        enc = add("VAEEncodeAudio", audio=[trim, 0], vae=["7", 0])
+        amask = add("SolidMask", value=0.0, width=round(total * 5 / 3), height=2)
+        a_lat = [add("SetLatentNoiseMask", samples=[enc, 0], mask=[amask, 0]), 0]
+    else:
+        a_lat = [new, 1]
+    if k == 0 and not cont:
+        v_lat = [new, 0]
+    else:
+        if cont:   # the tail of the existing video, encoded back into a latent
+            vid_in = add("LoadVideo", file=src[0])
+            comp = add("GetVideoComponents", video=[vid_in, 0])
+            last = add("ImageFromBatch", image=[comp, 0], batch_index=max(0, src[1] - ov), length=ov)
+            fit = add("ImageScale", image=[last, 0], upscale_method="lanczos", width=width, height=height, crop="center")
+            old = add("VAEEncode", pixels=[fit, 0], vae=["6", 0])
+            stages.update({vid_in: "encode", comp: "encode", last: "encode", fit: "encode", old: "encode"})
+        else:
+            old = add("LoadLatent", latent=state)
+        t_ov, t_tot = _tokens(ov), _tokens(total)
+        cut = add("LatentCut", samples=[old, 0], dim="t", index=-t_ov, amount=t_ov)
+        cat = add("LatentConcat", samples1=[cut, 0], samples2=[new, 0], dim="t")
+        cut2 = add("LatentCut", samples=[cat, 0], dim="t", index=0, amount=t_tot)
+        lw, lh = round(width / 16), round(height / 16)
+        black = add("EmptyImage", width=lw, height=lh, batch_size=t_ov, color=0)
+        white = add("EmptyImage", width=lw, height=lh, batch_size=max(1, t_tot - t_ov), color=16777215)
+        both = add("ImageBatch", image1=[black, 0], image2=[white, 0])
+        vmask = add("ImageToMask", image=[both, 0], channel="red")
+        v_lat = [add("SetLatentNoiseMask", samples=[cut2, 0], mask=[vmask, 0]), 0]
+        stages[old] = "load"
+    lat = add("LTXVConcatAVLatent", video_latent=v_lat, audio_latent=a_lat)
+    noise = add("RandomNoise", noise_seed=seed + 100 * k)
+    guider = add("BasicGuider", model=model, conditioning=[ref, 0])
+    smp = add("SamplerCustomAdvanced", noise=[noise, 0], guider=[guider, 0], sampler=["9", 0], sigmas=["10", 0],
+              latent_image=[lat, 0])
+    img = add("VAEDecode", samples=[smp, 1], vae=["6", 0])
+    clip_len = total - ov
+    frames_out = [img, 0] if (not k and not cont) else [add("ImageFromBatch", image=[img, 0], batch_index=ov, length=clip_len), 0]
+    if audio:
+        a0 = start + (p["acc_before"] / FPS if k else 0)
+        aud = [add("TrimAudioDuration", audio=["11", 0], start_index=round(a0, 3), duration=round(clip_len / FPS, 3)), 0]
+    else:
+        dec = add("VAEDecodeAudio", samples=[smp, 1], vae=["7", 0])
+        stages[dec] = "decode"
+        aud = [dec, 0] if (not k and not cont) else [add("TrimAudioDuration", audio=[dec, 0], start_index=round(ov / FPS, 3),
+                                                          duration=round(clip_len / FPS, 3)), 0]
+    vid = add("CreateVideo", images=frames_out, audio=aud, fps=float(FPS), bit_depth="auto", color_space="sRGB", codec="none")
+    save = add("SaveVideo", video=[vid, 0], filename_prefix="H3Workspace/long_part", format="auto", **{"format.codec": "auto"})
+    sep2 = add("LTXVSeparateAVLatent", av_latent=[smp, 1])
+    tail = add("LatentCut", samples=[sep2, 0], dim="t", index=-LONG_STATE_TOKENS, amount=LONG_STATE_TOKENS)
+    keep = add("SaveLatent", samples=[tail, 0], filename_prefix="H3Workspace/long_state")
+    stages.update({ref: "encode", smp: "sample", img: "decode", vid: "save", save: "save", sep2: "save", tail: "save", keep: "save"})
+    stages["__scenes__"] = {"n": len(scenes), "map": {smp: k}}
     return g, stages
 
 
@@ -382,9 +683,10 @@ def lipsync_graph(m, prompt, width, height, seconds, seed, audio, ref_images, sc
 
 # Krea 2 works at about 1 MP only
 KREA_SIZES = {"16:9": (1376, 768), "9:16": (768, 1376), "1:1": (1024, 1024), "4:3": (1184, 896),
-              "3:4": (896, 1184), "3:2": (1248, 832), "2:3": (832, 1248)}
+              "3:4": (896, 1184), "3:2": (1248, 832), "2:3": (832, 1248), "21:9": (1568, 672)}
 QWEN_MP = {"1": 1.0, "2": 2.0}
 SHEET_SIZE = (1920, 1088)
+SHEET6_SIZE = (2112, 960)  # six tall panels in one row, about 2 MP like the four-panel sheet
 SHEET_BG = {"grey": "light grey", "white": "white", "black": "black"}
 
 
@@ -436,7 +738,7 @@ def krea_real_graph(m, prompt, width, height, seed, scale):
     return g, stages
 
 
-def _qwen_base(m, image, megapixels, prompt, seed, size=None):
+def _qwen_base(m, image, megapixels, prompt, seed, size=None, extras=()):
     """The graph of the "One Image Edit" / "Character Sheet" workflows on plain ComfyUI nodes.
     `size` (width, height) gives an empty canvas of its own; otherwise the result keeps the picture's shape."""
     g = {
@@ -456,11 +758,307 @@ def _qwen_base(m, image, megapixels, prompt, seed, size=None):
         "10": {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": ["3", 0]}},
         "11": {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/qwen", "images": ["10", 0]}},
     }
+    for k, img in enumerate(list(extras)[:2], 2):  # more reference pictures: <image2>, <image3>
+        a, b = f"12{k}", f"13{k}"
+        g[a] = {"class_type": "LoadImage", "inputs": {"image": img}}
+        g[b] = {"class_type": "ImageScaleToTotalPixels", "inputs": {
+            "upscale_method": "lanczos", "megapixels": megapixels, "resolution_steps": 32, "image": [a, 0]}}
+        g["7"]["inputs"][f"images.image_{k}"] = [b, 0]
     if size:
         g["8"] = {"class_type": "EmptyLatentImage", "inputs": {"width": size[0], "height": size[1], "batch_size": 1}}
         g["9"]["inputs"]["latent_image"] = ["8", 0]
     stages = {"1": "load", "2": "load", "3": "load", "4": "load", "5": "encode", "6": "encode", "7": "encode",
               "8": "encode", "9": "sample", "10": "decode", "11": "save"}
+    for k in (2, 3):
+        stages[f"12{k}"] = stages[f"13{k}"] = "encode"
+    return g, stages
+
+
+def flux_t2i_graph(m, prompt, width, height, seed):
+    """FLUX.2 klein 4B (distilled), picture by text: 4 steps, CFG 1, no negative prompt."""
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["flux_unet"], "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["flux_clip"], "type": "flux2", "device": "default"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["flux_vae"]}},
+        "4": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
+        "5": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["4", 0]}},
+        "6": {"class_type": "CFGGuider", "inputs": {"model": ["1", 0], "positive": ["4", 0], "negative": ["5", 0], "cfg": 1}},
+        "7": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
+        "8": {"class_type": "Flux2Scheduler", "inputs": {"steps": 4, "width": width, "height": height}},
+        "9": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
+        "10": {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}},
+        "11": {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["10", 0], "guider": ["6", 0], "sampler": ["9", 0], "sigmas": ["8", 0], "latent_image": ["7", 0]}},
+        "12": {"class_type": "VAEDecode", "inputs": {"samples": ["11", 0], "vae": ["3", 0]}},
+        "13": {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/flux_t2i", "images": ["12", 0]}},
+    }
+    stages = {"1": "load", "2": "load", "3": "load", "4": "encode", "5": "encode", "6": "encode", "7": "encode",
+              "8": "encode", "9": "encode", "10": "encode", "11": "sample", "12": "decode", "13": "save"}
+    return g, stages
+
+
+def qwen_t2i_graph(m, prompt, negative, width, height, seed):
+    """Qwen Image 2.1, picture by text (no reference). With a negative prompt CFG goes above 1 so that it works."""
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["qwen_unet"], "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["qwen_clip"], "type": "qwen_image", "device": "default"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["qwen_vae"]}},
+        "4": {"class_type": "QwenImage21Cache", "inputs": {"device": "auto", "dtype": "default", "model": ["1", 0]}},
+        "7": {"class_type": "TextEncodeQwenImage21", "inputs": {
+            "prompt": prompt, "negative_prompt": negative, "resolution": 0, "clip": ["2", 0], "vae": ["3", 0]}},
+        "8": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
+        "9": {"class_type": "KSampler", "inputs": {
+            "seed": seed, "steps": 25, "cfg": 3 if negative.strip() else 1, "sampler_name": "euler", "scheduler": "simple", "denoise": 1,
+            "model": ["4", 0], "positive": ["7", 0], "negative": ["7", 1], "latent_image": ["8", 0]}},
+        "10": {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": ["3", 0]}},
+        "11": {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/qwen_t2i", "images": ["10", 0]}},
+    }
+    stages = {"1": "load", "2": "load", "3": "load", "4": "load", "7": "encode", "8": "encode",
+              "9": "sample", "10": "decode", "11": "save"}
+    return g, stages
+
+
+STORY_SIZE = (1920, 1088)
+
+
+def qwen_story_graph(m, images, prompt, seed, size=STORY_SIZE):
+    """Storyboard from 1-3 pictures (character, location...) on Qwen Image 2.1: <image1>, <image2> in the prompt."""
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["qwen_unet"], "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["qwen_clip"], "type": "qwen_image", "device": "default"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["qwen_vae"]}},
+        "4": {"class_type": "QwenImage21Cache", "inputs": {"device": "auto", "dtype": "default", "model": ["1", 0]}},
+    }
+    enc = {"prompt": prompt, "negative_prompt": "", "resolution": 0, "clip": ["2", 0], "vae": ["3", 0]}
+    stages = {"1": "load", "2": "load", "3": "load", "4": "load"}
+    for i, img in enumerate(images, 1):
+        a, b = f"10{i}", f"11{i}"
+        g[a] = {"class_type": "LoadImage", "inputs": {"image": img}}
+        g[b] = {"class_type": "ImageScaleToTotalPixels", "inputs": {
+            "upscale_method": "lanczos", "megapixels": 1.0, "resolution_steps": 32, "image": [a, 0]}}
+        enc[f"images.image_{i}"] = [b, 0]
+        stages[a] = stages[b] = "encode"
+    g["7"] = {"class_type": "TextEncodeQwenImage21", "inputs": enc}
+    g["8"] = {"class_type": "EmptyLatentImage", "inputs": {"width": size[0], "height": size[1], "batch_size": 1}}
+    g["9"] = {"class_type": "KSampler", "inputs": {
+        "seed": seed, "steps": 25, "cfg": 1, "sampler_name": "euler", "scheduler": "simple", "denoise": 1,
+        "model": ["4", 0], "positive": ["7", 0], "negative": ["7", 1], "latent_image": ["8", 0]}}
+    g["10"] = {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": ["3", 0]}}
+    g["11"] = {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/qwen_story", "images": ["10", 0]}}
+    stages.update({"7": "encode", "8": "encode", "9": "sample", "10": "decode", "11": "save"})
+    return g, stages
+
+
+FRAME_COLS = {2: 2, 3: 3, 4: 2, 6: 3, 8: 4, 9: 3}  # frames -> columns of the sheet (rows follow)
+FRAME_SIZE = (1376, 768)
+FRAME_LINE = {"white": ("white", 6), "black": ("black", 4), "none": ("white", 0)}
+
+
+def _glue(g, stages, titles, frame_nodes, line):
+    """Glue the decoded frames into one sheet with ImageStitch (exact thin line), saved as "Лист раскадровки"."""
+    n = len(frame_nodes)
+    color, gap = FRAME_LINE.get(line, FRAME_LINE["white"])
+    cols = FRAME_COLS.get(n, n)
+    rows = [frame_nodes[k:k + cols] for k in range(0, n, cols)]
+    row_out = []
+    for r, items in enumerate(rows):
+        cur = items[0]
+        for k, nxt in enumerate(items[1:]):
+            nid = f"4{r}{k}"
+            g[nid] = {"class_type": "ImageStitch", "inputs": {
+                "image1": cur, "direction": "right", "match_image_size": True, "spacing_width": gap, "spacing_color": color, "image2": nxt}}
+            stages[nid] = "decode"
+            cur = [nid, 0]
+        row_out.append(cur)
+    cur = row_out[0]
+    for r, nxt in enumerate(row_out[1:]):
+        nid = f"49{r}"
+        g[nid] = {"class_type": "ImageStitch", "inputs": {
+            "image1": cur, "direction": "down", "match_image_size": True, "spacing_width": gap, "spacing_color": color, "image2": nxt}}
+        stages[nid] = "decode"
+        cur = [nid, 0]
+    g["500"] = {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/story_sheet", "images": cur}}
+    stages["500"] = "save"
+    titles["500"] = "Лист раскадровки"
+
+
+def flux_frames_graph(m, refs, prompts, seed, size=FRAME_SIZE, line="white"):
+    """Storyboard frame by frame on FLUX.2 klein: every frame is its own picture (saved separately, full size) and the
+    sheet is glued from them by ImageStitch with an exact thin line, so there are no margins or double frames."""
+    n = len(prompts)
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["flux_unet"], "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["flux_clip"], "type": "flux2", "device": "default"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["flux_vae"]}},
+        "13": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": size[0], "height": size[1], "batch_size": 1}},
+        "14": {"class_type": "Flux2Scheduler", "inputs": {"steps": 4, "width": size[0], "height": size[1]}},
+        "15": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
+        "8": {"class_type": "CLIPTextEncode", "inputs": {"text": "", "clip": ["2", 0]}},
+    }
+    stages = {"1": "load", "2": "load", "3": "load", "13": "encode", "14": "encode", "15": "encode", "8": "encode"}
+    lat = []
+    for i, img in enumerate(refs[:3], 1):
+        a, b, v = f"10{i}", f"11{i}", f"12{i}"
+        g[a] = {"class_type": "LoadImage", "inputs": {"image": img}}
+        g[b] = {"class_type": "ImageScaleToTotalPixels", "inputs": {
+            "upscale_method": "lanczos", "megapixels": 1.0, "resolution_steps": 16, "image": [a, 0]}}
+        g[v] = {"class_type": "VAEEncode", "inputs": {"pixels": [b, 0], "vae": ["3", 0]}}
+        lat.append(v)
+        for k in (a, b, v):
+            stages[k] = "encode"
+    g["9"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["8", 0]}}
+    neg = ["9", 0]
+    for j, v in enumerate(lat):  # the negative side does not depend on the frame: build it once
+        nid = f"15{j}"
+        g[nid] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": neg, "latent": [v, 0]}}
+        neg = [nid, 0]
+        stages[nid] = "encode"
+    stages["9"] = "encode"
+    titles, frame_nodes = {}, []
+    for i, text in enumerate(prompts):
+        base = 200 + i * 10
+        t = str(base)
+        g[t] = {"class_type": "CLIPTextEncode", "inputs": {"text": text, "clip": ["2", 0]}}
+        pos = [t, 0]
+        for j, v in enumerate(lat):
+            nid = str(base + 1 + j)
+            g[nid] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": pos, "latent": [v, 0]}}
+            pos = [nid, 0]
+            stages[nid] = "encode"
+        gd, nz, sm, dc, sv = (str(base + k) for k in (5, 6, 7, 8, 9))
+        g[gd] = {"class_type": "CFGGuider", "inputs": {"model": ["1", 0], "positive": pos, "negative": neg, "cfg": 1}}
+        g[nz] = {"class_type": "RandomNoise", "inputs": {"noise_seed": seed + i}}
+        g[sm] = {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": [nz, 0], "guider": [gd, 0], "sampler": ["15", 0], "sigmas": ["14", 0], "latent_image": ["13", 0]}}
+        g[dc] = {"class_type": "VAEDecode", "inputs": {"samples": [sm, 0], "vae": ["3", 0]}}
+        g[sv] = {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/story_frame", "images": [dc, 0]}}
+        stages.update({t: "encode", gd: "encode", nz: "encode", sm: "sample", dc: "decode", sv: "save"})
+        titles[sv] = f"Кадр {i + 1}"
+        frame_nodes.append([dc, 0])
+    _glue(g, stages, titles, frame_nodes, line)
+    return g, stages, titles
+
+
+def qwen_frames_graph(m, refs, prompts, seed, size=FRAME_SIZE, line="white"):
+    """The same frame-by-frame storyboard on Qwen Image 2.1 (slower than FLUX, no commercial license)."""
+    n = len(prompts)
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["qwen_unet"], "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["qwen_clip"], "type": "qwen_image", "device": "default"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["qwen_vae"]}},
+        "4": {"class_type": "QwenImage21Cache", "inputs": {"device": "auto", "dtype": "default", "model": ["1", 0]}},
+        "8": {"class_type": "EmptyLatentImage", "inputs": {"width": size[0], "height": size[1], "batch_size": 1}},
+    }
+    stages = {"1": "load", "2": "load", "3": "load", "4": "load", "8": "encode"}
+    scaled = []
+    for i, img in enumerate(refs[:3], 1):
+        a, b = f"10{i}", f"11{i}"
+        g[a] = {"class_type": "LoadImage", "inputs": {"image": img}}
+        g[b] = {"class_type": "ImageScaleToTotalPixels", "inputs": {
+            "upscale_method": "lanczos", "megapixels": 1.0, "resolution_steps": 32, "image": [a, 0]}}
+        scaled.append(b)
+        stages[a] = stages[b] = "encode"
+    titles, frame_nodes = {}, []
+    for i, text in enumerate(prompts):
+        base = 200 + i * 10
+        en, ks, dc, sv = (str(base + k) for k in (0, 1, 2, 3))
+        enc = {"prompt": text, "negative_prompt": "", "resolution": 0, "clip": ["2", 0], "vae": ["3", 0]}
+        for k, b in enumerate(scaled, 1):
+            enc[f"images.image_{k}"] = [b, 0]
+        g[en] = {"class_type": "TextEncodeQwenImage21", "inputs": enc}
+        g[ks] = {"class_type": "KSampler", "inputs": {
+            "seed": seed + i, "steps": 25, "cfg": 1, "sampler_name": "euler", "scheduler": "simple", "denoise": 1,
+            "model": ["4", 0], "positive": [en, 0], "negative": [en, 1], "latent_image": ["8", 0]}}
+        g[dc] = {"class_type": "VAEDecode", "inputs": {"samples": [ks, 0], "vae": ["3", 0]}}
+        g[sv] = {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/story_frame", "images": [dc, 0]}}
+        stages.update({en: "encode", ks: "sample", dc: "decode", sv: "save"})
+        titles[sv] = f"Кадр {i + 1}"
+        frame_nodes.append([dc, 0])
+    _glue(g, stages, titles, frame_nodes, line)
+    return g, stages, titles
+
+
+def flux_story_graph(m, images, prompt, seed, size=STORY_SIZE):
+    """Storyboard from 1-3 pictures on FLUX.2 klein: every picture is one more ReferenceLatent (image 1, image 2 ...)."""
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["flux_unet"], "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["flux_clip"], "type": "flux2", "device": "default"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["flux_vae"]}},
+        "7": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
+        "8": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["7", 0]}},
+    }
+    stages = {"1": "load", "2": "load", "3": "load", "7": "encode", "8": "encode"}
+    pos, neg = ["7", 0], ["8", 0]
+    for i, img in enumerate(images, 1):
+        a, b, v, rp, rn = f"10{i}", f"11{i}", f"12{i}", f"13{i}", f"14{i}"
+        g[a] = {"class_type": "LoadImage", "inputs": {"image": img}}
+        g[b] = {"class_type": "ImageScaleToTotalPixels", "inputs": {
+            "upscale_method": "lanczos", "megapixels": 1.0, "resolution_steps": 16, "image": [a, 0]}}
+        g[v] = {"class_type": "VAEEncode", "inputs": {"pixels": [b, 0], "vae": ["3", 0]}}
+        g[rp] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": pos, "latent": [v, 0]}}
+        g[rn] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": neg, "latent": [v, 0]}}
+        pos, neg = [rp, 0], [rn, 0]
+        for k in (a, b, v, rp, rn):
+            stages[k] = "encode"
+    g["12"] = {"class_type": "CFGGuider", "inputs": {"model": ["1", 0], "positive": pos, "negative": neg, "cfg": 1}}
+    g["13"] = {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": size[0], "height": size[1], "batch_size": 1}}
+    g["14"] = {"class_type": "Flux2Scheduler", "inputs": {"steps": 4, "width": size[0], "height": size[1]}}
+    g["15"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}}
+    g["16"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}}
+    g["17"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
+        "noise": ["16", 0], "guider": ["12", 0], "sampler": ["15", 0], "sigmas": ["14", 0], "latent_image": ["13", 0]}}
+    g["18"] = {"class_type": "VAEDecode", "inputs": {"samples": ["17", 0], "vae": ["3", 0]}}
+    g["19"] = {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/flux_story", "images": ["18", 0]}}
+    stages.update({"12": "encode", "13": "encode", "14": "encode", "15": "encode", "16": "encode",
+                   "17": "sample", "18": "decode", "19": "save"})
+    return g, stages
+
+
+def flux_edit_graph(m, prompt, image, megapixels, seed, extras=(), size=None):
+    """FLUX.2 klein 4B (distilled), edit a picture: the official ComfyUI template on plain nodes, 4 steps, CFG 1.
+    The result keeps the shape of the picture (sides in steps of 16)."""
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["flux_unet"], "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["flux_clip"], "type": "flux2", "device": "default"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["flux_vae"]}},
+        "4": {"class_type": "LoadImage", "inputs": {"image": image}},
+        "5": {"class_type": "ImageScaleToTotalPixels", "inputs": {
+            "upscale_method": "lanczos", "megapixels": megapixels, "resolution_steps": 16, "image": ["4", 0]}},
+        "6": {"class_type": "GetImageSize", "inputs": {"image": ["5", 0]}},
+        "7": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
+        "8": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["7", 0]}},
+        "9": {"class_type": "VAEEncode", "inputs": {"pixels": ["5", 0], "vae": ["3", 0]}},
+        "10": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["7", 0], "latent": ["9", 0]}},
+        "11": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["8", 0], "latent": ["9", 0]}},
+    }
+    pos, neg = ["10", 0], ["11", 0]
+    for k, img in enumerate(list(extras)[:2]):  # more reference pictures: image 2, image 3
+        a, b, v, rp, rn = (f"{p}{k}" for p in ("30", "31", "32", "33", "34"))
+        g[a] = {"class_type": "LoadImage", "inputs": {"image": img}}
+        g[b] = {"class_type": "ImageScaleToTotalPixels", "inputs": {
+            "upscale_method": "lanczos", "megapixels": megapixels, "resolution_steps": 16, "image": [a, 0]}}
+        g[v] = {"class_type": "VAEEncode", "inputs": {"pixels": [b, 0], "vae": ["3", 0]}}
+        g[rp] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": pos, "latent": [v, 0]}}
+        g[rn] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": neg, "latent": [v, 0]}}
+        pos, neg = [rp, 0], [rn, 0]
+    g.update({
+        "12": {"class_type": "CFGGuider", "inputs": {"model": ["1", 0], "positive": pos, "negative": neg, "cfg": 1}},
+        "13": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": ["6", 0], "height": ["6", 1], "batch_size": 1}},
+        "14": {"class_type": "Flux2Scheduler", "inputs": {"steps": 4, "width": ["6", 0], "height": ["6", 1]}},
+        "15": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
+        "16": {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}},
+        "17": {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["16", 0], "guider": ["12", 0], "sampler": ["15", 0], "sigmas": ["14", 0], "latent_image": ["13", 0]}},
+        "18": {"class_type": "VAEDecode", "inputs": {"samples": ["17", 0], "vae": ["3", 0]}},
+        "19": {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/flux", "images": ["18", 0]}},
+    })
+    if size:  # own size: the picture is scaled to it, the result follows
+        g["5"] = {"class_type": "ImageScale", "inputs": {
+            "image": ["4", 0], "upscale_method": "lanczos", "width": size[0], "height": size[1], "crop": "center"}}
+    stages = {str(i): "load" for i in (1, 2, 3)}
+    stages.update({str(i): "encode" for i in range(4, 17)})
+    stages.update({k: "encode" for k in g if k.startswith(("30", "31", "32", "33", "34")) and len(k) == 3})
+    stages.update({"17": "sample", "18": "decode", "19": "save"})
     return g, stages
 
 
@@ -473,11 +1071,11 @@ def qwen_edit_size(aspect, megapixels):
     return (round(w * k / 32) * 32, round(h * k / 32) * 32)
 
 
-def qwen_edit_graph(m, prompt, image, megapixels, seed, size=None):
-    return _qwen_base(m, image, megapixels, prompt, seed, size)
+def qwen_edit_graph(m, prompt, image, megapixels, seed, size=None, extras=()):
+    return _qwen_base(m, image, megapixels, prompt, seed, size, extras)
 
 
-def sheet_prompt(headless=True, background="grey", marks=""):
+def sheet_prompt(headless=True, background="grey", marks="", panels=4):
     """Four panels: full body front (without the head by default), full body back, close-up front, close-up profile.
     Tested on Qwen Image 2.1 with a cartoon character: same style and outfit on all panels."""
     bg = SHEET_BG.get(background, "light grey")
@@ -488,6 +1086,19 @@ def sheet_prompt(headless=True, background="grey", marks=""):
              "from head to shoes.")
     keep = "Keep the same face, hairstyle, " + (marks.strip().rstrip(".,") + ", " if marks.strip() else "") \
         + "clothing, colors, proportions and art style as in <image1> in every panel."
+    if panels == 6:
+        return (
+            "A character reference sheet of the character from <image1>, split into six equal tall panels side by side in one "
+            "row, all at the same scale, in the same art style as <image1>.\n"
+            f"Panel one: {first}\n"
+            "Panel two: full-body three-quarter view of the same character, turned about forty-five degrees to the left, "
+            "same pose and outfit, head fully visible.\n"
+            "Panel three: full-body side view in profile facing left, same pose and outfit, head fully visible.\n"
+            "Panel four: full-body back view of the same character, same pose and outfit, seen from behind, head fully visible.\n"
+            "Panel five: close-up head-and-shoulders portrait facing the viewer with a neutral expression.\n"
+            "Panel six: close-up head-and-shoulders portrait in three-quarter view, with the same lighting and scale as panel five.\n"
+            f"{keep}\n"
+            f"Plain solid {bg} background, soft even lighting, no text, no labels.")
     return (
         "A character reference sheet of the character from <image1>, split into four equal panels side by side in one "
         "row, all at the same scale, in the same art style as <image1>.\n"
@@ -499,9 +1110,10 @@ def sheet_prompt(headless=True, background="grey", marks=""):
         f"Plain solid {bg} background, soft even lighting, no text, no labels.")
 
 
-def qwen_sheet_graph(m, image, seed, headless=True, background="grey", marks=""):
-    prompt = sheet_prompt(headless, background, marks)
-    g, stages = _qwen_base(m, image, SHEET_SIZE[0] * SHEET_SIZE[1] / 1048576, prompt, seed, size=SHEET_SIZE)
+def qwen_sheet_graph(m, image, seed, headless=True, background="grey", marks="", panels=4):
+    prompt = sheet_prompt(headless, background, marks, panels)
+    size = SHEET6_SIZE if panels == 6 else SHEET_SIZE
+    g, stages = _qwen_base(m, image, size[0] * size[1] / 1048576, prompt, seed, size=size)
     return g, stages, prompt
 
 
@@ -511,7 +1123,7 @@ UPSCALE_SCALES = {"1.5": 1.5, "2": 2.0}
 UPSCALE_SEC_PER_MP_FRAME = 3.24  # measured on an RTX 4060 Ti 16 GB: 5 s of 1056x608 -> 1584x912 took ~10 minutes
 
 
-def upscale_image_graph(m, image, scale, seed):
+def upscale_image_graph(m, image, scale, seed, soften=0.0):
     """The same SeedVR2 one-step enlarge for a single picture."""
     g = {
         "1": {"class_type": "LoadImage", "inputs": {"image": image}},
@@ -533,6 +1145,10 @@ def upscale_image_graph(m, image, scale, seed):
     }
     stages = {"1": "load", "5": "load", "6": "load", "3": "encode", "4": "encode", "7": "encode", "8": "encode",
               "9": "sample", "10": "decode", "11": "decode", "12": "save"}
+    if soften:  # soft result: SeedVR2 mixed with the plain enlarged picture (less "digital" sharpness)
+        g["13"] = {"class_type": "ImageBlend", "inputs": {"image1": ["11", 0], "image2": ["3", 0], "blend_factor": soften, "blend_mode": "normal"}}
+        g["12"]["inputs"]["images"] = ["13", 0]
+        stages["13"] = "decode"
     return g, stages
 
 

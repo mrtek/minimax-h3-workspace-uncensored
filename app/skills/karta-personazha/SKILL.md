@@ -70,6 +70,34 @@ Plain solid light grey background, soft even lighting, no text, no labels.
 ```
 Подставляй в `[accessories]` только то, что видно на картинке (очки, серьги, шрам). Если нужна голова на первой панели, замени описание панели 1 на: "full-body front view facing the viewer, standing in a relaxed neutral pose". Всегда пиши число панелей словом: без числа модель иногда рисует лишнюю фигуру. Фон меняется одной фразой (white, light grey, black).
 
+## Вариант из 6 панелей (когда пользователь выбрал "6 панелей", "лист на 6", "×6" или приложение это указало)
+
+Это отдельный лист, для видео, где модель путает ракурсы и дорисовывает невидимое (в частности сбоку и в три четверти). Шесть панелей в один ряд, горизонтальный широкий кадр, все высокие, один масштаб у полноростовых:
+1) в полный рост спереди, 2) в полный рост в три четверти (повёрнут примерно на 45 градусов), 3) в полный рост сбоку, в профиль, 4) в полный рост сзади, 5) портрет анфас, 6) портрет в три четверти. Одежда, лицо, стиль, свет и фон одинаковые во всех шести. Правило про голову на панели 1 то же, что выше (по умолчанию без головы только у Qwen по картинке; для Krea голова есть всегда).
+
+Если пользователь просит зеркальные виды ("слева и справа"), напиши панель 3 как "side view facing left", а панель 6 как "three-quarter view facing right", так оба направления присутствуют. Не добавляй больше шести панелей: число панелей всегда пиши словом "six".
+
+### Krea 2, 6 панелей (формат 21:9, один абзац на английском до 1500 символов, без негатива)
+
+```prompt
+Character reference sheet in a single very wide image, six tall panels side by side, [STYLE]. Panel one: full-body front view of [DNA short], standing in a neutral pose facing the viewer, wearing [WARDROBE]. Panel two: the same character full-body in a three-quarter view, turned about forty-five degrees, same pose and outfit. Panel three: the same character full-body in a side view in profile, same pose and outfit. Panel four: the same character full-body seen from behind, same pose and outfit. Panel five: head-and-shoulders portrait facing the viewer, neutral expression, [face details from DNA]. Panel six: head-and-shoulders portrait in three-quarter view, same lighting and scale as panel five. All four full-body figures have the same scale, and the face, hairstyle, skin tone and outfit are identical in all six panels. Even soft studio light, clean plain [BACKGROUND] backdrop with only the six figures on it.
+```
+Предупреди одной строкой: Krea работает примерно в 1 МП, на широком листе панели получаются небольшими; для чёткого листа лучше раздел "Правка картинки" → "Лист персонажа" → 6 панелей (по готовой картинке персонажа).
+
+### Qwen по загруженной картинке, 6 панелей (размер холста 2112x960)
+
+```prompt
+A character reference sheet of the character from <image1>, split into six equal tall panels side by side in one row, all at the same scale, in the same art style as <image1>.
+Panel one: full-body front view facing the viewer, standing in a relaxed neutral pose, showing the whole outfit from head to shoes.
+Panel two: full-body three-quarter view of the same character, turned about forty-five degrees to the left, same pose and outfit, head fully visible.
+Panel three: full-body side view in profile facing left, same pose and outfit, head fully visible.
+Panel four: full-body back view of the same character, same pose and outfit, seen from behind, head fully visible.
+Panel five: close-up head-and-shoulders portrait facing the viewer with a neutral expression.
+Panel six: close-up head-and-shoulders portrait in three-quarter view, with the same lighting and scale as panel five.
+Keep the same face, hairstyle, [accessories], clothing, colors, proportions and art style as in <image1> in every panel.
+Plain solid light grey background, soft even lighting, no text, no labels.
+```
+
 ## Шаг 4. Что дальше (одной строкой в конце)
 
 Скажи пользователю: сохранить лист в Библиотеку, потом загрузить его как референс в Qwen ("по картинке") или в раздел Референсы для видео. Для самой сцены с этим персонажем пиши новый промпт с фразой "preserve the face, hair and outfit from the reference".

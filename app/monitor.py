@@ -65,7 +65,8 @@ class Monitor:
             out = subprocess.run(
                 ["nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit",
                  "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, timeout=4, creationflags=engine.CREATE_NO_WINDOW).stdout
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=4,
+                creationflags=engine.CREATE_NO_WINDOW).stdout
         except Exception:
             return None
         rows = [[x.strip() for x in line.split(",")] for line in out.strip().splitlines() if line.strip()]
