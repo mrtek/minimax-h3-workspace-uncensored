@@ -167,16 +167,24 @@ def main():
                                        draggable=True)  # pywebview blocks dragging of every picture by default; the app drags pictures into slots
         api._window = window
 
+        def hard_exit(code=0):
+            try:
+                import ctypes
+                ctypes.windll.kernel32.TerminateProcess(ctypes.windll.kernel32.GetCurrentProcess(), code)
+            except Exception:
+                pass
+            os._exit(code)
+
         def on_closed():
             def _exit_worker():
                 try:
                     srv.shutdown()
                 except Exception:
                     pass
-                os._exit(0)
+                hard_exit(0)
             t = threading.Thread(target=_exit_worker, daemon=True)
             t.start()
-            threading.Timer(3.0, lambda: os._exit(0)).start()
+            threading.Timer(2.0, lambda: hard_exit(0)).start()
 
         window.events.closed += on_closed
         webview.start(gui="edgechromium", private_mode=False,
@@ -190,7 +198,7 @@ def main():
             srv.shutdown()
         except Exception:
             pass
-        os._exit(0)
+        hard_exit(0)
 
 
 if __name__ == "__main__":

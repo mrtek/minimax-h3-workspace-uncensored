@@ -4744,13 +4744,16 @@ async function saveChat() {
   loadChats();
 }
 function fmtShort(iso) { return iso ? fmtDate(new Date(iso)) : ''; }
-async function loadChats() {
+async function loadChats(autoOpen = false) {
   if (!API) return;
   const list = await (await fetch('/api/agent/chats')).json();
   $('#agHist').innerHTML = list.length ? list.map(c => `<div class="ag-h${c.id === AG.id ? ' on' : ''}" data-id="${c.id}">
       <div><b title="${esc(c.title)}">${esc(c.title)}</b><small>${fmtShort(c.updated)}</small></div>
       <button title="Удалить чат">✕</button></div>`).join('')
     : '<div class="ag-hempty">Здесь будут ваши переписки с агентом</div>';
+  if (autoOpen && !AG.id && list.length && !AG.msgs.length) {
+    openChat(list[0].id);
+  }
 }
 function newChat() {
   if (AG.busy) AG.ctrl?.abort();
@@ -6172,7 +6175,7 @@ $('#clConflicts')?.addEventListener('click', e => {
 $('#clCivitai')?.addEventListener('click', openCivitaiModal);
 $('.nav[data-view="models"]').addEventListener('click', loadCL);
 if (API) {
-  connectEvents(); loadStatus(); loadCloud(); pollSystem(); loadCL();
+  connectEvents(); loadStatus(); loadCloud(); pollSystem(); loadCL(); agStatus(); agCtx(); loadChats(true);
   fetch('/api/status').then(r => r.json()).then(s => {
     if (!s.configured) { setNavLocked(true); goTo('models'); }
   });

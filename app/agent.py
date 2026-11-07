@@ -455,18 +455,28 @@ class LlamaServer:
         v = LLM_VARIANTS[variant]
         m = self.root / "models" / v["model"]
         p = self.root / "models" / v["mmproj"]
-        if variant == "gemma4-12b" and not m.exists():
-            orig = LLM_VARIANTS.get("gemma4-12b-orig")
-            if orig:
-                fallback_m = self.root / "models" / orig["model"]
-                fallback_p = self.root / "models" / orig["mmproj"]
-                if fallback_m.exists():
-                    return fallback_m, (fallback_p if fallback_p.exists() else None)
+        if not m.exists():
+            for other_var, other_v in LLM_VARIANTS.items():
+                cand_m = self.root / "models" / other_v["model"]
+                if cand_m.exists():
+                    m = cand_m
+                    p = self.root / "models" / other_v["mmproj"]
+                    break
+        if p and not p.exists():
+            for cand_p in [
+                self.root / "models" / "gemma-4-12B-it-qat-q4_0-uncensored-heretic-mmproj-BF16.gguf",
+                self.root / "models" / "mmproj-gemma-4-12B-it-Q8_0.gguf",
+            ] + list((self.root / "models").glob("*mmproj*.gguf")):
+                if cand_p.exists():
+                    p = cand_p
+                    break
+            else:
+                p = None
         return m, p
 
     def has_model(self, variant):
         m, p = self.model_paths(variant)
-        return m.exists() and (p is None or p.exists())
+        return m.exists()
 
     def installed(self, variant):
         return bool(self.exe()) and self.has_model(variant)
