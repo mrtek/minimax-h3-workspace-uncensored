@@ -369,18 +369,18 @@ class ComfyProcess:
         return self.proc is not None and self.proc.poll() is None
 
     def stop(self):
-        py = self.root / "python_embeded" / "python.exe"
-        if self.alive():
+        if self.proc:
             try:
-                self.proc.terminate()
-                self.proc.wait(3)
+                pid = self.proc.pid
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               creationflags=CREATE_NO_WINDOW, timeout=3)
             except Exception:
                 try:
                     self.proc.kill()
                 except Exception:
                     pass
         self.proc = None
-        self.kill_orphans(py)
 
     def log_tail(self, n=15):
         try:

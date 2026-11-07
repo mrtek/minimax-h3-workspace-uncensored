@@ -502,10 +502,11 @@ class LlamaServer:
                                      creationflags=engine.CREATE_NO_WINDOW)
 
     def stop(self):
-        if self.alive():
+        if self.proc:
             try:
-                self.proc.terminate()
-                self.proc.wait(3)
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(self.proc.pid)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               creationflags=engine.CREATE_NO_WINDOW, timeout=2)
             except Exception:
                 try:
                     self.proc.kill()

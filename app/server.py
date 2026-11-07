@@ -143,7 +143,7 @@ class App:
         self.saved_queue = self.load_queue()  # unfinished jobs of the previous run (asked about at start)
         self.jobs = JobStore(self.save_queue)  # prompt_id -> job dict
         self.library = Library(LIBRARY_FILE)
-        self.output_dir = None
+        self.output_dir = self._detect_output_dir()
         self.comfy_online = False
         self.process = None  # engine.ComfyProcess in managed mode
         self.installer = None
@@ -500,6 +500,19 @@ class App:
 
     # ---------- helpers ----------
 
+    def _detect_output_dir(self):
+        cr = self.comfy_root()
+        if cr and (cr / "ComfyUI" / "output").exists():
+            return cr / "ComfyUI" / "output"
+        inst = self.config.get("install_dir")
+        if inst:
+            for cand in (Path(inst) / catalog.COMFY_DIRNAME / "ComfyUI" / "output",
+                         Path(inst) / "ComfyUI_windows_portable" / "ComfyUI" / "output",
+                         Path(inst) / "ComfyUI" / "output"):
+                if cand.exists():
+                    return cand
+        return None
+
     def public(self, item):
         p = self.file_path(item)
         # a video deleted from disk stays in the list until the user removes it, but is marked
@@ -507,11 +520,15 @@ class App:
                                                                  "missing": bool(p) and not p.exists()}
 
     def file_path(self, item):
-        if item["file"].get("type") == "local":
-            return Path(item["file"]["path"])
-        if not self.output_dir or item["file"].get("type") != "output":
+        f = item.get("file", {})
+        if f.get("type") == "local":
+            return Path(f["path"])
+        if f.get("type") != "output":
             return None
-        return self.output_dir / item["file"].get("subfolder", "") / item["file"]["filename"]
+        out = self.output_dir or self._detect_output_dir()
+        if not out:
+            return None
+        return out / f.get("subfolder", "") / f.get("filename", "")
 
     async def upload_state(self, path, name):
         """Put a saved scene state (.latent) into ComfyUI's input folder, where its LoadLatent node looks for it."""
@@ -2240,16 +2257,29 @@ class App:
         path = self.file_path(item)
         if path and path.exists():
             return web.FileResponse(path, headers=headers)
-        # output folder unknown: stream through ComfyUI
+        # Check subfolder fallbacks on disk
+        out = self.output_dir or self._detect_output_dir()
+        if out and out.exists():
+            cand = out / "H3Workspace" / f["filename"]
+            if cand.exists():
+                return web.FileResponse(cand, headers=headers)
+            cand2 = out / f["filename"]
+            if cand2.exists():
+                return web.FileResponse(cand2, headers=headers)
+        # output folder unknown: stream through ComfyUI with 5s timeout
         params = {"filename": f["filename"], "subfolder": f.get("subfolder", ""), "type": f.get("type", "output")}
-        async with self.session.get(self.comfy + "/view", params=params) as r:
-            if r.status != 200:
-                raise web.HTTPNotFound(text="Файл не найден")
-            resp = web.StreamResponse(headers={"Content-Type": r.headers.get("Content-Type", "video/mp4"), **headers})
-            await resp.prepare(req)
-            async for chunk in r.content.iter_chunked(1 << 16):
-                await resp.write(chunk)
-            return resp
+        mime = "image/png" if f["filename"].lower().endswith((".png", ".jpg", ".jpeg", ".webp")) else "video/mp4"
+        try:
+            async with self.session.get(self.comfy + "/view", params=params, timeout=aiohttp.ClientTimeout(total=5)) as r:
+                if r.status != 200:
+                    raise web.HTTPNotFound(text="Файл не найден")
+                resp = web.StreamResponse(headers={"Content-Type": r.headers.get("Content-Type", mime), **headers})
+                await resp.prepare(req)
+                async for chunk in r.content.iter_chunked(1 << 16):
+                    await resp.write(chunk)
+                return resp
+        except Exception:
+            raise web.HTTPNotFound(text="Файл не найден")
 
     async def h_events(self, req):
         ws = web.WebSocketResponse(heartbeat=20)

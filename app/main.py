@@ -51,7 +51,7 @@ class ServerThread(threading.Thread):
         try:
             fut = asyncio.run_coroutine_threadsafe(self.runner.cleanup(), self.loop)
             try:
-                fut.result(timeout=10)
+                fut.result(timeout=3)
             except Exception:
                 pass
         except Exception:
@@ -162,9 +162,23 @@ def main():
         except Exception:
             pass
         api = JsApi(port)
-        api._window = webview.create_window("Minimax H3 Workspace (Uncensored)", url, width=1440, height=920, min_size=(1000, 680),
-                                           background_color="#12070a", js_api=api,
-                                           draggable=True)  # pywebview blocks dragging of every picture by default; the app drags pictures into slots
+        window = webview.create_window("Minimax H3 Workspace (Uncensored)", url, width=1440, height=920, min_size=(1000, 680),
+                                       background_color="#12070a", js_api=api,
+                                       draggable=True)  # pywebview blocks dragging of every picture by default; the app drags pictures into slots
+        api._window = window
+
+        def on_closed():
+            def _exit_worker():
+                try:
+                    srv.shutdown()
+                except Exception:
+                    pass
+                os._exit(0)
+            t = threading.Thread(target=_exit_worker, daemon=True)
+            t.start()
+            threading.Timer(3.0, lambda: os._exit(0)).start()
+
+        window.events.closed += on_closed
         webview.start(gui="edgechromium", private_mode=False,
                       storage_path=str(server.DATA_DIR / "webview"))
     except Exception:
@@ -172,7 +186,11 @@ def main():
         webbrowser.open(url)
         threading.Event().wait()
     finally:
-        srv.shutdown()
+        try:
+            srv.shutdown()
+        except Exception:
+            pass
+        os._exit(0)
 
 
 if __name__ == "__main__":
