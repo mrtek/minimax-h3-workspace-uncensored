@@ -503,11 +503,14 @@ class LlamaServer:
 
     def stop(self):
         if self.alive():
-            self.proc.terminate()
             try:
-                self.proc.wait(10)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
+                self.proc.terminate()
+                self.proc.wait(3)
+            except Exception:
+                try:
+                    self.proc.kill()
+                except Exception:
+                    pass
         self.proc = None
 
     def log_tail(self, n=12):

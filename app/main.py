@@ -48,11 +48,19 @@ class ServerThread(threading.Thread):
 
     def shutdown(self):
         # cleanup also stops the managed ComfyUI process
-        fut = asyncio.run_coroutine_threadsafe(self.runner.cleanup(), self.loop)
         try:
-            fut.result(timeout=30)
+            fut = asyncio.run_coroutine_threadsafe(self.runner.cleanup(), self.loop)
+            try:
+                fut.result(timeout=10)
+            except Exception:
+                pass
+        except Exception:
+            pass
         finally:
-            self.loop.call_soon_threadsafe(self.loop.stop)
+            try:
+                self.loop.call_soon_threadsafe(self.loop.stop)
+            except Exception:
+                pass
 
 
 class JsApi:

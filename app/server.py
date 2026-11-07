@@ -239,13 +239,27 @@ class App:
         self.ws_task = asyncio.create_task(self.comfy_ws_loop())
 
     async def stop(self, _app):
-        self.ws_task.cancel()
+        if hasattr(self, 'ws_task') and self.ws_task:
+            self.ws_task.cancel()
         if self.installer:
             self.installer.cancelled = True
+        for ws in list(self.browsers):
+            try:
+                await ws.close()
+            except Exception:
+                pass
+        self.browsers.clear()
+        tasks = []
         if self.process:
-            await asyncio.to_thread(self.process.stop)
-        await asyncio.to_thread(self.llm.stop)
-        await self.session.close()
+            tasks.append(asyncio.to_thread(self.process.stop))
+        if self.llm:
+            tasks.append(asyncio.to_thread(self.llm.stop))
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            await self.session.close()
+        except Exception:
+            pass
 
     def start_managed(self):
         root = self.comfy_root()
