@@ -348,7 +348,12 @@ class ComfyProcess:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         log = open(self.log_path, "w", encoding="utf-8", errors="replace")
         self.proc = subprocess.Popen(args, cwd=self.root, stdout=log, stderr=subprocess.STDOUT,
-                                     creationflags=CREATE_NO_WINDOW, env=local_env(self.root))
+                                     creationflags=CREATE_NO_WINDOW, env=local_env(self.root),
+                                     close_fds=True)
+        try:
+            log.close()
+        except Exception:
+            pass
 
     @staticmethod
     def kill_orphans(py):

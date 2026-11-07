@@ -509,7 +509,11 @@ class LlamaServer:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         log = open(self.log_path, "w", encoding="utf-8", errors="replace")
         self.proc = subprocess.Popen(args, cwd=self.exe().parent, stdout=log, stderr=subprocess.STDOUT,
-                                     creationflags=engine.CREATE_NO_WINDOW)
+                                     creationflags=engine.CREATE_NO_WINDOW, close_fds=True)
+        try:
+            log.close()
+        except Exception:
+            pass
 
     def stop(self):
         if self.proc:
