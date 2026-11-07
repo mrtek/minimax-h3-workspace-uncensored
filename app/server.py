@@ -489,6 +489,12 @@ class App:
             self.library.add(item)
             items.append(self.public(item))
         await self.broadcast({"type": "done", "prompt_id": pid, "item": items[0], "items": items})
+        if not self.jobs:
+            try:
+                asyncio.create_task(self.comfy_json("POST", "/free", json={"unload_models": True, "free_memory": True},
+                                                    timeout=aiohttp.ClientTimeout(total=5)))
+            except Exception:
+                pass
 
     async def broadcast(self, payload):
         text = json.dumps(payload, ensure_ascii=False)
@@ -2439,6 +2445,10 @@ class App:
 
         async def send(obj):
             await resp.write(f"data: {ag.dumps(obj)}\n\n".encode())
+            try:
+                await resp.drain()
+            except Exception:
+                pass
 
         try:
             if self.jobs:
@@ -2449,9 +2459,22 @@ class App:
             if not self.llm.alive():
                 await send({"type": "status", "text": "Освобождаем видеопамять…"})
                 try:
-                    await self.comfy_json("POST", "/free", json={"unload_models": True, "free_memory": True})
+                    await self.comfy_json("POST", "/free", json={"unload_models": True, "free_memory": True},
+                                          timeout=aiohttp.ClientTimeout(total=4))
                 except Exception:
                     pass
+                for _ in range(6):
+                    await asyncio.sleep(0.5)
+                    try:
+                        status, stats = await self.comfy_json("GET", "/system_stats", timeout=aiohttp.ClientTimeout(total=1.5))
+                        if status == 200 and isinstance(stats, dict) and stats.get("devices"):
+                            dev = stats["devices"][0]
+                            v_free = dev.get("vram_free", 0)
+                            v_total = dev.get("vram_total", 0)
+                            if v_free > 9e9 or (v_total > 0 and (v_total - v_free) < 5e9):
+                                break
+                    except Exception:
+                        break
                 await send({"type": "status", "text": f'Загружаем {ag.LLM_VARIANTS[variant]["title"]}… (до минуты)'})
                 self.llm.start(variant)
                 await ag.wait_ready(self.session, self.llm)

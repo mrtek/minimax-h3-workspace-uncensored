@@ -69,6 +69,14 @@ def init_job_object():
             ]
 
         kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+        kernel32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+        kernel32.SetInformationJobObject.restype = wintypes.BOOL
+        kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+        kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
+
         hJob = kernel32.CreateJobObjectW(None, None)
         if not hJob:
             return
@@ -172,7 +180,7 @@ class ServerThread(threading.Thread):
         try:
             fut = asyncio.run_coroutine_threadsafe(_stop(), self.loop)
             try:
-                fut.result(timeout=4)
+                fut.result(timeout=1.5)
             except Exception:
                 pass
         except Exception:
@@ -250,7 +258,12 @@ class JsApi:
 def hard_exit(code=0):
     try:
         import ctypes
-        ctypes.windll.kernel32.TerminateProcess(ctypes.windll.kernel32.GetCurrentProcess(), code)
+        from ctypes import wintypes
+        k = ctypes.windll.kernel32
+        k.GetCurrentProcess.restype = wintypes.HANDLE
+        k.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        k.TerminateProcess.restype = wintypes.BOOL
+        k.TerminateProcess(k.GetCurrentProcess(), code)
     except Exception:
         pass
     os._exit(code)
@@ -303,8 +316,13 @@ def main():
         api._window = window
 
         def on_closed():
-            # Watchdog: if anything hangs after window is closed, force-kill the process in 5 seconds
-            threading.Timer(5.0, lambda: hard_exit(0)).start()
+            # Watchdog: if anything hangs after window is closed, force-kill the process in 1.5 seconds
+            threading.Timer(1.5, lambda: hard_exit(0)).start()
+            try:
+                srv.shutdown()
+            except Exception:
+                pass
+            hard_exit(0)
 
         window.events.closed += on_closed
         webview.start(gui="edgechromium", private_mode=False,
