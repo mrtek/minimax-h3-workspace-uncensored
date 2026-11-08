@@ -4544,7 +4544,7 @@ function agCtx() {
     ? `Длительность ${V.dur} с (как в «Генерации видео»). Картинки в чате: ${n} — 1-я станет первым кадром, 2-я последним.`
     : AG.target === 'lipsync'
       ? `Длина видео = длине аудио${L.dur0 ? ` (${L.len().toFixed(1)} с)` : ''}. Картинки в чате: ${n} — станут референсами Picture 1, 2…`
-      : `Длительность ${RM[AG.target].S.dur} с (как в разделе «${{ refs: 'Референсы', actor: 'Актёрская игра', action: 'Экшн-сцены' }[AG.target]}»). Картинки в чате: ${n} — станут Picture 1, 2…`;
+      : RM[AG.target] ? `Длительность ${RM[AG.target].S.dur} с (как в разделе «${{ refs: 'Референсы', actor: 'Актёрская игра', action: 'Экшн-сцены' }[AG.target] || ''}»). Картинки в чате: ${n} — станут Picture 1, 2…` : `Длительность 5 с. Картинки в чате: ${n}`;
 }
 function mdLite(s) {
   return esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
@@ -4681,9 +4681,29 @@ $('#agMic').onclick = async () => {
   mr.start();
 };
 
+function agStop() {
+  if (AG.busy) {
+    try { AG.ctrl?.abort(); } catch {}
+    try { AG.reader?.cancel(); } catch {}
+    AG.busy = false;
+    $('#agSend').textContent = 'Отправить';
+    if (AG.msgs.length) {
+      const last = AG.msgs[AG.msgs.length - 1];
+      if (last.role === 'assistant') {
+        last.status = null;
+        if (!last.content && !last.error) last.error = 'Остановлено';
+      }
+    }
+    renderMsgs();
+  }
+}
+
 async function agSend() {
   let text = $('#agIn').value.trim();
-  if (AG.busy) { AG.ctrl?.abort(); return; }
+  if (AG.busy) {
+    agStop();
+    return;
+  }
   const au = AG.audio;
   if (au?.busy) { toast('Подождите, слова из аудио ещё распознаются'); return; }
   if (!text && !AG.att.length && !au) return;
@@ -4698,11 +4718,12 @@ async function agSend() {
   const reply = { role: 'assistant', content: '', status: 'Отправляем…' };
   AG.msgs.push(reply); renderMsgs();
   const el = $('#agMsgs .msg:last-child');
+  const sendChatId = AG.id;
   AG.busy = true; $('#agSend').textContent = 'Стоп'; AG.ctrl = new AbortController();
   const ctx = {
     model: AG.storyFrames && AG.storyModel === 'krea' ? 'flux' : AG.storyModel,
     frames: AG.target === 'story' && AG.storyFrames,
-    duration: AG_IMG.includes(AG.target) ? null : AG.target === 'video' ? V.dur : AG.target === 'lipsync' ? (L.dur0 ? L.len() : null) : RM[AG.target].S.dur,
+    duration: AG_IMG.includes(AG.target) ? null : AG.target === 'video' ? V.dur : AG.target === 'lipsync' ? (L.dur0 ? L.len() : null) : (RM[AG.target]?.S.dur ?? 5),
     loras: (CL.items || []).filter(x => x && x.on && x.file)
   };
   if (AG.target === 'actor') ctx.voice = RM.actor.voice() ? 1 : 0;
@@ -4712,7 +4733,9 @@ async function agSend() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AG.ctrl.signal,
       body: JSON.stringify({ target: AG.target, ctx, think: AG.think, messages: AG.msgs.slice(0, -1).map(m => ({ role: m.role, content: m.content, images: m.images })) }),
     });
-    const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '';
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    AG.reader = reader;
+    let buf = '';
     for (;;) {
       const { value, done } = await reader.read(); if (done) break;
       buf += dec.decode(value, { stream: true });
@@ -4725,13 +4748,23 @@ async function agSend() {
         else if (ev.type === 'skills') reply.skills = ev.names;
         else if (ev.type === 'delta') reply.content += ev.text;
         else if (ev.type === 'error') reply.error = ev.message;
-        renderAssistant(el, reply); $('#agMsgs').scrollTop = 1e9;
+        if (sendChatId === AG.id) {
+          renderAssistant(el, reply); $('#agMsgs').scrollTop = 1e9;
+        }
       }
     }
-  } catch (e) { if (e.name !== 'AbortError') reply.error = e.message; }
-  AG.busy = false; $('#agSend').textContent = 'Отправить'; reply.status = null;
+  } catch (e) {
+    if (e.name !== 'AbortError') reply.error = e.message;
+  } finally {
+    AG.busy = false;
+    AG.reader = null;
+    $('#agSend').textContent = 'Отправить';
+    reply.status = null;
+  }
   if (!reply.content && !reply.error) reply.error = 'Остановлено';
-  renderAssistant(el, reply); agStatus(); saveChat();
+  if (sendChatId === AG.id) {
+    renderAssistant(el, reply); agStatus(); saveChat();
+  }
 }
 $('#agSend').onclick = agSend;
 
@@ -4746,25 +4779,51 @@ async function saveChat() {
 function fmtShort(iso) { return iso ? fmtDate(new Date(iso)) : ''; }
 async function loadChats(autoOpen = false) {
   if (!API) return;
-  const list = await (await fetch('/api/agent/chats')).json();
-  $('#agHist').innerHTML = list.length ? list.map(c => `<div class="ag-h${c.id === AG.id ? ' on' : ''}" data-id="${c.id}">
-      <div><b title="${esc(c.title)}">${esc(c.title)}</b><small>${fmtShort(c.updated)}</small></div>
-      <button title="Удалить чат">✕</button></div>`).join('')
-    : '<div class="ag-hempty">Здесь будут ваши переписки с агентом</div>';
-  if (autoOpen && !AG.id && list.length && !AG.msgs.length) {
-    openChat(list[0].id);
+  try {
+    const res = await fetch('/api/agent/chats');
+    if (!res.ok) return;
+    const list = await res.json();
+    $('#agHist').innerHTML = list.length ? list.map(c => `<div class="ag-h${c.id === AG.id ? ' on' : ''}" data-id="${c.id}">
+        <div><b title="${esc(c.title)}">${esc(c.title)}</b><small>${fmtShort(c.updated)}</small></div>
+        <button title="Удалить чат">✕</button></div>`).join('')
+      : '<div class="ag-hempty">Здесь будут ваши переписки с агентом</div>';
+    if (autoOpen && !AG.id && list.length && !AG.msgs.length) {
+      openChat(list[0].id);
+    }
+  } catch (err) {
+    console.error('Failed to load chats:', err);
   }
 }
 function newChat() {
-  if (AG.busy) AG.ctrl?.abort();
+  agStop();
   AG.id = null; AG.msgs = []; AG.att = []; renderAtt(); renderMsgs(); agCtx(); loadChats(); $('#agIn').focus();
 }
 async function openChat(id) {
-  if (AG.busy) AG.ctrl?.abort();
-  const c = await (await fetch(`/api/agent/chats/${id}`)).json();
-  AG.id = id; AG.msgs = c.messages || []; AG.att = []; renderAtt();
-  const b = $(`#agTarget button[data-t="${c.target}"], #agTarget2 button[data-t="${c.target}"]`); if (b) b.click();
-  renderMsgs(); agCtx(); loadChats();
+  agStop();
+  try {
+    const res = await fetch(`/api/agent/chats/${id}`);
+    if (!res.ok) {
+      toast('Не удалось открыть чат (код ' + res.status + ')');
+      return;
+    }
+    const c = await res.json();
+    AG.id = id;
+    AG.msgs = c.messages || [];
+    AG.att = [];
+    renderAtt();
+    const target = c.target || 'video';
+    AG.target = target;
+    const b = $(`#agTarget button[data-t="${target}"], #agTarget2 button[data-t="${target}"]`);
+    if (b) {
+      $$('#agTarget button, #agTarget2 button').forEach(x => x.classList.toggle('on', x === b));
+    }
+    renderMsgs();
+    agCtx();
+    loadChats();
+  } catch (err) {
+    console.error('Failed to open chat:', err);
+    toast('Ошибка открытия чата: ' + (err.message || err));
+  }
 }
 function confirmBox(title, text, ok, fn) {
   $('#cfTitle').textContent = title; $('#cfText').textContent = text; $('#cfOk').textContent = ok;

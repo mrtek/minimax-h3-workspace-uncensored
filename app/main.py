@@ -141,7 +141,13 @@ def free_port(start=8765):
     for port in range(start, start + 50):
         with socket.socket() as s:
             if s.connect_ex(("127.0.0.1", port)) != 0:
-                return port
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as b:
+                        b.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                        b.bind(("127.0.0.1", port))
+                        return port
+                except OSError:
+                    continue
     raise RuntimeError("no free port")
 
 
@@ -157,9 +163,9 @@ class ServerThread(threading.Thread):
     def run(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        self.runner = web.AppRunner(server.build_app())
+        self.runner = web.AppRunner(server.build_app(), shutdown_timeout=0.1)
         self.loop.run_until_complete(self.runner.setup())
-        self.site = web.TCPSite(self.runner, "127.0.0.1", self.port)
+        self.site = web.TCPSite(self.runner, "127.0.0.1", self.port, reuse_address=True)
         self.loop.run_until_complete(self.site.start())
         self.ready.set()
         self.loop.run_forever()
@@ -168,19 +174,29 @@ class ServerThread(threading.Thread):
         if not self.loop or not self.runner:
             return
         async def _stop():
-            try:
-                if self.site:
+            if self.site:
+                try:
                     await self.site.stop()
-            except Exception:
-                pass
-            try:
-                await self.runner.cleanup()
-            except Exception:
-                pass
+                except Exception:
+                    pass
+                try:
+                    if hasattr(self.site, "_server") and self.site._server:
+                        self.site._server.close()
+                        await asyncio.wait_for(self.site._server.wait_closed(), timeout=0.5)
+                except Exception:
+                    pass
+            if self.runner:
+                try:
+                    await asyncio.wait_for(self.runner.cleanup(), timeout=1.0)
+                except Exception:
+                    pass
+            for task in asyncio.all_tasks(self.loop):
+                task.cancel()
+
         try:
             fut = asyncio.run_coroutine_threadsafe(_stop(), self.loop)
             try:
-                fut.result(timeout=1.5)
+                fut.result(timeout=3.0)
             except Exception:
                 pass
         except Exception:
@@ -269,6 +285,26 @@ def hard_exit(code=0):
     os._exit(code)
 
 
+_exit_lock = threading.Lock()
+_did_exit = False
+
+def do_exit(srv, code=0):
+    global _did_exit
+    with _exit_lock:
+        if _did_exit:
+            return
+        _did_exit = True
+
+    # Watchdog timer: if anything hangs after window is closed, force-kill the process in 3.5 seconds
+    threading.Timer(3.5, lambda: hard_exit(code)).start()
+    try:
+        if srv:
+            srv.shutdown()
+    except Exception:
+        pass
+    hard_exit(code)
+
+
 def main():
     import ctypes
     if sys.platform == "win32":
@@ -316,13 +352,7 @@ def main():
         api._window = window
 
         def on_closed():
-            # Watchdog: if anything hangs after window is closed, force-kill the process in 1.5 seconds
-            threading.Timer(1.5, lambda: hard_exit(0)).start()
-            try:
-                srv.shutdown()
-            except Exception:
-                pass
-            hard_exit(0)
+            threading.Thread(target=lambda: do_exit(srv, 0), daemon=True, name="exit-worker").start()
 
         window.events.closed += on_closed
         webview.start(gui="edgechromium", private_mode=False,
@@ -332,11 +362,7 @@ def main():
         webbrowser.open(url)
         threading.Event().wait()
     finally:
-        try:
-            srv.shutdown()
-        except Exception:
-            pass
-        hard_exit(0)
+        do_exit(srv, 0)
 
 
 if __name__ == "__main__":

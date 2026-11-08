@@ -255,7 +255,10 @@ class App:
         if self.llm:
             tasks.append(asyncio.to_thread(self.llm.stop))
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            try:
+                await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=2.0)
+            except Exception:
+                pass
         try:
             await self.session.close()
         except Exception:
