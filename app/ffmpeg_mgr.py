@@ -83,16 +83,34 @@ def find_ffmpeg(folder):
     return ff, fp
 
 
+def parse_version_tuple(v_str):
+    """Extracts numeric version tuple from version string, e.g. '9.0.2-essentials...' -> (9, 0, 2)."""
+    if not v_str:
+        return (0,)
+    m = re.search(r"(\d+(?:\.\d+)+)", str(v_str))
+    if m:
+        return tuple(map(int, m.group(1).split(".")))
+    digits = re.findall(r"\d+", str(v_str))
+    return tuple(map(int, digits)) if digits else (0,)
+
+
 def get_ffmpeg_version(ffmpeg_exe):
-    """Executes ffmpeg.exe -version and parses the version string."""
+    """Executes ffmpeg.exe -version and parses clean version string."""
     if not ffmpeg_exe or not Path(ffmpeg_exe).is_file():
         return None
     try:
         creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         res = subprocess.run([str(ffmpeg_exe), "-version"], capture_output=True, text=True, timeout=5, creationflags=creationflags)
         first_line = res.stdout.splitlines()[0] if res.stdout else ""
+        m_ver = re.search(r"ffmpeg version\s+[vn]?(\d+(?:\.\d+)+)", first_line, re.I)
+        if m_ver:
+            return m_ver.group(1)
         m = re.search(r"ffmpeg version\s+([^\s]+)", first_line, re.I)
-        return m.group(1) if m else first_line[:30]
+        if m:
+            token = m.group(1)
+            prefix = token.split("-")[0].lstrip("vn")
+            return prefix if prefix and any(c.isdigit() for c in prefix) else token
+        return first_line[:30]
     except Exception:
         return None
 
@@ -121,11 +139,22 @@ def check_ffmpeg_update(current_version=None):
         req = urllib.request.Request(api_url, headers={"User-Agent": "MinimaxH3Workspace"})
         with urllib.request.urlopen(req, timeout=6) as r:
             data = json.loads(r.read().decode("utf-8"))
-            tag = data.get("tag_name", "").lstrip("v")
-            has_update = bool(current_version and tag and current_version.strip() != tag.strip())
-            return {"ok": True, "latest_version": tag, "has_update": has_update, "current_version": current_version}
+            tag = data.get("tag_name", "").lstrip("vn").strip()
+            v_cur = parse_version_tuple(current_version)
+            v_tag = parse_version_tuple(tag)
+            has_update = bool(current_version and tag and v_tag > v_cur)
+            clean_cur = ".".join(map(str, v_cur)) if v_cur != (0,) else (current_version or "")
+            return {
+                "ok": True,
+                "latest_version": tag,
+                "has_update": has_update,
+                "current_version": clean_cur,
+                "url": data.get("html_url") or "https://github.com/GyanD/codexffmpeg/releases",
+            }
     except Exception as e:
-        return {"ok": False, "latest_version": DEFAULT_RELEASE_VERSION, "has_update": False, "error": str(e)}
+        v_cur = parse_version_tuple(current_version)
+        clean_cur = ".".join(map(str, v_cur)) if v_cur != (0,) else (current_version or "")
+        return {"ok": False, "latest_version": DEFAULT_RELEASE_VERSION, "has_update": False, "current_version": clean_cur, "error": str(e)}
 
 
 def probe_media(ffprobe_exe, file_path):
