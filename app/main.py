@@ -257,10 +257,6 @@ class ServerThread(threading.Thread):
             pending = [t for t in asyncio.all_tasks(self.loop) if not t.done()]
             for task in pending:
                 task.cancel()
-            if pending:
-                self.loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-            self.loop.run_until_complete(self.loop.shutdown_asyncgens())
-            self.loop.run_until_complete(self.loop.shutdown_default_executor())
         except Exception:
             self.ready.set()
         finally:
@@ -392,49 +388,41 @@ _did_exit = False
 
 
 def do_exit(srv=None, code=0):
-    global _did_exit, _JOB_HANDLE
+    global _did_exit
     with _exit_lock:
         if _did_exit:
             return
         _did_exit = True
 
-    # Emergency fallback: if anything prevents normal exit within 4 seconds,
-    # force process exit via standard Windows ExitProcess (never TerminateProcess on self)
-    def _emergency_watchdog():
-        time.sleep(4.0)
-        os._exit(code)
-
-    threading.Thread(target=_emergency_watchdog, daemon=True, name="exit-watchdog").start()
-
     # 1. Kill all descendant processes (WebView2 workers, StorageService, ComfyUI, LLM)
+    # using native Win32 Toolhelp snapshot so no Edge or backend worker lingers.
     if sys.platform == "win32":
-        kill_all_descendants(os.getpid())
-
-    # 2. Terminate and close Job Object handle: Windows kernel immediately terminates child processes
-    if sys.platform == "win32" and _JOB_HANDLE:
         try:
-            import ctypes
-            ctypes.windll.kernel32.TerminateJobObject(_JOB_HANDLE, 0)
-            ctypes.windll.kernel32.CloseHandle(_JOB_HANDLE)
+            kill_all_descendants(os.getpid())
         except Exception:
             pass
-        _JOB_HANDLE = None
 
-    # 2. Stop local web server and wait for thread to join
+    # 2. Tell the local web server to close non-blockingly
+    if srv:
+        try:
+            srv.shutdown(timeout=0.3)
+        except Exception:
+            pass
+
+    # 3. Fast, clean, unblockable process termination.
+    # In Windows, ExitProcess unconditionally and immediately terminates all threads,
+    # closes all handles, and triggers kernel-level cleanup without waiting on Python CRT atexit locks.
+    # Never call TerminateJobObject on our own process, as that causes kernel NtClose deadlocks.
     try:
-        if srv:
-            srv.shutdown(timeout=2.0)
-            srv.join(timeout=2.0)
+        os._exit(code)
     except Exception:
         pass
-
-    # 3. Clean exit
-    try:
-        sys.exit(code)
-    except SystemExit:
-        os._exit(code)
-    except Exception:
-        os._exit(code)
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.kernel32.ExitProcess(code)
+        except Exception:
+            pass
 
 
 def main():
@@ -484,11 +472,8 @@ def main():
         api._window = window
 
         def on_closed():
-            # If pywebview fails to return from webview.start() within 5 seconds of window close, force exit
-            def _watchdog():
-                time.sleep(5.0)
-                do_exit(srv, 0)
-            threading.Thread(target=_watchdog, daemon=True, name="close-watchdog").start()
+            # Window was closed by user -> terminate immediately without delay
+            do_exit(srv, 0)
 
         window.events.closed += on_closed
         webview.start(gui="edgechromium", private_mode=False,
