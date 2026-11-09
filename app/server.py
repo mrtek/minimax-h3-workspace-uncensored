@@ -688,8 +688,12 @@ class App:
                                 for k, v in catalog.VARIANTS[role].items()] if len(catalog.VARIANTS[role]) > 1 else []}
                   for role, variant in self.choice().items() if role in needed]
         choice = self.choice()
-        add_modes = {m: round(catalog.plan_size(choice, self.modes() + [m]) - catalog.plan_size(choice, self.modes()))
-                     for m in catalog.MODE_ROLES if m not in self.modes()}
+        def _mode_gb(m):
+            diff = (catalog.plan_size(choice, self.modes() + [m]) - catalog.plan_size(choice, self.modes())) / 1e9
+            gb = round(diff, 1)
+            return int(gb) if gb.is_integer() else gb
+
+        add_modes = {m: _mode_gb(m) for m in catalog.MODE_ROLES if m not in self.modes()}
         return web.json_response({
             **base, "online": True, "modes": self.modes(), "add_modes": add_modes, "hf_mirror": bool(self.config.get("hf_mirror")),
             "offer_modes": [{"mode": m, "gb": add_modes[m]} for m in catalog.OFFER_MODES
