@@ -1638,6 +1638,7 @@ function connectEvents() {
     if (m.type === 'setup') { onSetupEvent(m); return; }
     if (m.type === 'agent_setup') { onAgentSetup(m); return; }
     if (m.type === 'mdl') { onMdl(m); return; }
+    if (m.type === 'ffmpeg_download') { if (window.onFfmpegDownload) window.onFfmpegDownload(m); return; }
     qHandle(m);
     const fn = promptHandlers.get(m.prompt_id);
     if (fn) fn(m);
@@ -7264,22 +7265,130 @@ window.addEventListener('wheel', e => {
 }, { passive: false });
 applyZoom();
 
-/* ---------- MONTAGE: join library clips in a chosen order (ComfyUI does the work, no ffmpeg) ---------- */
+/* ---------- MONTAGE: join library clips with portable FFmpeg (instant stream copy / NVENC / audio) or ComfyUI ---------- */
 (function mountMontage() {
-  const root = $('#view-montage'), MT = { ids: [], drag: null, busy: false };
+  const root = $('#view-montage'), MT = { ids: [], drag: null, busy: false, audioFile: null, ff: null };
   root.innerHTML = `
-    <div class="head"><div><h1>Монтаж</h1><p>Склейте клипы из Библиотеки в один ролик: добавьте их по порядку, при необходимости поменяйте местами и нажмите «Склеить»</p></div></div>
+    <div class="head"><div><h1>Монтаж</h1><p>Склейте клипы из Библиотеки в один ролик: добавьте их по порядку, при необходимости наложите музыку и нажмите «Склеить»</p></div></div>
     <div class="grid"><div class="col">
       <div class="card"><div class="card-h"><h3><span class="n">1</span>Клипы из Библиотеки</h3><span class="hint">нажмите на клип, чтобы добавить</span></div><div class="mt-lib"></div></div>
       <div class="card"><div class="card-h"><h3><span class="n">2</span>Порядок склейки</h3><span class="counter mt-total"></span></div>
         <div class="mt-strip"></div>
-        <div class="hint mt-hint" style="margin-top:8px">Порядок можно менять: перетащите клип или нажмите стрелки под ним. Клипы разного размера приводятся к размеру первого.</div></div>
-    </div><div class="preview">
-      <div class="screen"><div class="frame" style="aspect-ratio:16/9;width:100%"><div class="res mt-empty"><b>Монтаж</b>готовый ролик появится здесь</div><video class="result mt-res" controls loop playsinline hidden></video></div></div>
-      <button class="go mt-go"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>Склеить</button>
+        <div class="hint mt-hint" style="margin-top:8px">Порядок можно менять: перетащите клип или используйте стрелки под ним. Одинаковые клипы склеиваются мгновенно без потери качества.</div>
+      </div>
+
+      <!-- Card 3: Audio / Music -->
+      <div class="card" id="mtAudioCard">
+        <div class="card-h">
+          <h3><span class="n">3</span>Фоновая музыка / Аудио</h3>
+          <span class="hint">необязательно</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <input type="file" id="mtAudioInput" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg" style="display:none">
+            <button type="button" class="btn" id="mtAudioPickBtn">🎵 Выбрать аудиофайл…</button>
+            <span id="mtAudioName" class="hint" style="word-break:break-all">Аудио не выбрано</span>
+            <button type="button" class="btn" id="mtAudioClearBtn" style="display:none;padding:2px 8px;font-size:11px" title="Убрать аудио">✕</button>
+          </div>
+          <div id="mtAudioOptions" style="display:none;flex-direction:column;gap:8px;padding:10px 12px;background:var(--surface-2);border-radius:8px;border:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <label style="font-size:12px;cursor:pointer"><input type="checkbox" id="mtAudioLoop" checked style="vertical-align:middle;margin-right:6px">Зациклить музыку, если видео длиннее</label>
+              <div style="display:flex;align-items:center;gap:6px">
+                <label style="font-size:12px">Режим звука:</label>
+                <select id="mtAudioMode" style="padding:2px 8px;font-size:12px;border-radius:4px;background:var(--surface-3);color:inherit;border:1px solid var(--border)">
+                  <option value="mix" selected>Смешать с клипами</option>
+                  <option value="replace">Заменить звук видео</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+              <label style="font-size:12px;display:flex;align-items:center;gap:6px">
+                Громкость музыки:
+                <input type="range" id="mtMusicVol" min="10" max="100" value="80" style="width:90px">
+                <span id="mtMusicVolVal" style="font-size:11px;min-width:30px">80%</span>
+              </label>
+              <label style="font-size:12px;display:flex;align-items:center;gap:6px" id="mtVideoVolWrap">
+                Звук клипов:
+                <input type="range" id="mtVideoVol" min="0" max="100" value="100" style="width:90px">
+                <span id="mtVideoVolVal" style="font-size:11px;min-width:30px">100%</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 4: FFmpeg Manager -->
+      <div class="card" id="mtFfCard">
+        <div class="card-h">
+          <h3><span class="n">4</span>FFmpeg для быстрого монтажа</h3>
+          <span class="badge" id="mtFfBadge">Проверка...</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="font-size:12.5px;color:var(--dim)">
+            <div id="mtFfStatusText">Проверка наличия портативного FFmpeg...</div>
+            <div style="margin-top:4px;font-size:11.5px;word-break:break-all">
+              <b>Папка:</b> <code id="mtFfPath" style="color:var(--pri)"></code>
+              <span id="mtFfPathBadge" style="font-size:11px;color:var(--muted);margin-left:4px"></span>
+            </div>
+          </div>
+
+          <div id="mtFfActions" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+            <button type="button" class="btn pri" id="mtFfDownloadBtn" style="display:none">⚡ Скачать FFmpeg (~100 МБ)</button>
+            <button type="button" class="btn" id="mtFfCheckUpdBtn" style="display:none">🔄 Проверить обновления / Обновить</button>
+            <button type="button" class="btn" id="mtFfOpenFolderBtn">📁 Папка FFmpeg</button>
+            <button type="button" class="btn" id="mtFfSetFolderBtn">⚙ Указать папку</button>
+            <button type="button" class="btn" id="mtFfResetFolderBtn" style="display:none" title="Вернуть стандартную папку g:\MinimaxH3Workspace\ffmpeg\">Сбросить по умолчанию</button>
+          </div>
+
+          <!-- Download / Update Progress Box -->
+          <div id="mtFfProgressBox" style="display:none;padding:10px 12px;background:var(--surface-2);border-radius:8px;border:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px">
+              <span id="mtFfProgLabel" style="font-weight:600">Скачивание FFmpeg...</span>
+              <span id="mtFfProgStats" style="font-size:11px;color:var(--dim)">0 МБ / 0 МБ (0%)</span>
+            </div>
+            <div style="width:100%;height:8px;background:var(--surface-3);border-radius:4px;overflow:hidden">
+              <div id="mtFfProgBar" style="width:0%;height:100%;background:var(--pri);transition:width 0.2s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+              <span id="mtFfProgSpeed" style="font-size:11px;color:var(--dim)">0 МБ/с</span>
+              <button type="button" class="btn" id="mtFfCancelBtn" style="padding:2px 10px;font-size:11px">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview & Controls -->
+    <div class="preview">
+      <div class="screen">
+        <div class="frame" style="aspect-ratio:16/9;width:100%">
+          <div class="res mt-empty"><b>Монтаж</b>готовый ролик появится здесь</div>
+          <video class="result mt-res" controls loop playsinline hidden></video>
+        </div>
+      </div>
+
+      <div id="mtEnginePill" style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);margin:4px 0 8px 0">
+        <span id="mtEngineDot" style="width:8px;height:8px;border-radius:50%;background:#4ade80"></span>
+        <span id="mtEngineText">Быстрый FFmpeg</span>
+      </div>
+
+      <button class="go mt-go">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>
+        <span id="mtGoText">Склеить</span>
+      </button>
+
+      <!-- Montage progress bar -->
+      <div id="mtJoinProgressBox" style="display:none;width:100%;margin-top:10px">
+        <div style="width:100%;height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden">
+          <div id="mtJoinProgressBar" style="width:0%;height:100%;background:var(--pri);transition:width 0.2s"></div>
+        </div>
+      </div>
+
       <div class="status mt-status"></div>
     </div></div>`;
+
   const lenTxt = it => it.len ? it.len.toFixed(1).replace('.0', '') + ' с' : '';
+
   function render() {
     MT.ids = MT.ids.filter(id => byId(id) && !byId(id).missing);
     const vids = LIB.filter(it => it.kind !== 'image' && !it.missing && it.url);
@@ -7290,7 +7399,9 @@ applyZoom();
     const total = MT.ids.reduce((a, id) => a + (byId(id).len || 0), 0);
     $('.mt-total', root).textContent = MT.ids.length ? `${MT.ids.length} клипов · ≈ ${Math.round(total)} с` : '';
   }
+
   const move = (i, j) => { if (j < 0 || j >= MT.ids.length) return; const [x] = MT.ids.splice(i, 1); MT.ids.splice(j, 0, x); render(); };
+
   root.addEventListener('click', e => {
     const c = e.target.closest('.mt-card'); if (c) { MT.ids.push(c.dataset.id); render(); return; }
     const it = e.target.closest('.mt-item'); if (!it) return; const i = +it.dataset.i;
@@ -7302,32 +7413,267 @@ applyZoom();
   root.addEventListener('drop', e => { const it = e.target.closest('.mt-item'); if (!it || MT.drag == null) return; e.preventDefault(); const from = MT.drag; MT.drag = null; move(from, +it.dataset.i); });
   root.addEventListener('dragend', () => { MT.drag = null; $$('.mt-item', root).forEach(x => x.classList.remove('over')); });
 
+  /* ---------- Audio picker handling ---------- */
+  const audioIn = $('#mtAudioInput', root);
+  $('#mtAudioPickBtn', root).onclick = () => audioIn.click();
+  audioIn.onchange = e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    MT.audioFile = file;
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    $('#mtAudioName', root).textContent = `${file.name} (${mb} МБ)`;
+    $('#mtAudioOptions', root).style.display = 'flex';
+    $('#mtAudioClearBtn', root).style.display = 'inline-block';
+  };
+  $('#mtAudioClearBtn', root).onclick = () => {
+    MT.audioFile = null;
+    audioIn.value = '';
+    $('#mtAudioName', root).textContent = 'Аудио не выбрано';
+    $('#mtAudioOptions', root).style.display = 'none';
+    $('#mtAudioClearBtn', root).style.display = 'none';
+  };
+  $('#mtMusicVol', root).oninput = e => { $('#mtMusicVolVal', root).textContent = e.target.value + '%'; };
+  $('#mtVideoVol', root).oninput = e => { $('#mtVideoVolVal', root).textContent = e.target.value + '%'; };
+  $('#mtAudioMode', root).onchange = e => {
+    $('#mtVideoVolWrap', root).style.display = e.target.value === 'replace' ? 'none' : 'flex';
+  };
+
+  /* ---------- FFmpeg Management ---------- */
+  async function refreshFfStatus() {
+    try {
+      const res = await fetch('/api/ffmpeg/status');
+      const st = await res.json();
+      MT.ff = st;
+      $('#mtFfPath', root).textContent = st.dir || '—';
+      $('#mtFfPathBadge', root).textContent = st.is_default ? '(по умолчанию)' : '(своя папка)';
+      $('#mtFfResetFolderBtn', root).style.display = st.is_default ? 'none' : 'inline-block';
+
+      if (st.installed) {
+        $('#mtFfBadge', root).innerHTML = `<span style="background:#166534;color:#4ade80;padding:2px 7px;border-radius:99px">✓ Готов (${esc(st.version || 'v9')})</span>`;
+        $('#mtFfStatusText', root).textContent = `Установлен портативный FFmpeg (${st.version || ''}). Быстрая склейка без потери качества и наложение музыки активны.`;
+        $('#mtFfDownloadBtn', root).style.display = 'none';
+        $('#mtFfCheckUpdBtn', root).style.display = 'inline-block';
+        $('#mtEngineDot', root).style.background = '#4ade80';
+        $('#mtEngineText', root).textContent = 'Режим: Быстрый FFmpeg (без потерь качества)';
+        $('#mtGoText', root).textContent = '⚡ Склеить (FFmpeg)';
+      } else {
+        $('#mtFfBadge', root).innerHTML = `<span style="background:#7c2d12;color:#fb923c;padding:2px 7px;border-radius:99px">⚠ Не установлен</span>`;
+        $('#mtFfStatusText', root).textContent = 'Портативный FFmpeg не установлен в папке проекта. Скачайте его в один клик (~100 МБ) для мгновенной склейки и поддержки аудио, либо используйте медленный режим ComfyUI.';
+        $('#mtFfDownloadBtn', root).style.display = 'inline-block';
+        $('#mtFfCheckUpdBtn', root).style.display = 'none';
+        $('#mtEngineDot', root).style.background = '#f59e0b';
+        $('#mtEngineText', root).textContent = 'Режим: ComfyUI (медленнее, без аудиодорожки)';
+        $('#mtGoText', root).textContent = 'Склеить (через ComfyUI)';
+      }
+
+      if (st.downloading && st.download_state) {
+        updateFfProgress(st.download_state);
+      } else if (!st.downloading) {
+        $('#mtFfProgressBox', root).style.display = 'none';
+      }
+    } catch (e) {
+      $('#mtFfStatusText', root).textContent = 'Ошибка проверки FFmpeg: ' + e.message;
+    }
+  }
+
+  function updateFfProgress(ev) {
+    const box = $('#mtFfProgressBox', root);
+    box.style.display = 'block';
+    if (ev.status === 'downloading') {
+      $('#mtFfProgLabel', root).textContent = 'Скачивание FFmpeg...';
+      const curMb = (ev.bytes / (1024 * 1024)).toFixed(1);
+      const totMb = (ev.total / (1024 * 1024)).toFixed(1);
+      $('#mtFfProgStats', root).textContent = `${curMb} МБ / ${totMb} МБ (${ev.pct}%)`;
+      $('#mtFfProgBar', root).style.width = ev.pct + '%';
+      $('#mtFfProgSpeed', root).textContent = (ev.speed_mb || 0) + ' МБ/с';
+    } else if (ev.status === 'extracting') {
+      $('#mtFfProgLabel', root).textContent = 'Распаковка архива и установка...';
+      $('#mtFfProgStats', root).textContent = 'Архив скачан';
+      $('#mtFfProgBar', root).style.width = '100%';
+      $('#mtFfProgSpeed', root).textContent = '';
+    } else if (ev.status === 'done') {
+      box.style.display = 'none';
+      toast('✓ Портативный FFmpeg успешно установлен!');
+      refreshFfStatus();
+    } else if (ev.status === 'cancelled') {
+      box.style.display = 'none';
+      toast('Загрузка FFmpeg отменена');
+      refreshFfStatus();
+    } else if (ev.status === 'error') {
+      box.style.display = 'none';
+      toast('Ошибка: ' + ev.error);
+      refreshFfStatus();
+    }
+  }
+
+  window.onFfmpegDownload = ev => {
+    updateFfProgress(ev);
+  };
+
+  $('#mtFfDownloadBtn', root).onclick = async () => {
+    $('#mtFfProgressBox', root).style.display = 'block';
+    $('#mtFfProgLabel', root).textContent = 'Запуск загрузки...';
+    $('#mtFfProgBar', root).style.width = '5%';
+    try {
+      const r = await fetch('/api/ffmpeg/download', { method: 'POST' });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || 'Ошибка старта загрузки');
+    } catch (e) {
+      toast('Ошибка: ' + e.message);
+      $('#mtFfProgressBox', root).style.display = 'none';
+    }
+  };
+
+  $('#mtFfCancelBtn', root).onclick = async () => {
+    try {
+      await fetch('/api/ffmpeg/cancel', { method: 'POST' });
+    } catch {}
+  };
+
+  $('#mtFfCheckUpdBtn', root).onclick = async () => {
+    toast('Проверяем обновления FFmpeg...');
+    try {
+      const r = await fetch('/api/ffmpeg/check-update', { method: 'POST' });
+      const j = await r.json();
+      if (j.has_update) {
+        confirmBox('Доступно обновление FFmpeg', `Найдена новая версия FFmpeg (${j.latest_version}). Текущая: ${j.current_version}. Обновить сейчас?`, 'Обновить', () => {
+          $('#mtFfDownloadBtn', root).click();
+        });
+      } else {
+        toast(`У вас установлена актуальная версия FFmpeg (${j.current_version || ''})`);
+      }
+    } catch (e) {
+      toast('Не удалось проверить обновления: ' + e.message);
+    }
+  };
+
+  $('#mtFfOpenFolderBtn', root).onclick = async () => {
+    try {
+      await fetch('/api/ffmpeg/open-folder', { method: 'POST' });
+    } catch (e) {
+      toast('Ошибка: ' + e.message);
+    }
+  };
+
+  $('#mtFfSetFolderBtn', root).onclick = async () => {
+    const cur = MT.ff?.dir || '';
+    const folder = prompt('Укажите папку для портативного FFmpeg:', cur);
+    if (folder && folder.trim() && folder.trim() !== cur) {
+      try {
+        const r = await fetch('/api/ffmpeg/set-folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder: folder.trim() })
+        });
+        const st = await r.json();
+        toast('Папка FFmpeg обновлена');
+        refreshFfStatus();
+      } catch (e) {
+        toast('Ошибка: ' + e.message);
+      }
+    }
+  };
+
+  $('#mtFfResetFolderBtn', root).onclick = async () => {
+    try {
+      await fetch('/api/ffmpeg/set-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true })
+      });
+      toast('Сброшено на папку по умолчанию');
+      refreshFfStatus();
+    } catch (e) {
+      toast('Ошибка: ' + e.message);
+    }
+  };
+
+  /* ---------- MONTAGE EXECUTION ---------- */
   $('.mt-go', root).onclick = async () => {
     const st = $('.mt-status', root);
+    const progBox = $('#mtJoinProgressBox', root);
+    const progBar = $('#mtJoinProgressBar', root);
+
     if (MT.busy) return;
     if (MT.ids.length < 2) { st.textContent = 'Добавьте хотя бы два клипа'; return; }
-    MT.busy = true; $('.mt-go', root).disabled = true; st.textContent = 'Отправляем клипы в ComfyUI…';
+
+    MT.busy = true;
+    $('.mt-go', root).disabled = true;
+    progBox.style.display = 'block';
+    progBar.style.width = '5%';
+
+    const isFf = MT.ff && MT.ff.installed;
+    st.textContent = isFf ? 'Подготовка FFmpeg монтажа…' : 'Отправляем клипы в ComfyUI…';
+
     try {
-      const fd = new FormData(); fd.append('ids', JSON.stringify(MT.ids));
+      const fd = new FormData();
+      fd.append('ids', JSON.stringify(MT.ids));
+      if (MT.audioFile) {
+        fd.append('audio', MT.audioFile);
+        fd.append('audio_loop', $('#mtAudioLoop', root).checked ? 'true' : 'false');
+        fd.append('audio_mode', $('#mtAudioMode', root).value);
+        fd.append('music_vol', ($('#mtMusicVol', root).value / 100).toFixed(2));
+        fd.append('video_vol', ($('#mtVideoVol', root).value / 100).toFixed(2));
+      }
+      if (!isFf) {
+        fd.append('force_comfy', '1');
+      }
+
       const r = await fetch('/api/montage', { method: 'POST', body: fd });
-      const txt = await r.text(); let res; try { res = JSON.parse(txt); } catch { res = { error: txt }; }
+      const txt = await r.text();
+      let res;
+      try { res = JSON.parse(txt); } catch { res = { error: txt }; }
       if (!r.ok) throw new Error(res.error || r.statusText);
-      qAdd(res.prompt_id, 'montage', `Монтаж: ${MT.ids.length} клипов`);
-      st.textContent = 'Склеиваем…';
+
+      const qTitle = isFf ? `Монтаж FFmpeg: ${MT.ids.length} клипов` : `Монтаж: ${MT.ids.length} клипов`;
+      qAdd(res.prompt_id, 'montage', qTitle);
+      st.textContent = isFf ? 'Склеиваем через FFmpeg…' : 'Склеиваем в ComfyUI…';
+
       onPrompt(res.prompt_id, ev => {
         if (ev.prompt_id !== res.prompt_id) return;
-        if (ev.type === 'done') {
-          offPrompt(res.prompt_id); MT.busy = false; $('.mt-go', root).disabled = false;
-          const v = $('.mt-res', root); v.src = ev.item.url; v.hidden = false; v.muted = true; v.play().catch(() => {}); $('.mt-empty', root).hidden = true;
+
+        if (ev.type === 'progress') {
+          const val = ev.value || 0;
+          progBar.style.width = val + '%';
+          st.textContent = ev.text || `Монтаж: ${val}%`;
+        } else if (ev.type === 'done') {
+          offPrompt(res.prompt_id);
+          MT.busy = false;
+          $('.mt-go', root).disabled = false;
+          progBox.style.display = 'none';
+          const v = $('.mt-res', root);
+          v.src = ev.item.url;
+          v.hidden = false;
+          v.muted = false;
+          v.play().catch(() => {});
+          $('.mt-empty', root).hidden = true;
           st.innerHTML = 'Готово: ролик в Библиотеке. <button class="btn pri" id="mtUp" type="button" style="padding:4px 12px;font-size:12px" title="Увеличить разрешение (долго)">Увеличить</button>';
           $('#mtUp', root).onclick = () => openUpscale(byId(ev.item.id) || normItem(ev.item));
-        } else if (ev.type === 'error') { offPrompt(res.prompt_id); MT.busy = false; $('.mt-go', root).disabled = false; st.textContent = 'Ошибка ComfyUI: ' + ev.message; }
-        else if (ev.type === 'interrupted') { offPrompt(res.prompt_id); MT.busy = false; $('.mt-go', root).disabled = false; st.textContent = 'Остановлено'; }
+        } else if (ev.type === 'error') {
+          offPrompt(res.prompt_id);
+          MT.busy = false;
+          $('.mt-go', root).disabled = false;
+          progBox.style.display = 'none';
+          st.textContent = 'Ошибка: ' + ev.message;
+        } else if (ev.type === 'interrupted') {
+          offPrompt(res.prompt_id);
+          MT.busy = false;
+          $('.mt-go', root).disabled = false;
+          progBox.style.display = 'none';
+          st.textContent = 'Остановлено';
+        }
       });
-    } catch (err) { MT.busy = false; $('.mt-go', root).disabled = false; st.textContent = 'Ошибка: ' + err.message; }
+    } catch (err) {
+      MT.busy = false;
+      $('.mt-go', root).disabled = false;
+      progBox.style.display = 'none';
+      st.textContent = 'Ошибка: ' + err.message;
+    }
   };
+
   IMG_PANELS.push(render);
   render();
+  refreshFfStatus();
 })();
 ['#vPrompt', '#lPrompt', '.kr-prompt', '.qw-prompt'].forEach(sel => $$(sel).forEach(attachRu));   // every prompt field gets «Показать по-русски»
 

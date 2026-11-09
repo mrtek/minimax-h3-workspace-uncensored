@@ -34,6 +34,7 @@ import catalog
 import cloud
 import customwf
 import engine
+import ffmpeg_mgr
 import monitor
 import report
 import speech
@@ -166,6 +167,26 @@ class App:
         self.rh_models = None  # model paths found in the user's RunningHub workflow
         self.monitor = monitor.Monitor()
         self.recent_errors = []  # last problems, for the report to the author
+        self.loop = None
+        self.ffmpeg_download_task = None
+        self.ffmpeg_download_cancel = None
+        self.ffmpeg_download_state = None
+
+    def workspace_root(self):
+        if self.config.get("install_dir"):
+            return Path(self.config.get("install_dir"))
+        if self.comfy_root():
+            return self.comfy_root().parent
+        return Path(engine.default_install_dir())
+
+    def ffmpeg_dir(self):
+        return ffmpeg_mgr.get_ffmpeg_dir(self.config, self.workspace_root())
+
+    def ffmpeg_status(self):
+        st = ffmpeg_mgr.get_ffmpeg_status(self.config, self.workspace_root())
+        st["downloading"] = bool(self.ffmpeg_download_task and not self.ffmpeg_download_task.done())
+        st["download_state"] = self.ffmpeg_download_state
+        return st
 
     def llm_root(self):
         if self.config.get("llm_dir"):
@@ -249,6 +270,7 @@ class App:
                 time.sleep(1)
 
     async def start(self, _app):
+        self.loop = asyncio.get_running_loop()
         if sys.platform == "win32":
             import threading
             threading.Thread(target=self.awake_loop, daemon=True, name="keep-awake").start()
@@ -2238,11 +2260,86 @@ class App:
                 raise web.HTTPBadRequest(text="Не удалось найти один из клипов: он удалён с диска?")
             return await r.read()
 
+    async def h_ffmpeg_status(self, _req):
+        return web.json_response(self.ffmpeg_status())
+
+    async def h_ffmpeg_download(self, _req):
+        if self.ffmpeg_download_task and not self.ffmpeg_download_task.done():
+            return web.json_response({"ok": False, "error": "Загрузка уже выполняется"})
+        target_dir = self.ffmpeg_dir()
+        cancel_event = threading.Event()
+        self.ffmpeg_download_cancel = cancel_event
+        self.ffmpeg_download_state = {"status": "starting", "pct": 0, "bytes": 0, "total": 0, "speed_mb": 0.0}
+
+        def prog_cb(info):
+            self.ffmpeg_download_state = info
+            if self.loop and self.loop.is_running():
+                asyncio.run_coroutine_threadsafe(
+                    self.broadcast({"type": "ffmpeg_download", **info}),
+                    self.loop
+                )
+
+        async def run_dl():
+            try:
+                res = await asyncio.to_thread(ffmpeg_mgr.download_and_extract_ffmpeg_sync, target_dir, prog_cb, cancel_event)
+                if res.get("ok"):
+                    self.ffmpeg_download_state = {"status": "done", "pct": 100, "version": res.get("version")}
+                    await self.broadcast({"type": "ffmpeg_download", "status": "done", "pct": 100, "version": res.get("version")})
+                else:
+                    self.ffmpeg_download_state = {"status": "error", "error": res.get("error")}
+                    await self.broadcast({"type": "ffmpeg_download", "status": "error", "error": res.get("error")})
+            except Exception as e:
+                self.ffmpeg_download_state = {"status": "error", "error": str(e)}
+                await self.broadcast({"type": "ffmpeg_download", "status": "error", "error": str(e)})
+
+        self.ffmpeg_download_task = asyncio.create_task(run_dl())
+        return web.json_response({"ok": True, "status": "started"})
+
+    async def h_ffmpeg_cancel(self, _req):
+        if self.ffmpeg_download_cancel:
+            self.ffmpeg_download_cancel.set()
+        if self.ffmpeg_download_task:
+            self.ffmpeg_download_task.cancel()
+        self.ffmpeg_download_state = {"status": "cancelled"}
+        await self.broadcast({"type": "ffmpeg_download", "status": "cancelled"})
+        return web.json_response({"ok": True})
+
+    async def h_ffmpeg_check_update(self, _req):
+        st = self.ffmpeg_status()
+        res = await asyncio.to_thread(ffmpeg_mgr.check_ffmpeg_update, st.get("version"))
+        return web.json_response(res)
+
+    async def h_ffmpeg_set_folder(self, req):
+        try:
+            body = await req.json()
+        except Exception:
+            body = {}
+        if body.get("reset"):
+            self.config.update(ffmpeg_dir=None)
+        elif body.get("folder"):
+            folder = str(Path(body["folder"].strip()))
+            Path(folder).mkdir(parents=True, exist_ok=True)
+            self.config.update(ffmpeg_dir=folder)
+        return web.json_response(self.ffmpeg_status())
+
+    async def h_ffmpeg_open_folder(self, _req):
+        folder = self.ffmpeg_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer.exe", str(folder)])
+        return web.json_response({"ok": True, "path": str(folder)})
+
     async def h_montage(self, req):
-        """Join library clips in the given order with ComfyUI (no ffmpeg in the app)."""
+        """Join library clips in the given order with portable FFmpeg if installed, or ComfyUI."""
         form = {}
+        audio_bytes = None
+        audio_filename = None
         async for field in await req.multipart():
-            form[field.name] = await field.text()
+            if field.name == "audio":
+                audio_filename = field.filename
+                audio_bytes = await field.read()
+            else:
+                form[field.name] = await field.text()
         try:
             ids = [i for i in json.loads(form.get("ids") or "[]") if isinstance(i, str)][:30]
         except ValueError:
@@ -2250,6 +2347,113 @@ class App:
         items = [self.library.get(i) for i in ids]
         if len(items) < 2 or any(not it or it.get("kind") == "image" for it in items):
             raise web.HTTPBadRequest(text="Добавьте хотя бы два видео")
+
+        ff_status = self.ffmpeg_status()
+        use_ffmpeg = ff_status.get("installed") and not form.get("force_comfy")
+
+        if use_ffmpeg:
+            pid = "ffm_" + uuid.uuid4().hex[:10]
+            clip_paths = []
+            temp_clips = []
+            for it in items:
+                p = self.file_path(it)
+                if p and p.exists():
+                    clip_paths.append(p)
+                else:
+                    data = await self.item_bytes(it)
+                    tmp = Path(tempfile.gettempdir()) / f"h3s_clip_{uuid.uuid4().hex[:8]}.mp4"
+                    tmp.write_bytes(data)
+                    clip_paths.append(tmp)
+                    temp_clips.append(tmp)
+
+            temp_audio_path = None
+            if audio_bytes and len(audio_bytes) > 0:
+                temp_audio_path = Path(tempfile.gettempdir()) / f"h3s_mus_{uuid.uuid4().hex[:8]}_{audio_filename or 'audio.mp3'}"
+                temp_audio_path.write_bytes(audio_bytes)
+
+            audio_opts = {
+                "loop": form.get("audio_loop") != "false",
+                "music_vol": float(form.get("music_vol") or 0.8),
+                "video_vol": float(form.get("video_vol") or 1.0),
+                "mode": form.get("audio_mode") or "mix"
+            }
+
+            out_filename = f"montage_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:4]}.mp4"
+            dest_dir = self.results_dir()
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_path = dest_dir / out_filename
+
+            cancel_ev = threading.Event()
+
+            def prog_cb(pct, text=""):
+                if self.loop and self.loop.is_running():
+                    asyncio.run_coroutine_threadsafe(
+                        self.broadcast({"type": "progress", "prompt_id": pid, "value": pct, "max": 100, "text": text}),
+                        self.loop
+                    )
+
+            async def run_montage_bg():
+                try:
+                    await self.broadcast({"type": "progress", "prompt_id": pid, "value": 10, "max": 100, "text": "Подготовка FFmpeg..."})
+                    res = await asyncio.to_thread(
+                        ffmpeg_mgr.run_concat,
+                        ff_status["ffmpeg_path"],
+                        ff_status["ffprobe_path"],
+                        clip_paths,
+                        dest_path,
+                        temp_audio_path,
+                        audio_opts,
+                        prog_cb,
+                        cancel_ev
+                    )
+                    if not res.get("ok"):
+                        raise RuntimeError(res.get("error", "Ошибка монтажа"))
+
+                    total = sum(float(it.get("len") or 0) for it in items)
+                    first_it = items[0]
+                    mode_sub = f"{len(items)} клипов (FFmpeg copy)" if res.get("fast_copy") else f"{len(items)} клипов (FFmpeg)"
+                    new_item = {
+                        "id": uuid.uuid4().hex[:12],
+                        "prompt_id": pid,
+                        "date": datetime.now().isoformat(timespec="seconds"),
+                        "fav": False,
+                        "kind": "video",
+                        "mode": "montage",
+                        "sub": mode_sub,
+                        "prompt": f"Монтаж {len(items)} клипов",
+                        "aspect": first_it.get("aspect", ""),
+                        "q": "",
+                        "len": round(res.get("duration") or total, 1),
+                        "res": res.get("res", first_it.get("res", "")),
+                        "seed": 0,
+                        "ext": "mp4",
+                        "file": {"filename": out_filename, "type": "local", "path": str(dest_path)},
+                        "local": str(dest_path)
+                    }
+                    self.library.add(new_item)
+                    pub = self.public(new_item)
+                    await self.broadcast({"type": "done", "prompt_id": pid, "item": pub, "items": [pub]})
+                except Exception as e:
+                    await self.broadcast({"type": "error", "prompt_id": pid, "message": f"Ошибка FFmpeg: {e}"})
+                finally:
+                    if temp_audio_path and temp_audio_path.exists():
+                        try:
+                            temp_audio_path.unlink()
+                        except OSError:
+                            pass
+                    for tc in temp_clips:
+                        if tc.exists():
+                            try:
+                                tc.unlink()
+                            except OSError:
+                                pass
+
+            t = asyncio.create_task(run_montage_bg())
+            self._bg.add(t)
+            t.add_done_callback(lambda task: self._bg.discard(task))
+            return web.json_response({"prompt_id": pid, "mode": "ffmpeg"})
+
+        # ComfyUI fallback
         if self.rh():
             raise web.HTTPBadRequest(text="Монтаж работает только с локальным ComfyUI, не с облаком.")
         names, sizes = [], []
@@ -3234,6 +3438,12 @@ def build_app(comfy_override=None):
         web.post("/api/generate/actor", state.h_generate_actor),
         web.post("/api/generate/swap", state.h_generate_swap),
         web.post("/api/generate/long", state.h_generate_long),
+        web.get("/api/ffmpeg/status", state.h_ffmpeg_status),
+        web.post("/api/ffmpeg/download", state.h_ffmpeg_download),
+        web.post("/api/ffmpeg/cancel", state.h_ffmpeg_cancel),
+        web.post("/api/ffmpeg/check-update", state.h_ffmpeg_check_update),
+        web.post("/api/ffmpeg/set-folder", state.h_ffmpeg_set_folder),
+        web.post("/api/ffmpeg/open-folder", state.h_ffmpeg_open_folder),
         web.post("/api/montage", state.h_montage),
         web.get("/api/long/state", state.h_long_state),
         web.get("/api/long/project", state.h_long_project),
