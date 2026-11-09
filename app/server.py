@@ -1649,7 +1649,8 @@ class App:
                 "len": 0.0, "res": f"{width}×{height}", "seed": seed, **lab})
         if engine == "qwen":
             await self.need_models("qwen")
-            graph, stages = wf.qwen_t2i_graph(self.model_names, prompt, form.get("negative", "").strip()[:600], width, height, seed)
+            graph, stages = wf.qwen_t2i_graph(self.model_names, prompt, form.get("negative", "").strip()[:600], width, height, seed,
+                                              extra_loras=self.qwen_loras(form))
             return await self.queue(graph, stages, {
                 "mode": "krea", "sub": "Картинка (Qwen 2.1)", "prompt": prompt, "aspect": aspect, "q": "1K",
                 "len": 0.0, "res": f"{width}×{height}", "seed": seed, **lab})
@@ -1677,8 +1678,12 @@ class App:
             if len(frames) not in wf.FRAME_COLS:
                 raise web.HTTPBadRequest(text=f"Нужно 2, 3, 4, 6, 8 или 9 кадров, а в описании их {len(frames)}. Напишите каждый кадр с новой строки: «1: ...», «2: ...».")
             refs = [x for x in ([image] if image else []) + list(form.get("_extra") or [])]
-            build = wf.qwen_frames_graph if use_qwen else wf.flux_frames_graph
-            graph, stages, titles = build(self.model_names, refs, frames, seed, size=round_size(form) or wf.FRAME_SIZE, line=form.get("line", "white"))
+            if use_qwen:
+                graph, stages, titles = wf.qwen_frames_graph(self.model_names, refs, frames, seed, size=round_size(form) or wf.FRAME_SIZE,
+                                                             line=form.get("line", "white"), extra_loras=self.qwen_loras(form))
+            else:
+                graph, stages, titles = wf.flux_frames_graph(self.model_names, refs, frames, seed, size=round_size(form) or wf.FRAME_SIZE,
+                                                             line=form.get("line", "white"))
             return await self.queue(graph, stages, {
                 "mode": "qwen", "sub": "Раскадровка по кадрам", "prompt": form.get("prompt", "").strip(), "aspect": "",
                 "q": "", "len": 0.0, "res": "", "seed": seed}, titles=titles)
@@ -1693,7 +1698,7 @@ class App:
             if flux:
                 graph, stages = wf.flux_story_graph(self.model_names, refs, prompt, seed, sz)
             else:
-                graph, stages = wf.qwen_story_graph(self.model_names, refs, prompt, seed, sz)
+                graph, stages = wf.qwen_story_graph(self.model_names, refs, prompt, seed, sz, extra_loras=self.qwen_loras(form))
             return await self.queue(graph, stages, {
                 "mode": "qwen", "sub": "Раскадровка по картинкам", "prompt": prompt, "aspect": "",
                 "q": "", "len": 0.0, "res": "%d×%d" % wf.STORY_SIZE, "seed": seed})
@@ -1710,7 +1715,8 @@ class App:
             panels = 6 if form.get("panels") == "6" else 4
             graph, stages, prompt = wf.qwen_sheet_graph(
                 self.model_names, image, seed, headless=form.get("headless", "1") != "0",
-                background=form.get("background", "grey"), marks=form.get("marks", "")[:300], panels=panels)
+                background=form.get("background", "grey"), marks=form.get("marks", "")[:300], panels=panels,
+                extra_loras=self.qwen_loras(form))
             sub, res = "Лист персонажа", "%d×%d" % (wf.SHEET6_SIZE if panels == 6 else wf.SHEET_SIZE)
             prompt = "Лист персонажа" + (" (6 панелей)" if panels == 6 else "") + (": " + form["marks"].strip()[:80] if form.get("marks", "").strip() else "")
         else:
@@ -1719,7 +1725,8 @@ class App:
                 raise web.HTTPBadRequest(text="Напишите, что изменить на картинке")
             mp = wf.QWEN_MP.get(form.get("size", "1"), 1.0)
             size = round_size(form) or wf.qwen_edit_size(form.get("aspect", ""), mp)
-            graph, stages = wf.qwen_edit_graph(self.model_names, prompt, image, mp, seed, size, form.get("_extra") or ())
+            graph, stages = wf.qwen_edit_graph(self.model_names, prompt, image, mp, seed, size, form.get("_extra") or (),
+                                                extra_loras=self.qwen_loras(form))
             sub, res = "Правка картинки", ("%d×%d" % size if size else "")
         return await self.queue(graph, stages, {
             "mode": "qwen", "sub": sub, "prompt": prompt, "aspect": form.get("aspect", "") if form.get("kind") != "sheet" else "",
@@ -1803,6 +1810,21 @@ class App:
             except Exception:
                 pass
         return configured
+
+    def qwen_loras(self, form=None):
+        """Active LoRAs for Qwen Image 2.1: ChatR Labs Omni-LoRA (if chosen/available) + custom LoRAs."""
+        loras = []
+        omni = self.model_names.get("qwen_lora")
+        missing = {m["role"] for m in self.missing}
+        if omni and "qwen_lora" not in missing and self.choice().get("qwen_lora") != "none":
+            str_val = lora_strength(form or {}, "omni", 0.8)
+            if str_val is not None:
+                loras.append((omni, str_val))
+        for f, s in self.custom_loras(form):
+            if omni and (f == omni or f.endswith("chatrlabs-omni-lora-v0.1-bf16.safetensors")):
+                continue
+            loras.append((f, s))
+        return loras
 
     async def h_loras_custom(self, _req):
         import loras_registry

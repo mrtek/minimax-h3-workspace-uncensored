@@ -409,5 +409,25 @@ Copy-Item -Recurse -Force 'dist/MinimaxH3Workspace/*' 'app/build/dist/MinimaxH3W
 
 ---
 
+## 13. Аудит моделей и снятие цензуры при генерации картинок (Models & LoRA Audit)
+
+В ходе комплексного аудита директории `ComfyUI\models\` (всего 60 safetensors моделей) и логики генерации изображений:
+
+1. **Анализ используемых моделей и текстовых энкодеров**:
+   - **Текстовые энкодеры**: В конфигурации по умолчанию уже выбраны Uncensored-версии (`Huihui-Qwen3-VL-8B-Instruct-abliterated` для Qwen и `qwen3_4b_abliterated_fp16_converted` для FLUX.2 klein). Они не фильтруют взрослые или анатомические запросы на этапе кодирования текста.
+   - **Диффузионная модель Qwen Image 2.1**: Базовый чекпоинт `qwen_image_2.1_int8_convrot.safetensors` содержит диффузионное выравнивание (отказ от прорисовки подробной взрослой анатомии и откровенных поз).
+   - **ChatR Labs Uncensored Omni-LoRA (`chatrlabs-omni-lora-v0.1-bf16.safetensors`)**: Специализированная rank-128 LoRA для Qwen Image 2.1, снимающая диффузионную цензуру и улучшающая детализацию анатомии. Ранее файл лежал в папке `models/loras/Images/`, но **не был задействован ни в одном воркфлоу программы**, так как графы Qwen не имели нод `LoraLoaderModelOnly`.
+
+2. **Интеграция ChatR Labs Omni-LoRA в ядро приложения**:
+   - **Каталог (`app/catalog.py`)**: Добавлена роль `qwen_lora` с вариантом `omni` (`chatrlabs/Qwen-Image-2.1-Uncensored-Omni-LoRA-v0.1`, 670 МБ), включена в `MODE_OPTIONAL["qwen"]` и назначена по умолчанию (`DEFAULT_CHOICE["qwen_lora"] = "omni"`).
+   - **Воркфлоу (`app/workflows.py`)**: Во все графы Qwen (`qwen_t2i_graph`, `_qwen_base`, `qwen_story_graph`, `qwen_frames_graph`, `qwen_edit_graph`, `qwen_sheet_graph`) добавлена цепочка `_lora_chain`, внедряющая ноду `LoraLoaderModelOnly` между загрузчиком UNet и `QwenImage21Cache`.
+   - **Сервер (`app/server.py`)**: Реализован метод `qwen_loras(form)`, автоматически подключающий Omni-LoRA (при наличии файла на диске) и любые пользовательские LoRA при генерации картинок по тексту, правке, раскадровках и листах персонажа.
+   - **Реестр LoRA (`app/loras_registry.py`)**: Добавлена запись с паттерном `chatrlabs|omni[-_]?lora`, описанием на русском языке, категорией «NSFW & Снятие цензуры», триггерными словами (`uncensored, nsfw, detailed anatomy, omni`) и рекомендованным весом 0.8.
+
+3. **Снятие ограничений и выбор моделей для Krea 2**:
+   - В каталоге для `krea_unet` добавлен выбор варианта `redcraft` (`redcraftKREA2RedMix_krea2Edition.safetensors`). Теперь пользователь может переключить стандартный режим Krea 2 на uncensored-модель RedMix прямо в настройках моделей, не требуя включения двойного апскейла Realism.
+
+---
+
 *Документ актуален для версии v1.1.12 от 09.11.2026.*
 

@@ -938,7 +938,7 @@ def krea_real_graph(m, prompt, width, height, seed, scale):
     return g, stages
 
 
-def _qwen_base(m, image, megapixels, prompt, seed, size=None, extras=()):
+def _qwen_base(m, image, megapixels, prompt, seed, size=None, extras=(), extra_loras=()):
     """The graph of the "One Image Edit" / "Character Sheet" workflows on plain ComfyUI nodes.
     `size` (width, height) gives an empty canvas of its own; otherwise the result keeps the picture's shape."""
     g = {
@@ -958,6 +958,8 @@ def _qwen_base(m, image, megapixels, prompt, seed, size=None, extras=()):
         "10": {"class_type": "VAEDecode", "inputs": {"samples": ["9", 0], "vae": ["3", 0]}},
         "11": {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/qwen", "images": ["10", 0]}},
     }
+    if extra_loras:
+        g["4"]["inputs"]["model"] = _lora_chain(g, ["1", 0], extra_loras, base=60)
     for k, img in enumerate(list(extras)[:2], 2):  # more reference pictures: <image2>, <image3>
         a, b = f"12{k}", f"13{k}"
         g[a] = {"class_type": "LoadImage", "inputs": {"image": img}}
@@ -969,6 +971,9 @@ def _qwen_base(m, image, megapixels, prompt, seed, size=None, extras=()):
         g["9"]["inputs"]["latent_image"] = ["8", 0]
     stages = {"1": "load", "2": "load", "3": "load", "4": "load", "5": "encode", "6": "encode", "7": "encode",
               "8": "encode", "9": "sample", "10": "decode", "11": "save"}
+    if extra_loras:
+        for i in range(len(extra_loras)):
+            stages[str(60 + i)] = "load"
     for k in (2, 3):
         stages[f"12{k}"] = stages[f"13{k}"] = "encode"
     return g, stages
@@ -997,7 +1002,7 @@ def flux_t2i_graph(m, prompt, width, height, seed):
     return g, stages
 
 
-def qwen_t2i_graph(m, prompt, negative, width, height, seed):
+def qwen_t2i_graph(m, prompt, negative, width, height, seed, extra_loras=()):
     """Qwen Image 2.1, picture by text (no reference). With a negative prompt CFG goes above 1 so that it works."""
     g = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["qwen_unet"], "weight_dtype": "default"}},
@@ -1015,13 +1020,17 @@ def qwen_t2i_graph(m, prompt, negative, width, height, seed):
     }
     stages = {"1": "load", "2": "load", "3": "load", "4": "load", "7": "encode", "8": "encode",
               "9": "sample", "10": "decode", "11": "save"}
+    if extra_loras:
+        g["4"]["inputs"]["model"] = _lora_chain(g, ["1", 0], extra_loras, base=60)
+        for i in range(len(extra_loras)):
+            stages[str(60 + i)] = "load"
     return g, stages
 
 
 STORY_SIZE = (1920, 1088)
 
 
-def qwen_story_graph(m, images, prompt, seed, size=STORY_SIZE):
+def qwen_story_graph(m, images, prompt, seed, size=STORY_SIZE, extra_loras=()):
     """Storyboard from 1-3 pictures (character, location...) on Qwen Image 2.1: <image1>, <image2> in the prompt."""
     g = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["qwen_unet"], "weight_dtype": "default"}},
@@ -1029,8 +1038,12 @@ def qwen_story_graph(m, images, prompt, seed, size=STORY_SIZE):
         "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["qwen_vae"]}},
         "4": {"class_type": "QwenImage21Cache", "inputs": {"device": "auto", "dtype": "default", "model": ["1", 0]}},
     }
-    enc = {"prompt": prompt, "negative_prompt": "", "resolution": 0, "clip": ["2", 0], "vae": ["3", 0]}
     stages = {"1": "load", "2": "load", "3": "load", "4": "load"}
+    if extra_loras:
+        g["4"]["inputs"]["model"] = _lora_chain(g, ["1", 0], extra_loras, base=60)
+        for i in range(len(extra_loras)):
+            stages[str(60 + i)] = "load"
+    enc = {"prompt": prompt, "negative_prompt": "", "resolution": 0, "clip": ["2", 0], "vae": ["3", 0]}
     for i, img in enumerate(images, 1):
         a, b = f"10{i}", f"11{i}"
         g[a] = {"class_type": "LoadImage", "inputs": {"image": img}}
@@ -1139,7 +1152,7 @@ def flux_frames_graph(m, refs, prompts, seed, size=FRAME_SIZE, line="white"):
     return g, stages, titles
 
 
-def qwen_frames_graph(m, refs, prompts, seed, size=FRAME_SIZE, line="white"):
+def qwen_frames_graph(m, refs, prompts, seed, size=FRAME_SIZE, line="white", extra_loras=()):
     """The same frame-by-frame storyboard on Qwen Image 2.1 (slower than FLUX, no commercial license)."""
     n = len(prompts)
     g = {
@@ -1150,6 +1163,10 @@ def qwen_frames_graph(m, refs, prompts, seed, size=FRAME_SIZE, line="white"):
         "8": {"class_type": "EmptyLatentImage", "inputs": {"width": size[0], "height": size[1], "batch_size": 1}},
     }
     stages = {"1": "load", "2": "load", "3": "load", "4": "load", "8": "encode"}
+    if extra_loras:
+        g["4"]["inputs"]["model"] = _lora_chain(g, ["1", 0], extra_loras, base=60)
+        for i in range(len(extra_loras)):
+            stages[str(60 + i)] = "load"
     scaled = []
     for i, img in enumerate(refs[:3], 1):
         a, b = f"10{i}", f"11{i}"
@@ -1271,8 +1288,8 @@ def qwen_edit_size(aspect, megapixels):
     return (round(w * k / 32) * 32, round(h * k / 32) * 32)
 
 
-def qwen_edit_graph(m, prompt, image, megapixels, seed, size=None, extras=()):
-    return _qwen_base(m, image, megapixels, prompt, seed, size, extras)
+def qwen_edit_graph(m, prompt, image, megapixels, seed, size=None, extras=(), extra_loras=()):
+    return _qwen_base(m, image, megapixels, prompt, seed, size, extras, extra_loras=extra_loras)
 
 
 def sheet_prompt(headless=True, background="grey", marks="", panels=4):
@@ -1310,10 +1327,10 @@ def sheet_prompt(headless=True, background="grey", marks="", panels=4):
         f"Plain solid {bg} background, soft even lighting, no text, no labels.")
 
 
-def qwen_sheet_graph(m, image, seed, headless=True, background="grey", marks="", panels=4):
+def qwen_sheet_graph(m, image, seed, headless=True, background="grey", marks="", panels=4, extra_loras=()):
     prompt = sheet_prompt(headless, background, marks, panels)
     size = SHEET6_SIZE if panels == 6 else SHEET_SIZE
-    g, stages = _qwen_base(m, image, size[0] * size[1] / 1048576, prompt, seed, size=size)
+    g, stages = _qwen_base(m, image, size[0] * size[1] / 1048576, prompt, seed, size=size, extra_loras=extra_loras)
     return g, stages, prompt
 
 

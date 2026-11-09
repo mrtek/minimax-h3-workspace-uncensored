@@ -12,6 +12,14 @@ from pathlib import Path
 # Built-in knowledge base for known MiniMax H3 LoRAs
 KNOWN_LORAS = [
     {
+        "pattern": r"chatrlabs|omni[-_]?lora",
+        "name": "ChatR Labs Uncensored Omni-LoRA (Qwen 2.1)",
+        "category": "NSFW & Снятие цензуры",
+        "desc": "Универсальная Uncensored LoRA (Omni-LoRA v0.1) для Qwen Image 2.1: снимает ограничения диффузии, разблокирует взрослую анатомию, улучшает детализацию тела и поз в генерации и правке картинок.",
+        "triggers": ["uncensored", "nsfw", "detailed anatomy", "omni"],
+        "recommended_weight": 0.8,
+    },
+    {
         "pattern": r"dr34ml4y",
         "name": "DR34ML4Y NSFW Позы & Секс",
         "category": "NSFW & Позы",

@@ -166,6 +166,8 @@ VARIANTS = {
     "krea_unet": {
         "int8": _m("Comfy-Org/Krea-2", "diffusion_models/krea2_turbo_int8_convrot.safetensors", 13.49,
                    "diffusion_models", sub=IMG_SUB),
+        "redcraft": _m("Kerstal/krea-2_model", "redcraftKREA2RedMix_krea2Edition.safetensors", 13.14,
+                       "diffusion_models", sub=IMG_SUB),
     },
     "krea_clip": {
         "fp8": _m("Comfy-Org/Krea-2", "text_encoders/qwen3vl_4b_fp8_scaled.safetensors", 5.24,
@@ -196,6 +198,10 @@ VARIANTS = {
     "qwen_vae": {
         "bf16": _m("Comfy-Org/Qwen-Image-2.1", "vae/qwen_image_2.1_vae_bf16.safetensors", 0.68, "vae", sub=IMG_SUB),
     },
+    "qwen_lora": {
+        "omni": _m("chatrlabs/Qwen-Image-2.1-Uncensored-Omni-LoRA-v0.1",
+                   "chatrlabs-omni-lora-v0.1-bf16.safetensors", 0.67, "loras", sub=IMG_SUB),
+    },
     # FLUX.2 klein 4B (Apache 2.0, free for commercial use): edit a picture by text
     "flux_unet": {
         "fp8": _m("black-forest-labs/FLUX.2-klein-4b-fp8", "flux-2-klein-4b-fp8.safetensors", 4.07,
@@ -224,7 +230,7 @@ ROLE_MARKS = {
     "seedvr_unet": ["seedvr"], "seedvr_vae": ["seedvr"], "relayvsr_unet": ["relayvsr"], "relayvsr_vae": ["relayvsr"], "krea_clip": ["qwen3vl", "qwen3-vl"],
     "krea_vae": ["qwen_image", "qwen-image"], "kreareal_unet": ["krea"], "kreareal_lora": ["realism"],
     "qwen_unet": ["qwen"], "qwen_clip": ["qwen3vl", "qwen3-vl", "abliterated"], "qwen_vae": ["qwen"],
-    "flux_unet": ["flux"], "flux_clip": ["qwen_3", "qwen3", "abliterated"], "flux_vae": ["flux"],
+    "flux_unet": ["flux"], "qwen_lora": ["chatrlabs", "omni"], "flux_clip": ["qwen_3", "qwen3", "abliterated"], "flux_vae": ["flux"],
 }
 
 
@@ -245,6 +251,7 @@ VARIANT_LABELS = {
     "lipsync_unet": {"full": "v1.3 полная (самая тяжёлая)", "pruned": "v1.3 облегчённая", "lite": "v1.3 лёгкая (слабее качество)",
                      "v2": "v2 облегчённая — по отзывам, звук лучше", "v2_full": "v2 полная"},
     "action_unet": {"int8": "обычная (int8)", "lite": "лёгкая (меньше памяти, чуть слабее)"},
+    "krea_unet": {"int8": "Krea 2 Turbo (стандартная int8)", "redcraft": "RedCraft RedMix (Uncensored реализм)"},
     "qwen_clip": {"uncensored": "Uncensored (Abliterated int8)", "int8": "оригинальная (Comfy-Org int8)"},
     "flux_clip": {"uncensored": "Uncensored (Abliterated fp16)", "bf16": "оригинальная (Comfy-Org bf16)"},
 }
@@ -282,6 +289,7 @@ ROLE_DESCRIPTIONS = {
     "qwen_unet": "Правка картинок по описанию и генерация листов персонажа на базе Qwen Image 2.1.",
     "qwen_clip": "Текстовый энкодер для Qwen Image 2.1 (Qwen3-VL 8B).",
     "qwen_vae": "Автоэнкодер VAE для модели Qwen Image 2.1.",
+    "qwen_lora": "Uncensored Omni-LoRA для Qwen Image 2.1: снимает ограничения диффузии, разблокирует взрослую анатомию и позы.",
     "flux_unet": "Правка картинок для коммерческого использования на базе FLUX.2 klein (4B).",
     "flux_clip": "Текстовый энкодер для FLUX.2 klein (Qwen3 4B).",
     "flux_vae": "Автоэнкодер VAE для модели FLUX.2 klein.",
@@ -324,6 +332,7 @@ ROLE_GROUPS = {
     "swap_lora": "lora",
     "pika_lora": "lora",
     "kreareal_lora": "lora",
+    "qwen_lora": "lora",
 }
 
 ROLE_TITLES = {
@@ -356,6 +365,7 @@ ROLE_TITLES = {
     "qwen_unet": "Основная модель — Правка картинки (Qwen Image 2.1)",
     "qwen_clip": "Текстовый энкодер Qwen (Qwen3-VL 8B)",
     "qwen_vae": "VAE для Qwen Image 2.1",
+    "qwen_lora": "LoRA ChatR Labs Omni Uncensored (Qwen 2.1)",
     "flux_unet": "Основная модель — Правка картинки для коммерции (FLUX.2 klein 4B)",
     "flux_clip": "Текстовый энкодер FLUX.2 klein (Qwen3 4B)",
     "flux_vae": "VAE для FLUX.2",
@@ -393,6 +403,7 @@ MODE_OPTIONAL = {
     "swap": ["pika_lora", "realism_lora", "motion_repair_lora"],
     "action": ["speed_slider_lora", "action_upscaler"],
     "long": ["vocal_model"],
+    "qwen": ["qwen_lora"],
 }
 ALL_ROLES = list(VARIANTS)
 
@@ -402,7 +413,7 @@ DEFAULT_CHOICE = {"fast_unet": "int8", "lipsync_unet": "full", "text_encoder": "
                   "action_unet": "int8", "speed_slider_lora": "v1.1", "action_upscaler": "lms", "vocal_model": "fp16",
                   "realism_lora": "v1", "motion_repair_lora": "v1", "pika_lora": "hd8", "swap_lora": "v15", "sla_lora": "bf16",
                   "krea_unet": "int8", "krea_clip": "fp8", "krea_vae": "bf16", "kreareal_unet": "fp8", "kreareal_lora": "v2",
-                  "qwen_unet": "int8", "qwen_clip": "uncensored", "qwen_vae": "bf16",
+                  "qwen_unet": "int8", "qwen_clip": "uncensored", "qwen_vae": "bf16", "qwen_lora": "omni",
                   "flux_unet": "fp8", "flux_clip": "uncensored", "flux_vae": "bf16",
                   "seedvr_unet": "int8", "seedvr_vae": "fp16", "relayvsr_unet": "x2", "relayvsr_vae": "x2"}
 
