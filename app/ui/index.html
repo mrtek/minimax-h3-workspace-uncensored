@@ -709,7 +709,10 @@ details[open] summary::before{content:'－ '}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
       Отчёт для разработчика
     </button>
-    <button class="sup-btn" id="supBtn" type="button" title="Программа бесплатная. Если она вам помогла, можно поддержать автора: откроется страница оплаты в браузере. Ничего вводить в самой программе не нужно.">♥ Поддержать проект</button>
+    <div style="display:flex;flex-direction:column;gap:5px;margin:-4px 0 12px">
+      <button class="sup-btn" id="supOrigBtn" type="button" style="margin:0" title="Поддержать автора оригинального проекта MiniMax H3">♥ Поддержать оригинал</button>
+      <button class="sup-btn" id="supUncBtn" type="button" style="margin:0;color:var(--accent,#c0405a);border:1px solid rgba(var(--accent-rgb,200,60,90),.35);background:var(--accent-soft,rgba(200,60,90,.12))" title="Поддержать автора версии UNCENSORED (разблокировка моделей, ComfyUI апдейтер, LoRA менеджер)">🔥 Поддержать UNCENSORED</button>
+    </div>
     <div class="zoom-btns" id="uiZoom" title="Размер интерфейса (или Ctrl + колесо мыши)" style="margin:0 0 8px 4px"><button class="btn" id="uiSm" type="button">А−</button><small id="uiPct">100%</small><button class="btn" id="uiLg" type="button">А+</button></div>
     <div class="themes" id="themes" title="Тема оформления">
       <button data-t="" style="background:#e8264f" title="Бордо"></button>
@@ -3921,7 +3924,9 @@ const TOASTS = [];
 const noteMsg = s => { TOASTS.push(new Date().toLocaleTimeString('ru') + ' ' + String(s).slice(0, 300)); if (TOASTS.length > 20) TOASTS.shift(); };
 window.addEventListener('error', e => noteMsg('Ошибка скрипта: ' + e.message + ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')'));
 window.addEventListener('unhandledrejection', e => noteMsg('Ошибка: ' + (e.reason && e.reason.message || e.reason)));
-$('#supBtn').onclick = () => fetch('/api/support', { method: 'POST' }).then(() => toast('Открываю страницу поддержки в браузере'), () => {});
+$('#supOrigBtn')?.addEventListener('click', () => fetch('/api/support?target=original', { method: 'POST' }).then(() => toast('Открываю страницу поддержки оригинального проекта в браузере'), () => {}));
+$('#supUncBtn')?.addEventListener('click', () => fetch('/api/support?target=uncensored', { method: 'POST' }).then(() => toast('Открываю страницу поддержки версии UNCENSORED в браузере'), () => {}));
+$('#supBtn')?.addEventListener('click', () => fetch('/api/support?target=uncensored', { method: 'POST' }).then(() => toast('Открываю страницу поддержки в браузере'), () => {}));
 $('#repBtn').onclick = async () => {
   const b = $('#repBtn'); b.disabled = true;
   try {
@@ -6777,7 +6782,7 @@ async function startComfyUpdate() {
   $('#comfyUpdLog').textContent = 'Запуск обновления...\n';
 
   try {
-    const res = await fetch('/api/comfy/update/run', { method: 'POST' });
+    const res = await fetch('/api/comfy/update/run', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
     const data = await res.json();
     if (!res.ok) {
       $('#comfyUpdSpinner').style.display = 'none';

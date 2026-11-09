@@ -92,6 +92,7 @@ def round_size(form, step=32, low=256, high=2048, max_px=2200000):
 
 
 SUPPORT_URL = "https://pay.cloudtips.ru/p/0e4d4824"
+SUPPORT_UNCENSORED_URL = "https://pay.cloudtips.ru/p/10956f76"
 import workflows as wf
 
 # frozen builds keep code inside the bundle but user data next to the exe
@@ -220,6 +221,12 @@ class App:
         self.config.update(hf_mirror=on)
         self.apply_mirror()
         return web.json_response({"ok": True, "on": on})
+
+    def _bg_run(self, coro):
+        task = asyncio.create_task(coro)
+        self._bg.add(task)
+        task.add_done_callback(self._bg.discard)
+        return task
 
     def awake_loop(self):
         """While generations are queued or running (and for ten minutes after the last one), Windows is not allowed to go to sleep:
@@ -1139,9 +1146,11 @@ class App:
         self.save_queue()
         return web.json_response({"ok": True})
 
-    async def h_support(self, _req):
-        """Open the author's donation page (a fixed address, never taken from the request)."""
-        webbrowser.open(SUPPORT_URL)
+    async def h_support(self, req):
+        """Open the author's donation page."""
+        target = req.query.get("target") or ""
+        url = SUPPORT_UNCENSORED_URL if target == "uncensored" else SUPPORT_URL
+        webbrowser.open(url)
         return web.json_response({"ok": True})
 
     async def h_clipboard(self, _req):
@@ -3031,6 +3040,8 @@ class App:
         self._comfy_updating = True
         self._comfy_update_status = {"status": "running", "log": "Остановка ComfyUI...\n"}
 
+        repo_dir = root / "ComfyUI"
+
         async def do_update():
             log_lines = ["Остановка ComfyUI..."]
             was_managed = bool(self.process)
@@ -3042,16 +3053,29 @@ class App:
                 log_lines.append("Запуск скрипта обновления ComfyUI...")
                 self._comfy_update_status = {"status": "running", "log": "\n".join(log_lines)}
 
-                cmd = [str(py), str(update_py), "ComfyUI", "--stable", "--skip_self_update"]
+                cmd = [str(py), str(update_py), str(repo_dir), "--stable", "--skip_self_update"]
+                env = os.environ.copy()
+                proxy = engine.system_proxy()
+                if proxy:
+                    env["HTTP_PROXY"] = proxy
+                    env["HTTPS_PROXY"] = proxy
+
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
                     cwd=str(root),
+                    env=env,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.STDOUT
                 )
-                stdout, _ = await proc.communicate()
-                out_text = (stdout or b"").decode("utf-8", errors="replace")
-                log_lines.append(out_text)
+                while True:
+                    line = await proc.stdout.readline()
+                    if not line:
+                        break
+                    line_str = line.decode("utf-8", errors="replace").strip()
+                    if line_str:
+                        log_lines.append(line_str)
+                        self._comfy_update_status = {"status": "running", "log": "\n".join(log_lines[-60:])}
+                await proc.wait()
 
                 new_v = self.get_comfy_version()
                 log_lines.append(f"Готово! Текущая версия: {new_v}")
