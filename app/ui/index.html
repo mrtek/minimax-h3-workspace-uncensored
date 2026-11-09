@@ -1099,6 +1099,7 @@ details[open] summary::before{content:'－ '}
               <button data-t="fluxt">Картинка по тексту<small>FLUX.2 klein</small></button>
               <button data-t="qwent">Картинка по тексту<small>Qwen 2.1</small></button>
               <button data-t="qwen">Правка картинки<small>Qwen, нужна картинка</small></button>
+              <button data-t="flux">Правка картинки<small>FLUX.2 klein, нужна картинка</small></button>
               <button data-t="story">Раскадровка<small>история в кадрах на одной картинке</small></button>
               <button data-t="sheet">Лист персонажа<small>4 панели, Krea 2</small></button>
               <button data-t="sheet6">Лист персонажа ×6<small>6 панелей, Krea 2</small></button>
@@ -4963,8 +4964,8 @@ $('#agFile').onchange = async e => {
 };
 $('#agEmpty').onclick = e => { const s = e.target.closest('span'); if (s) { $('#agIn').value = s.textContent.replace(/[«»]/g, '').replace(/ \+ фото героинь$/, ''); $('#agIn').focus(); } };
 $('#agIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#agSend').click(); } });
-const AG_NAMES = { plist: 'список кадров', long: 'сцены длинного видео', video: 'Генерацию видео', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрскую игру', swap: 'Замену персонажа', action: 'Экшн-сцены', krea: 'Картинку по тексту', qwen: 'Правку картинки', sheet: 'Картинку по тексту', sheet6: 'Картинку по тексту', fluxt: 'Картинку по тексту', qwent: 'Картинку по тексту', story: 'Картинку по тексту' };
-const AG_IMG = ['plist', 'krea', 'qwen', 'sheet', 'sheet6', 'fluxt', 'qwent', 'story'];
+const AG_NAMES = { plist: 'список кадров', long: 'сцены длинного видео', video: 'Генерацию видео', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрскую игру', swap: 'Замену персонажа', action: 'Экшн-сцены', krea: 'Картинку по тексту', qwen: 'Правку картинки (Qwen)', flux: 'Правку картинки (FLUX.2)', sheet: 'Картинку по тексту', sheet6: 'Картинку по тексту', fluxt: 'Картинку по тексту', qwent: 'Картинку по тексту', story: 'Картинку по тексту' };
+const AG_IMG = ['plist', 'krea', 'qwen', 'flux', 'sheet', 'sheet6', 'fluxt', 'qwent', 'story'];
 AG.storyModel = 'krea'; AG.storyFrames = true;
 AG.think = (() => { try { return localStorage.getItem('h3-ag-think') === 'deep' ? 'deep' : 'fast'; } catch { return 'fast'; } })();
 function agThinkPaint() {
@@ -4989,6 +4990,7 @@ function agCtx() {
   $('#agCtx').textContent = AG_IMG.includes(AG.target)
     ? ({ krea: 'Опишите картинку словами: агент напишет промпт для Krea 2. Картинки в чате — только образцы настроения.',
          qwen: `Приложите картинку, которую нужно изменить (скрепка или «Из Библиотеки»), и напишите, что поменять. Картинок в чате: ${n}.`,
+         flux: `Приложите картинку, которую нужно изменить (скрепка или «Из Библиотеки»), и напишите, что поменять (FLUX.2 klein, без негатива). Дополнительные картинки станут image 2, image 3. Картинок в чате: ${n}.`,
          story: 'Расскажите историю по кадрам («первый кадр — …, второй кадр — …») и скажите, сколько кадров нужно. Агент напишет промпт одной картинки-раскадровки без подписей и номеров для выбранной модели.',
          fluxt: 'Опишите картинку словами: агент напишет промпт для FLUX.2 klein (без негатива, описание по порядку: главное сначала). Картинки в чате — только образцы настроения.',
          qwent: 'Опишите картинку словами: агент напишет промпт для Qwen 2.1. Негатив впишите отдельным полем в разделе. Картинки в чате — только образцы настроения.',
@@ -5018,7 +5020,7 @@ function renderAssistant(el, m) {
     const text = m.edits?.[i] ?? p.replace(/\n$/, '');
     html += `<div class="pblock"><pre${closed ? ` contenteditable="plaintext-only" spellcheck="false" data-b="${i}" title="Текст можно править прямо здесь"` : ''}>${esc(text)}</pre>${closed ? `<div class="pb-act">
       <button class="btn pri" data-send="${AG.target}">В ${AG_NAMES[AG.target]}</button>
-      <select class="pb-other"><option value="">Отправить в…</option><option value="video">Image-to-Video</option><option value="lipsync">Lipsync</option><option value="refs">Референсы</option><option value="actor">Актёрская игра</option><option value="swap">Замена персонажа</option><option value="action">Экшн-сцены</option><option value="long">Длинное видео (сцены)</option><option value="krea">Картинка по тексту</option><option value="qwen">Правка картинки</option></select>
+      <select class="pb-other"><option value="">Отправить в…</option><option value="video">Image-to-Video</option><option value="lipsync">Lipsync</option><option value="refs">Референсы</option><option value="actor">Актёрская игра</option><option value="swap">Замена персонажа</option><option value="action">Экшн-сцены</option><option value="long">Длинное видео (сцены)</option><option value="krea">Картинка по тексту</option><option value="qwen">Правка картинки (Qwen)</option><option value="flux">Правка картинки (FLUX.2)</option></select>
       <button class="btn" data-ru title="Русский перевод только для чтения: в модель уходит английский текст">Показать по-русски</button><button class="btn" data-copy>Копировать</button><button class="btn" data-paste title="Вставить скопированный текст на место выделенного (или в конец)">Вставить</button><small class="pb-n">${text.length} симв.</small></div>` : ''}${m.ru?.[i] ? `<div class="pb-ru"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px"><b>По-русски (только для чтения):</b><button class="btn" data-copy-ru type="button" style="padding:3px 10px;font-size:12px">Копировать русский</button></div><span class="pb-ru-t">${esc(m.ru[i]).replace(/\n/g, '<br>')}</span></div>` : ''}</div>`;
   });
   if (m.status && !m.content) html += `<div class="st">${esc(m.status)}</div>`;
@@ -5262,12 +5264,13 @@ async function sendPrompt(blk, to) {
     const six = AG.target === 'sheet6' || to === 'sheet6';
     const engine = to === 'fluxt' ? 'flux' : to === 'qwent' ? 'qwen' : (AG.target === 'fluxt' ? 'flux' : AG.target === 'qwent' ? 'qwen' : AG.target === 'story' ? AG.storyModel : 'krea');
     IMG.krea.fill({ prompt, engine, aspect: six ? '21:9' : AG.target === 'sheet' || to === 'sheet' || AG.target === 'story' ? '16:9' : undefined }); to = 'krea';
-  } else if (to === 'qwen') {
-    IMG.qwen.fill({ prompt });
+  } else if (to === 'qwen' || to === 'flux') {
+    IMG.qwen.fill({ prompt, engine: to === 'flux' ? 'flux' : 'qwen' });
     for (const [i, sel] of ['#qwDrop', '#qwDrop2', '#qwDrop3'].entries()) {
       $(sel + ' .x')?.click();
       if (files[i]) await setDropFile($(sel + ' input'), files[i]);
     }
+    to = 'qwen';
   } else if (to === 'video') {
     $('#vPrompt').value = prompt; $('#vPrompt').oninput({ target: $('#vPrompt') });
     if (files[0]) { $('#dFirst .x')?.click(); await setDropFile($('#dFirst input'), files[0]); }

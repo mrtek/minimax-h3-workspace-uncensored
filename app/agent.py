@@ -113,9 +113,9 @@ DEFAULT_SKILL_SETTINGS = {
 
 
 # "Prompt for" targets that make pictures: which skill writes the prompt for each
-IMAGE_SKILLS = {"plist": "krea-2", "krea": "krea-2", "fluxt": "flux2-klein", "qwent": "qwen-image-2-1-director-prompt",
-                "qwen": "qwen-image-2-1-director-prompt", "sheet": "karta-personazha", "sheet6": "karta-personazha",
-                "story": "storyboard"}
+IMAGE_SKILLS = {"plist": "krea-2", "krea": "krea-2", "fluxt": "flux2-klein", "flux": "flux2-klein",
+                "qwent": "qwen-image-2-1-director-prompt", "qwen": "qwen-image-2-1-director-prompt",
+                "sheet": "karta-personazha", "sheet6": "karta-personazha", "story": "storyboard"}
 AGENT_TARGETS = ("video", "lipsync", "refs", "actor", "swap", "action", "long") + tuple(IMAGE_SKILLS)
 # long extra reference files that would not fit next to the rest into the model's context
 SKIP_REFS = {"platform-adapters.md", "long-form-writing.md"}
