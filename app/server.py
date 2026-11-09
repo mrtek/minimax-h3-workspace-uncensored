@@ -607,12 +607,17 @@ class App:
     # ---------- own copies of the results (they must not vanish when ComfyUI's output folder is cleaned) ----------
 
     def default_results_dir(self):
-        """Videos\\Minimax H3\\output in the user's folder: it does not depend on where the program lies and survives updates."""
-        return Path.home() / "Videos" / "Minimax H3" / "output"
+        """<WORKSPACE_DIR>\output (e.g. G:\MinimaxH3Workspace\output)."""
+        return self.workspace_root() / "output"
 
     def results_dir(self):
         d = self.config.get("results_dir")
-        return Path(d) if d else self.default_results_dir()
+        if d:
+            old_default = Path.home() / "Videos" / "Minimax H3" / "output"
+            if Path(d).resolve() == old_default.resolve():
+                return self.default_results_dir()
+            return Path(d)
+        return self.default_results_dir()
 
     def _detect_output_dir(self):
         cr = self.comfy_root()
@@ -2788,6 +2793,13 @@ class App:
             self.library.remove(i)
         return web.json_response({"removed": len(gone), **json.loads((await self.h_results_get(req)).text)})
 
+    async def h_results_open_folder(self, _req):
+        folder = self.results_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer.exe", str(folder)])
+        return web.json_response({"ok": True, "path": str(folder)})
+
     async def h_file(self, req):
         item = self.library.get(req.match_info["id"])
         if not item:
@@ -3477,6 +3489,7 @@ def build_app(comfy_override=None):
         web.post("/api/results", state.h_results_set),
         web.post("/api/results/backfill", state.h_results_backfill),
         web.post("/api/results/clean", state.h_results_clean),
+        web.post("/api/results/open-folder", state.h_results_open_folder),
         web.get("/api/library", state.h_library),
         web.patch("/api/library/{id}", state.h_library_patch),
         web.delete("/api/library/{id}", state.h_library_delete),

@@ -1182,7 +1182,7 @@ details[open] summary::before{content:'－ '}
         <div class="hint" style="font-size:13px;line-height:1.5;margin-bottom:8px">Программа сама кладёт копию каждого готового видео и картинки в свою папку. Если вы почистите папку ComfyUI (<b>output</b>), файлы в Библиотеке останутся.</div>
         <label class="cw-chk" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="checkbox" id="resKeep" checked> Сохранять копию каждого результата</label>
         <div class="hint" style="margin-bottom:4px">Папка копий:</div>
-        <div class="path on"><input id="resDir" spellcheck="false"><button class="btn" data-pick="resDir">Обзор…</button><button class="btn pri" id="resApply" type="button">Применить</button></div>
+        <div class="path on"><input id="resDir" spellcheck="false"><button class="btn" data-pick="resDir">Обзор…</button><button class="btn pri" id="resApply" type="button">Применить</button><button class="btn" id="resReset" type="button" title="Сбросить на папку по умолчанию">Сбросить</button><button class="btn" id="resOpenFolder" type="button" title="Открыть папку в Проводнике">📁 Открыть</button></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
           <button class="btn" id="resBackfill" type="button">Сохранить копии старых файлов</button>
           <button class="btn" id="resClean" type="button">Убрать записи, у которых нет файла</button>
@@ -3765,6 +3765,8 @@ async function resLoad(s) {
 $('#resBox').addEventListener('toggle', () => { if ($('#resBox').open) resLoad(); });
 $('#resKeep').onchange = async e => { try { resLoad(await postJSON('/api/results', { keep: e.target.checked })); toast(e.target.checked ? 'Копии включены' : 'Копии выключены'); } catch (err) { toast(err.message); } };
 $('#resApply').onclick = async () => { try { resLoad(await postJSON('/api/results', { dir: $('#resDir').value })); toast('Папка копий сохранена: новые результаты пойдут туда'); } catch (err) { toast(err.message); } };
+$('#resReset').onclick = async () => { try { const s = await postJSON('/api/results', { reset: true }); resLoad(s); toast('Сброшено на папку по умолчанию'); } catch (err) { toast(err.message); } };
+$('#resOpenFolder').onclick = async () => { try { await postJSON('/api/results/open-folder'); } catch (err) { toast(err.message); } };
 $('#resBackfill').onclick = async () => { $('#resBackfill').disabled = true; try { const r = await postJSON('/api/results/backfill'); resLoad(r); toast(`Скопировано файлов: ${r.copied}`); } catch (err) { toast(err.message); } };
 $('#resClean').onclick = async () => { if (!confirm('Убрать из Библиотеки записи, у которых нет файла? Файлы на диске не затрагиваются.')) return; try { const r = await postJSON('/api/results/clean'); resLoad(r); toast(`Убрано записей: ${r.removed}`); const items = await (await fetch('/api/library')).json(); LIB.length = 0; items.forEach(it => LIB.push(normItem(it))); renderLib(); } catch (err) { toast(err.message); } };
 if (API) resLoad();
