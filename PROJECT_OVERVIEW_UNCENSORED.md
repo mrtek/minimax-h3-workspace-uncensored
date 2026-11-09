@@ -8,7 +8,7 @@
 
 - **Исходный апстрим**: [Yuliya1310/minimax-h3-workspace](https://github.com/Yuliya1310/minimax-h3-workspace)
 - **Форк (Uncensored Edition)**: [mrtek/minimax-h3-workspace-uncensored](https://github.com/mrtek/minimax-h3-workspace-uncensored)
-- **Текущая стабильная версия**: `v1.1.11`
+- **Текущая стабильная версия**: `v1.2.0`
 - **Лицензия**: MIT
 - **Целевая ОС**: Windows 10 / 11 (64-бит)
 - **Основной стек**:
@@ -115,6 +115,10 @@
    - Бесшовный цикл (зацикливание видео).
 4. **Storyboards и Character Sheets**:
    - Раскадровки на FLUX.2 Klein и листы персонажей на 4 и 6 панелей.
+5. **Немодерируемые энкодеры генерации картинок по умолчанию (v1.2.0)**:
+   - **Qwen Image 2.1**: по умолчанию скачивается и подключается abliterated-энкодер Huihui-Qwen3-VL-8B-Instruct-abliterated_int8_convrot.safetensors (INT8 ConvRot + BF16 vision для ComfyUI). Устранены системные отказы и морализаторство на уровне текстового запроса.
+   - **FLUX.2 klein**: по умолчанию скачивается и подключается abliterated-энкодер qwen3_4b_abliterated_fp16_converted.safetensors (FP16 1:1 замена официального qwen_3_4b.safetensors).
+   - Сохранена полная совместимость с оригинальными моделями Comfy-Org — переключение доступно в разделе «Модели» через кнопку «Другая версия».
 
 ---
 
@@ -222,3 +226,4 @@ Copy-Item -Recurse -Force 'dist/MinimaxH3Workspace/*' 'app/build/dist/MinimaxH3W
 ---
 
 *Документ актуален для версии v1.1.11 от 08.11.2026.*
+

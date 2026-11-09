@@ -26,6 +26,7 @@ __pycache__/
 
 # отчёт с локальными путями
 ОТЧЁТ.md
+PROJECT_OVERVIEW_UNCENSORED.md
 
 *.skill
 Руководство по релизу.txt

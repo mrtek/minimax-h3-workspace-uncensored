@@ -84,6 +84,8 @@ non_diegetic_music: <инструменты, темп, ритм, динамик�
 
 `@image1 — референс персонажа (закрепить лицо этой женщины). @video1 — референс движения (взять хореографию танца с мечом из этого видео). @audio1 — референс настроения (звучание гуциня).`
 
+**В режимах ComfyUI («Референсы», «Экшн») модель ждёт теги `<Picture N>`, `<Video N>`, `<Audio N>`** (нумерация отдельная для каждого типа, в порядке слотов). Пользователь их сам не пишет — их ставит скилл: строка выравнивания для каждой картинки, затем фраза с ролью каждого файла, например `<Picture 1> is the character reference (keep this face exactly). <Picture 2> is the clothing reference. <Video 1> is a camera-movement reference only, take no faces or people from it. <Audio 1> is the background sound reference.` Если есть картинка с лицом и видео — прямо пиши, что лицо только с картинки, а видео даёт лишь указанное пользователем.
+
 Роли: character reference (лицо/фигура), object reference (товар/предмет), scene reference (локация), keyframe (первый/последний кадр — указать явно, какой), voice reference (тембр голоса), storyboard (раскадровка), style reference (стиль), composition reference (кадрирование), audio reuse (использовать дорожку как есть), motion reference (движение), camera reference (движение камеры), video edit (видео, которое нужно отредактировать). Один файл — одна роль. Больше референсов — не значит больше контроля: 3–4 файла с чёткой ролью работают надёжнее, чем 9 файлов без объяснения.
 
 ## Workflow

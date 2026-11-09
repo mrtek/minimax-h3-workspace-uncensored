@@ -60,6 +60,28 @@ def nvidia_smi_info():
         return f"nvidia-smi: ошибка {type(e).__name__}"
 
 
+def gpu_load():
+    """Total used video memory, load and power right now. --query-compute-apps shows N/A per process on Windows, so only totals."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu,power.draw,power.limit",
+                              "--format=csv,noheader"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=10,
+                             creationflags=NO_WINDOW).stdout.strip()
+        return out or "нет данных"
+    except Exception as e:
+        return f"нет данных ({type(e).__name__})"
+
+
+def gpu_processes():
+    """Names of programs that use the video card (memory per program is not available on Windows)."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,process_name", "--format=csv,noheader"],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=10,
+                             creationflags=NO_WINDOW).stdout.strip()
+        return [x.strip() for x in out.splitlines() if x.strip()]
+    except Exception:
+        return []
+
+
 def cpu_name():
     try:
         out = subprocess.run(["wmic", "cpu", "get", "name"], capture_output=True, text=True, timeout=8,
@@ -111,6 +133,9 @@ def build(info):
     L.append("Видеокарта NVIDIA (name, driver, memory, compute): " + nvidia_smi_info())
     L.append(f"Определено приложением: видеокарта={hw.get('gpu')}, видеопамять ГБ={hw.get('vram_gb')}, "
              f"драйвер={hw.get('driver')}, compute={hw.get('compute_cap')}")
+    L.append("Сейчас занято видеопамяти / всего / загрузка GPU / мощность / лимит: " + gpu_load())
+    procs = gpu_processes()
+    L.append("Программы на видеокарте: " + ("; ".join(procs) if procs else "нет данных"))
     L.append(f"Движок окна (WebView2): {webview2_version()}")
 
     sec("ОКНО (что видит страница)")
@@ -120,6 +145,11 @@ def build(info):
     sec("ДВИЖОК ComfyUI")
     for k, v in (info.get("comfy") or {}).items():
         L.append(f"{k}: {v}")
+
+    if info.get("long_states"):
+        sec("ДЛИННОЕ ВИДЕО (сохранённые состояния сцен)")
+        for line in info["long_states"]:
+            L.append(line)
 
     sec("МОДЕЛИ")
     for m in info.get("models") or []:

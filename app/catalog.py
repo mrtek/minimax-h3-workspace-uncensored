@@ -23,6 +23,9 @@ NODE_PACKS = [
     # loads reference videos at 24 fps for the references mode
     {"name": "ComfyUI-VideoHelperSuite", "repo": "Kosinkadink/ComfyUI-VideoHelperSuite",
      "commit": "4d907bee61e92c2e65af3bd6383a4e4d356126d1"},
+    # memory savers (MiniMaxChunkFeedForward, MiniMaxLowVRAMAttention) used by the long video graphs
+    {"name": "ComfyUI-KJNodes", "repo": "kijai/ComfyUI-KJNodes",
+     "commit": "ab72eda7ffad6280422d71ab7d54d3fb87c0ba18"},
 ]
 
 # What each mode needs from custom nodes: checked in a user's own ComfyUI (a new install gets them by itself).
@@ -34,8 +37,10 @@ NODE_CHECKS = [
      "optional": False, "why": "второй проход (увеличение кадра)"},
     {"pack": "ComfyUI-MelBandRoFormer", "classes": ["MelBandRoFormerSampler", "MelBandRoFormerModelLoader"],
      "modes": ["lipsync"], "optional": True, "why": "кнопка «Отделить голос» в редакторе аудио"},
-    {"pack": "ComfyUI-VideoHelperSuite", "classes": ["VHS_LoadVideo"], "modes": ["refs"],
-     "optional": True, "why": "референс-видео"},
+    {"pack": "ComfyUI-VideoHelperSuite", "classes": ["VHS_LoadVideo"], "modes": ["refs", "swap"],
+     "optional": False, "why": "видео, в котором меняем персонажа"},
+    {"pack": "ComfyUI-KJNodes", "classes": ["MiniMaxChunkFeedForward", "MiniMaxLowVRAMAttention"], "modes": ["long"],
+     "optional": False, "why": "экономия видеопамяти в длинном видео"},
 ]
 
 
@@ -133,6 +138,10 @@ VARIANTS = {
     "motion_repair_lora": {
         "v1": _m("JOKER141/MiniMax-H3-General-Motion-Continuity-Repair", "Motion_Repair.safetensors", 0.16, "loras"),
     },
+    # Character swap (akatz-ai): replaces a person in a video with a character from a picture
+    "swap_lora": {
+        "v15": _m("akatz-ai/MiniMax-H3-Character-Swap-LoRA", "h3_character_swap_v1.5.safetensors", 0.16, "loras"),
+    },
     # Pika H3 Flex Turbo: 8-step HD LoRA for references; a viewer favourite for the generated sound
     "pika_lora": {
         "hd8": _m("Pika-Labs/Pika-H3-Flex-Turbo-LoRA", "pika_h3_flex_turbo_8step_hd_ref2va.safetensors", 3.91, "loras"),
@@ -144,6 +153,14 @@ VARIANTS = {
     },
     "seedvr_vae": {
         "fp16": _m("Comfy-Org/SeedVR2", "vae/seedvr2_ema_vae_fp16.safetensors", 0.5, "vae", sub=IMG_SUB),
+    },
+    # fast video enlarge x2 in one sampling step (RelayVSR, built into ComfyUI); video only
+    "relayvsr_unet": {
+        "x2": _m("Comfy-Org/RelayVSR", "diffusion_models/relayvsr_x2_lightx2v_int8_convrot.safetensors", 5.16,
+                 "diffusion_models", sub=IMG_SUB),
+    },
+    "relayvsr_vae": {
+        "x2": _m("Comfy-Org/RelayVSR", "vae/relayvsr_flash_vae_x2_fp32.safetensors", 0.13, "vae", sub=IMG_SUB),
     },
     # pictures: Krea 2 (by text) and Qwen Image 2.1 (edit a picture, character sheet); both are plain ComfyUI nodes
     "krea_unet": {
@@ -170,6 +187,9 @@ VARIANTS = {
                    "diffusion_models", sub=IMG_SUB),
     },
     "qwen_clip": {
+        "uncensored": _m("paralaif/Huihui-Qwen3-VL-8B-Instruct-abliterated-comfy-int8-convrot",
+                         "Huihui-Qwen3-VL-8B-Instruct-abliterated_int8_convrot.safetensors", 9.29,
+                         "text_encoders", sub=IMG_SUB),
         "int8": _m("Comfy-Org/Qwen-Image-2.1", "text_encoders/qwen3vl_8b_int8_convrot.safetensors", 9.35,
                    "text_encoders", sub=IMG_SUB),
     },
@@ -182,6 +202,9 @@ VARIANTS = {
                   "diffusion_models", sub=IMG_SUB),
     },
     "flux_clip": {
+        "uncensored": _m("ussoewwin/qwen3_4b_8b_abliterated_fp16_convrot_int8",
+                         "qwen3_4b_abliterated_fp16_converted.safetensors", 8.04,
+                         "text_encoders", sub=IMG_SUB),
         "bf16": _m("Comfy-Org/z_image_turbo", "split_files/text_encoders/qwen_3_4b.safetensors", 8.04,
                    "text_encoders", sub=IMG_SUB),
     },
@@ -197,11 +220,11 @@ ROLE_MARKS = {
     "video_vae": ["video_vae"], "audio_vae": ["audio_vae"], "ref2v_turbo_lora": ["turbo"],
     "upscaler": ["upscaler"], "preview": ["taeh3"], "action_unet": ["hybrid", "fl2va"],
     "speed_slider_lora": ["speed"], "action_upscaler": ["upscaler"], "vocal_model": ["melband"],
-    "realism_lora": ["realism"], "motion_repair_lora": ["motion"], "pika_lora": ["pika"], "sla_lora": ["sla"],
-    "seedvr_unet": ["seedvr"], "seedvr_vae": ["seedvr"], "krea_clip": ["qwen3vl", "qwen3-vl"],
+    "realism_lora": ["realism"], "motion_repair_lora": ["motion"], "pika_lora": ["pika"], "swap_lora": ["swap"], "sla_lora": ["sla"],
+    "seedvr_unet": ["seedvr"], "seedvr_vae": ["seedvr"], "relayvsr_unet": ["relayvsr"], "relayvsr_vae": ["relayvsr"], "krea_clip": ["qwen3vl", "qwen3-vl"],
     "krea_vae": ["qwen_image", "qwen-image"], "kreareal_unet": ["krea"], "kreareal_lora": ["realism"],
-    "qwen_unet": ["qwen"], "qwen_clip": ["qwen3vl", "qwen3-vl"], "qwen_vae": ["qwen"],
-    "flux_unet": ["flux"], "flux_clip": ["qwen_3", "qwen3"], "flux_vae": ["flux"],
+    "qwen_unet": ["qwen"], "qwen_clip": ["qwen3vl", "qwen3-vl", "abliterated"], "qwen_vae": ["qwen"],
+    "flux_unet": ["flux"], "flux_clip": ["qwen_3", "qwen3", "abliterated"], "flux_vae": ["flux"],
 }
 
 
@@ -222,6 +245,8 @@ VARIANT_LABELS = {
     "lipsync_unet": {"full": "v1.3 полная (самая тяжёлая)", "pruned": "v1.3 облегчённая", "lite": "v1.3 лёгкая (слабее качество)",
                      "v2": "v2 облегчённая — по отзывам, звук лучше", "v2_full": "v2 полная"},
     "action_unet": {"int8": "обычная (int8)", "lite": "лёгкая (меньше памяти, чуть слабее)"},
+    "qwen_clip": {"uncensored": "Uncensored (Abliterated int8)", "int8": "оригинальная (Comfy-Org int8)"},
+    "flux_clip": {"uncensored": "Uncensored (Abliterated fp16)", "bf16": "оригинальная (Comfy-Org bf16)"},
 }
 
 # LoRA from the original action workflow that has no public download; used when the user has it
@@ -242,10 +267,13 @@ ROLE_TITLES = {
     "vocal_model": "Отделение голоса от музыки (MelBand RoFormer)",
     "realism_lora": "LoRA «Реализм людей» (по желанию)",
     "motion_repair_lora": "LoRA «Исправление движения» (по желанию)",
+    "swap_lora": "LoRA «Замена персонажа» (akatz-ai)",
     "pika_lora": "LoRA Pika H3 Flex Turbo (ускорение для Референсов, хороший звук)",
     "sla_lora": "LoRA Turbo-SLA (быстрое ускорение для Image-to-Video)",
     "seedvr_unet": "Увеличение видео и картинок — модель SeedVR2 (3B)",
     "seedvr_vae": "Увеличение видео и картинок — VAE SeedVR2",
+    "relayvsr_unet": "Быстрое увеличение видео — модель RelayVSR x2",
+    "relayvsr_vae": "Быстрое увеличение видео — VAE RelayVSR",
     "krea_unet": "Основная модель — Картинка по тексту (Krea 2)",
     "krea_clip": "Текстовый энкодер Krea 2 (Qwen3-VL 4B)",
     "krea_vae": "VAE для Krea 2",
@@ -259,9 +287,9 @@ ROLE_TITLES = {
     "flux_vae": "VAE для FLUX.2",
 }
 
-MODE_TITLES = {"video": "Image-to-Video", "lipsync": "Lipsync", "refs": "Референсы", "actor": "Актёрская игра", "action": "Экшн-сцены",
+MODE_TITLES = {"video": "Image-to-Video", "lipsync": "Lipsync", "refs": "Референсы", "actor": "Актёрская игра", "swap": "Замена персонажа", "action": "Экшн-сцены",
                "krea": "Картинка по тексту", "kreareal": "Картинка: реализм", "qwen": "Правка картинки", "flux": "Правка картинки: FLUX.2 (можно в коммерцию)",
-               "upscale": "Увеличение видео и картинок", "long": "Длинное видео"}
+               "upscale": "Увеличение видео и картинок", "relayvsr": "Быстрое увеличение видео (RelayVSR)", "long": "Длинное видео"}
 
 # Which roles each mode needs.
 MODE_ROLES = {
@@ -271,6 +299,8 @@ MODE_ROLES = {
     # same models as references: dialogue scenes with a voice sample, acting-first prompts
     "actor": ["lipsync_unet", "text_encoder", "video_vae", "audio_vae", "ref2v_turbo_lora"],
     "action": ["action_unet", "text_encoder", "video_vae", "audio_vae", "upscaler"],
+    # character swap preset: same Ref2V model as References + a small swap LoRA
+    "swap": ["lipsync_unet", "text_encoder", "video_vae", "audio_vae", "ref2v_turbo_lora", "swap_lora"],
     # long video / clips: scenes that continue each other (Singularity Ref2V + Pika LoRA, same files as References)
     "long": ["lipsync_unet", "text_encoder", "video_vae", "audio_vae", "pika_lora"],
     "krea": ["krea_unet", "krea_clip", "krea_vae"],
@@ -278,6 +308,7 @@ MODE_ROLES = {
     "qwen": ["qwen_unet", "qwen_clip", "qwen_vae"],
     "flux": ["flux_unet", "flux_clip", "flux_vae"],
     "upscale": ["seedvr_unet", "seedvr_vae"],
+    "relayvsr": ["relayvsr_unet", "relayvsr_vae"],
 }
 # Small extras downloaded with a mode but not required to run it.
 MODE_OPTIONAL = {
@@ -285,6 +316,7 @@ MODE_OPTIONAL = {
     "lipsync": ["realism_lora", "vocal_model"],
     "refs": ["pika_lora", "realism_lora", "motion_repair_lora"],
     "actor": ["realism_lora"],
+    "swap": ["pika_lora", "realism_lora", "motion_repair_lora"],
     "action": ["speed_slider_lora", "action_upscaler"],
     "long": ["vocal_model"],
 }
@@ -294,18 +326,18 @@ ALL_ROLES = list(VARIANTS)
 DEFAULT_CHOICE = {"fast_unet": "int8", "lipsync_unet": "full", "text_encoder": "nvfp4", "video_vae": "int8",
                   "audio_vae": "fp32", "ref2v_turbo_lora": "bf16", "upscaler": "bf16", "preview": "taeh3",
                   "action_unet": "int8", "speed_slider_lora": "v1.1", "action_upscaler": "lms", "vocal_model": "fp16",
-                  "realism_lora": "v1", "motion_repair_lora": "v1", "pika_lora": "hd8", "sla_lora": "bf16",
+                  "realism_lora": "v1", "motion_repair_lora": "v1", "pika_lora": "hd8", "swap_lora": "v15", "sla_lora": "bf16",
                   "krea_unet": "int8", "krea_clip": "fp8", "krea_vae": "bf16", "kreareal_unet": "fp8", "kreareal_lora": "v2",
-                  "qwen_unet": "int8", "qwen_clip": "int8", "qwen_vae": "bf16",
-                  "flux_unet": "fp8", "flux_clip": "bf16", "flux_vae": "bf16",
-                  "seedvr_unet": "int8", "seedvr_vae": "fp16"}
+                  "qwen_unet": "int8", "qwen_clip": "uncensored", "qwen_vae": "bf16",
+                  "flux_unet": "fp8", "flux_clip": "uncensored", "flux_vae": "bf16",
+                  "seedvr_unet": "int8", "seedvr_vae": "fp16", "relayvsr_unet": "x2", "relayvsr_vae": "x2"}
 
 
 PROFILES = {
     "lite": {"title": "Лёгкий", "lipsync_unet": "lite", "action_unet": "lite",
              "about": "Самые лёгкие версии: меньше качать и меньше памяти, качество немного ниже"},
-    "standard": {"title": "Стандарт", "lipsync_unet": "pruned", "action_unet": "int8",
-                 "about": "Облегчённая (pruned) Singularity — качество почти как у полной"},
+    "standard": {"title": "Стандарт", "lipsync_unet": "v2", "action_unet": "int8",
+                 "about": "Облегчённая (pruned) Singularity v2: ~20 ГБ вместо 34, качество почти как у полной. Подходит для видеокарт 12–16 ГБ"},
     "max": {"title": "Максимум", "lipsync_unet": "full", "action_unet": "int8",
             "about": "Полные модели, как в исходных workflow"},
 }
@@ -313,7 +345,7 @@ PROFILES = {
 
 def recommended_profile(hw):
     vram, ram = hw.get("vram_gb") or 0, hw.get("ram_gb") or 0
-    if vram + ram >= 48 and vram >= 16:
+    if vram + ram >= 48 and vram >= 24:  # "max" puts the full ~32 GB Singularity: too heavy for 16 GB cards
         return "max"
     if vram + ram >= 40:
         return "standard"

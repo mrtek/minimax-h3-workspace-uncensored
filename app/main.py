@@ -8,6 +8,7 @@ import os
 import socket
 import sys
 import threading
+import time
 import webbrowser
 from pathlib import Path
 
@@ -82,7 +83,7 @@ def init_job_object():
             return
 
         info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-        info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        info.BasicLimitInformation.LimitFlags = 0x2000 | 0x1000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
         res = kernel32.SetInformationJobObject(hJob, 9, ctypes.byref(info), ctypes.sizeof(info))
         if res:
             kernel32.AssignProcessToJobObject(hJob, kernel32.GetCurrentProcess())
@@ -163,15 +164,39 @@ class ServerThread(threading.Thread):
     def run(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        self.runner = web.AppRunner(server.build_app(), shutdown_timeout=0.1)
-        self.loop.run_until_complete(self.runner.setup())
-        self.site = web.TCPSite(self.runner, "127.0.0.1", self.port, reuse_address=True)
-        self.loop.run_until_complete(self.site.start())
-        self.ready.set()
-        self.loop.run_forever()
+        try:
+            self.runner = web.AppRunner(server.build_app(), shutdown_timeout=0.1)
+            self.loop.run_until_complete(self.runner.setup())
+            self.site = web.TCPSite(self.runner, "127.0.0.1", self.port, reuse_address=True)
+            self.loop.run_until_complete(self.site.start())
+            self.ready.set()
+            self.loop.run_forever()
+        except Exception:
+            self.ready.set()
+        finally:
+            self._cleanup_loop()
 
-    def shutdown(self):
-        if not self.loop or not self.runner:
+    def _cleanup_loop(self):
+        if not self.loop or self.loop.is_closed():
+            return
+        try:
+            pending = [t for t in asyncio.all_tasks(self.loop) if not t.done()]
+            for task in pending:
+                task.cancel()
+            if pending:
+                self.loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            self.loop.run_until_complete(self.loop.shutdown_asyncgens())
+            self.loop.run_until_complete(self.loop.shutdown_default_executor())
+        except Exception:
+            self.ready.set()
+        finally:
+            try:
+                self.loop.close()
+            except Exception:
+                pass
+
+    def shutdown(self, timeout=3.0):
+        if not self.loop or self.loop.is_closed():
             return
         async def _stop():
             if self.site:
@@ -190,17 +215,15 @@ class ServerThread(threading.Thread):
                     await asyncio.wait_for(self.runner.cleanup(), timeout=1.0)
                 except Exception:
                     pass
-            for task in asyncio.all_tasks(self.loop):
-                task.cancel()
 
         try:
             fut = asyncio.run_coroutine_threadsafe(_stop(), self.loop)
             try:
-                fut.result(timeout=3.0)
+                fut.result(timeout=timeout)
             except Exception:
                 pass
         except Exception:
-            pass
+            self.ready.set()
         finally:
             try:
                 self.loop.call_soon_threadsafe(self.loop.stop)
@@ -219,6 +242,23 @@ class JsApi:
         import webview
         res = self._window.create_file_dialog(webview.FOLDER_DIALOG, directory=start if os.path.isdir(start) else "")
         return res[0] if res else None
+
+    @staticmethod
+    def _last_dir():
+        '''The folder the user saved into last time (Windows Save as starts there next time).'''
+        try:
+            d = (server.DATA_DIR / "last_save_dir.txt").read_text(encoding="utf-8").strip()
+            return d if os.path.isdir(d) else ""
+        except OSError:
+            return ""
+
+    @staticmethod
+    def _remember_dir(folder):
+        try:
+            if folder and os.path.isdir(folder):
+                (server.DATA_DIR / "last_save_dir.txt").write_text(folder, encoding="utf-8")
+        except OSError:
+            pass
 
     def _copy(self, item_id, dest):
         """Stream a library video from the local server into the file the user chose."""
@@ -241,7 +281,7 @@ class JsApi:
         import webview
         ext = os.path.splitext(filename)[1].lower() or ".mp4"
         kinds = (f"Картинка {ext[1:].upper()} (*{ext})",) if ext != ".mp4" else ("Видео MP4 (*.mp4)",)
-        res = self._window.create_file_dialog(webview.SAVE_DIALOG, save_filename=filename, file_types=kinds)
+        res = self._window.create_file_dialog(webview.SAVE_DIALOG, directory=self._last_dir(), save_filename=filename, file_types=kinds)
         if not res:
             return {"ok": False, "cancelled": True}
         dest = res if isinstance(res, str) else res[0]
@@ -251,15 +291,17 @@ class JsApi:
             self._copy(item_id, dest)
         except Exception as e:
             return {"ok": False, "error": str(e)}
+        self._remember_dir(os.path.dirname(dest))
         return {"ok": True, "path": dest}
 
     def save_videos(self, items):
         """Several videos: one folder is chosen, every video is saved into it."""
         import webview
-        res = self._window.create_file_dialog(webview.FOLDER_DIALOG)
+        res = self._window.create_file_dialog(webview.FOLDER_DIALOG, directory=self._last_dir())
         if not res:
             return {"ok": False, "cancelled": True}
         folder = res if isinstance(res, str) else res[0]
+        self._remember_dir(folder)
         saved, failed = [], 0
         for it in items:
             try:
@@ -271,38 +313,49 @@ class JsApi:
         return {"ok": bool(saved), "folder": folder, "count": len(saved), "failed": failed}
 
 
-def hard_exit(code=0):
-    try:
-        import ctypes
-        from ctypes import wintypes
-        k = ctypes.windll.kernel32
-        k.GetCurrentProcess.restype = wintypes.HANDLE
-        k.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
-        k.TerminateProcess.restype = wintypes.BOOL
-        k.TerminateProcess(k.GetCurrentProcess(), code)
-    except Exception:
-        pass
-    os._exit(code)
-
-
 _exit_lock = threading.Lock()
 _did_exit = False
 
-def do_exit(srv, code=0):
-    global _did_exit
+
+def do_exit(srv=None, code=0):
+    global _did_exit, _JOB_HANDLE
     with _exit_lock:
         if _did_exit:
             return
         _did_exit = True
 
-    # Watchdog timer: if anything hangs after window is closed, force-kill the process in 3.5 seconds
-    threading.Timer(3.5, lambda: hard_exit(code)).start()
+    # Emergency fallback: if anything prevents normal exit within 4 seconds,
+    # force process exit via standard Windows ExitProcess (never TerminateProcess on self)
+    def _emergency_watchdog():
+        time.sleep(4.0)
+        os._exit(code)
+
+    threading.Thread(target=_emergency_watchdog, daemon=True, name="exit-watchdog").start()
+
+    # 1. Close Job Object handle: Windows kernel immediately terminates child processes (ComfyUI / LLM)
+    if sys.platform == "win32" and _JOB_HANDLE:
+        try:
+            import ctypes
+            ctypes.windll.kernel32.CloseHandle(_JOB_HANDLE)
+        except Exception:
+            pass
+        _JOB_HANDLE = None
+
+    # 2. Stop local web server and wait for thread to join
     try:
         if srv:
-            srv.shutdown()
+            srv.shutdown(timeout=2.0)
+            srv.join(timeout=2.0)
     except Exception:
         pass
-    hard_exit(code)
+
+    # 3. Clean exit
+    try:
+        sys.exit(code)
+    except SystemExit:
+        os._exit(code)
+    except Exception:
+        os._exit(code)
 
 
 def main():
@@ -352,7 +405,11 @@ def main():
         api._window = window
 
         def on_closed():
-            threading.Thread(target=lambda: do_exit(srv, 0), daemon=True, name="exit-worker").start()
+            # If pywebview fails to return from webview.start() within 5 seconds of window close, force exit
+            def _watchdog():
+                time.sleep(5.0)
+                do_exit(srv, 0)
+            threading.Thread(target=_watchdog, daemon=True, name="close-watchdog").start()
 
         window.events.closed += on_closed
         webview.start(gui="edgechromium", private_mode=False,

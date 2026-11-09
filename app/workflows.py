@@ -11,8 +11,11 @@ FPS = 24
 
 # Model files come in as `m`: role -> name as ComfyUI lists it (see catalog.py).
 
-ASPECTS = {"16:9": (16, 9), "9:16": (9, 16), "1:1": (1, 1), "4:3": (4, 3), "3:4": (3, 4)}
-QUALITY = {"480p": 864 * 480, "720p": 1280 * 736, "HD+": 1376 * 768, "1080p": 1920 * 1088}
+ASPECTS = {"16:9": (16, 9), "9:16": (9, 16), "1:1": (1, 1), "4:3": (4, 3), "3:4": (3, 4), "21:9": (21, 9)}
+# sizes of the original workflow's table (16:9 base, multiples of 32); the four old ids are kept for saved settings
+QUALITY = {"0.2": 608 * 352, "0.3": 736 * 416, "480p": 864 * 480, "0.5": 960 * 544, "0.6": 1056 * 608, "0.7": 1152 * 640,
+           "0.8": 1216 * 672, "720p": 1280 * 736, "HD+": 1376 * 768, "1.2": 1504 * 832, "1.5": 1664 * 928,
+           "1.8": 1824 * 1024, "1080p": 1920 * 1088}
 
 
 def r32(v):
@@ -100,7 +103,7 @@ def video_graph(m, prompt, width, height, seconds, seed, first=None, last=None, 
     return g, stages
 
 
-def _refs(g, cond_node, images, videos=(), audios=(), base=100):
+def _refs(g, cond_node, images, videos=(), audios=(), base=100, vsize=None):
     """LoadImage / VHS_LoadVideo (24 fps) / LoadAudio nodes wired into MiniMaxH3ReferenceToVideo."""
     inputs = g[cond_node]["inputs"]
     for i, name in enumerate(images[:9]):
@@ -110,7 +113,7 @@ def _refs(g, cond_node, images, videos=(), audios=(), base=100):
     for i, name in enumerate(videos[:3]):
         nid = str(base + 10 + i)
         g[nid] = {"class_type": "VHS_LoadVideo", "inputs": {
-            "video": name, "force_rate": 24, "custom_width": 0, "custom_height": 0,
+            "video": name, "force_rate": 24, "custom_width": vsize[0] if vsize else 0, "custom_height": vsize[1] if vsize else 0,
             "frame_load_cap": 360, "skip_first_frames": 0, "select_every_nth": 1, "format": "None"}}
         inputs[f"ref_videos.ref_video_{i}"] = [nid, 0]
     for i, name in enumerate(audios[:3]):
@@ -222,6 +225,197 @@ def actor_graph(m, prompt, width, height, seconds, seed, images, audios, realism
     stages = {n: "load" for n in ["1", "2", "3", "4", "5", "6", "7"] + [k for k in g if k.isdigit() and 60 <= int(k) < 70]}
     stages.update({n: "encode" for n in ["8"] + loaders})
     stages.update({"14": "sample", "15": "decode", "16": "decode", "17": "save", "18": "save"})
+    return g, stages
+
+
+def swap_prompt(whos, extra="", cuts=None, structured=True):
+    """Prompt of the character swap preset. `whos`: who to replace with <Picture 1>, <Picture 2>... (one phrase each, in the
+    user's words; a single string is accepted too). `extra`: optional addition. `cuts`: seconds where shot 2, 3... start (when
+    several people are swapped in one pass: one person per shot). Tags follow the order the files are connected.
+    `structured`: MiniMax's official three-field prompt (alignment line, [Shot N] timeline, soundscape, music), as References use."""
+    whos = [whos] if isinstance(whos, str) else list(whos)
+    tail = (" Retain the identity, attire, and style of the "
+            + ("character from <Picture 1>." if len(whos) == 1 else "replacement characters from their pictures.")
+            + " Simultaneously, preserve the camera angle, background, lighting, objects, and all other figures from the original video."
+            " Ensure each replacement character aligns with the original figure in terms of position, scale, pose, and movement."
+            + (" Only this one character is added: do not add any other figures, copies or people from the picture, and keep the background of <Video 1>."
+               if len(whos) == 1 else " Do not add any other figures, copies or people, and keep the background of <Video 1>.")
+            + " Do not display the reference images or their backgrounds.")
+    names = [(w or "").strip() or ("the main person" if len(whos) == 1 else f"person {i + 1}") for i, w in enumerate(whos)]
+    if not structured:
+        t = " ".join(f"Replace {'only ' if len(whos) == 1 else ''}{w} in <Video 1> with the character from <Picture {i + 1}>."
+                     for i, w in enumerate(names)) + tail
+        return t + (" " + extra.strip() if extra and extra.strip() else "")
+    pics = " ".join(f"<Picture {i + 1}> (from [Shot {i + 1}]) is fully referenced." for i in range(len(names)))
+    head = (f"For the target video, at 0.00 seconds into the target video, {pics} <Video 1> is the video to edit: its motion, camera, "
+            "timing, setting and sound are kept. The faces and identities of the replaced people must match the reference pictures exactly.")
+    shots = []
+    for i, w in enumerate(names):
+        if i == 0:
+            lead = "[Shot 1] Live-action, "
+        else:
+            t0 = (cuts[i - 1] if cuts and len(cuts) >= i else None)
+            lead = (f"[Shot {i + 1}] At {int(t0 // 60):02d}:{t0 % 60:06.3f}, the camera cuts to the next shot of <Video 1>. " if t0 is not None
+                    else f"[Shot {i + 1}] After the cut in <Video 1>, ")
+        verb = "Replace" if lead.endswith(". ") else "replace"
+        shots.append(lead + f"{verb} {'only ' if len(names) == 1 else ''}{w} in <Video 1> with the character from <Picture {i + 1}>.")
+    body = " ".join(shots) + tail + (" " + extra.strip() if extra and extra.strip() else "")
+    return f"{head}\n\nintegrated_multimodal_description: {body}\n\noverall_soundscape: N/A\n\nnon_diegetic_music: N/A"
+
+
+def swap_graph(m, prompt, width, height, seconds, seed, images, video, extra_loras=(), pika=None, audio="original", small_ref=False):
+    """Character swap preset (fallback group of Smart Bobo's «MiniMax H3 Character Swap» workflow):
+    Ref2V model + swap LoRA 1.0 + turbo LoRA, sol-attn, sigma shift 12.2 / 3, er_sde, 10 manual sigmas.
+    With `pika` (file name): the Pika H3 Flex Turbo LoRA instead of the turbo one, 8 steps, scheduler simple (as in References).
+    `audio`: "original" - the sound of the video is put into the result; "lock" - the same, and Audio Lock makes the mouths follow
+    that exact sound (lip sync); "model" - the sound the model invents (for videos that have no sound)."""
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["lipsync_unet"], "weight_dtype": "default"}},
+        "2": {"class_type": "ModelAttentionBackend", "inputs": {"model": ["1", 0], "attention": "comfy kitchen attention"}},
+        "4": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["text_encoder"], "type": "minimax", "device": "default"}},
+        "5": {"class_type": "VAELoader", "inputs": {"vae_name": m["video_vae"]}},
+        "6": {"class_type": "VAELoader", "inputs": {"vae_name": m["audio_vae"]}},
+        "8": {"class_type": "MiniMaxH3ReferenceToVideo", "inputs": {
+            "clip": ["4", 0], "vae": ["5", 0], "audio_vae": ["6", 0], "prompt": prompt,
+            "width": width, "height": height, "length": frames(seconds), "ref_image_size": "match"}},
+    }
+    if pika:
+        model = _lora_chain(g, ["2", 0], [(m["swap_lora"], 1.0), (pika, 1.0)] + list(extra_loras))
+        g.update({
+            "10": {"class_type": "BasicScheduler", "inputs": {"model": model, "scheduler": "simple", "steps": 8, "denoise": 1.0}},
+            "12": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
+        })
+    else:
+        g["3"] = {"class_type": "BlockSparseAttention", "inputs": {
+            "model": ["2", 0], "selection": "sol-attn", "selection.tau": 1.3, "start_percent": 0.2, "end_percent": 1.0,
+            "dense_blocks": "", "min_tokens": 12288, "extra_tokens": 256, "sink_conditioning": "exact_kv_and_rows",
+            "verbose": False}}
+        g["7"] = {"class_type": "MiniMaxH3SigmaShift", "inputs": {"model": ["3", 0], "shift_video": 12.2, "shift_audio": 3.0}}
+        model = _lora_chain(g, ["7", 0], [(m["swap_lora"], 1.0), (m["ref2v_turbo_lora"], 1.0)] + list(extra_loras))
+        g.update({
+            "10": {"class_type": "ManualSigmas", "inputs": {"sigmas": ACTOR_SIGMAS}},
+            "12": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "er_sde"}},
+        })
+    latent, snd = ["8", 1], ["110", 2]
+    if audio == "lock":   # exact sound of the video encoded into the latent: video is denoised while listening to it
+        g["9"] = {"class_type": "MiniMaxH3NativeAudioLock", "inputs": {
+            "model": ["1", 0], "av_latent": ["8", 1], "audio_vae": ["6", 0], "audio": ["110", 2]}}
+        g["10"]["inputs"]["model"] = ["9", 0]
+        latent, snd = ["9", 1], ["9", 2]
+    g.update({
+        "11": {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}},
+        "13": {"class_type": "BasicGuider", "inputs": {"model": model, "conditioning": ["8", 0]}},
+        "14": {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["11", 0], "guider": ["13", 0], "sampler": ["12", 0], "sigmas": ["10", 0], "latent_image": latent}},
+        "15": {"class_type": "VAEDecode", "inputs": {"samples": ["14", 1], "vae": ["5", 0]}},
+        "17": {"class_type": "CreateVideo", "inputs": {
+            "images": ["15", 0], "audio": snd, "fps": float(FPS), "bit_depth": "auto", "color_space": "sRGB", "codec": "none"}},
+        "18": {"class_type": "SaveVideo", "inputs": {
+            "video": ["17", 0], "filename_prefix": "H3Workspace/swap", "format": "auto", "format.codec": "auto"}},
+    })
+    images = [images] if isinstance(images, str) else list(images)
+    if audio == "model":   # a video without sound: the result gets the sound the model invents
+        g["16"] = {"class_type": "VAEDecodeAudio", "inputs": {"samples": ["14", 1], "vae": ["6", 0]}}
+        g["17"]["inputs"]["audio"] = ["16", 0]
+    loaders = _refs(g, "8", images[:2], [video], (), vsize=(width, height) if small_ref else None)   # node 110 = the video loader; its sound goes into the result
+    stages = {n: "load" for n in ["1", "2", "3", "4", "5", "6", "7"] if n in g}
+    stages.update({k: "load" for k in g if k.isdigit() and 60 <= int(k) < 70})
+    stages.update({n: "encode" for n in ["8"] + loaders})
+    stages.update({"14": "sample", "15": "decode", "17": "save", "18": "save"})
+    return g, stages
+
+
+def swap_shots_graph(m, shots, width, height, seed, images, video, extra="", pika=None, extra_loras=(), audio="original", small_ref=False):
+    """Character swap over several shots (plans) of one video. The LoRA is made for one continuous shot, so every shot
+    is swapped on its own and the pieces are joined again.
+
+    shots: [{"s": start sec, "e": end sec, "pic": picture index or -1 (keep the original shot), "who": words}].
+    VHS_LoadVideo takes just that part of the video (skip_first_frames / frame_load_cap, 24 fps), so no cutting is needed."""
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["lipsync_unet"], "weight_dtype": "default"}},
+        "2": {"class_type": "ModelAttentionBackend", "inputs": {"model": ["1", 0], "attention": "comfy kitchen attention"}},
+        "4": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["text_encoder"], "type": "minimax", "device": "default"}},
+        "5": {"class_type": "VAELoader", "inputs": {"vae_name": m["video_vae"]}},
+        "6": {"class_type": "VAELoader", "inputs": {"vae_name": m["audio_vae"]}},
+    }
+    if pika:
+        model = _lora_chain(g, ["2", 0], [(m["swap_lora"], 1.0), (pika, 1.0)] + list(extra_loras))
+        g["10"] = {"class_type": "BasicScheduler", "inputs": {"model": model, "scheduler": "simple", "steps": 8, "denoise": 1.0}}
+        g["12"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}}
+    else:
+        g["3"] = {"class_type": "BlockSparseAttention", "inputs": {
+            "model": ["2", 0], "selection": "sol-attn", "selection.tau": 1.3, "start_percent": 0.2, "end_percent": 1.0,
+            "dense_blocks": "", "min_tokens": 12288, "extra_tokens": 256, "sink_conditioning": "exact_kv_and_rows",
+            "verbose": False}}
+        g["7"] = {"class_type": "MiniMaxH3SigmaShift", "inputs": {"model": ["3", 0], "shift_video": 12.2, "shift_audio": 3.0}}
+        model = _lora_chain(g, ["7", 0], [(m["swap_lora"], 1.0), (m["ref2v_turbo_lora"], 1.0)] + list(extra_loras))
+        g["10"] = {"class_type": "ManualSigmas", "inputs": {"sigmas": ACTOR_SIGMAS}}
+        g["12"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "er_sde"}}
+    stages = {n: "load" for n in ["1", "2", "3", "4", "5", "6", "7"] if n in g}
+    stages.update({k: "load" for k in g if k.isdigit() and 60 <= int(k) < 70})
+    pieces = {}
+    for k, sh in enumerate(shots):
+        n = max(5, int(round((sh["e"] - sh["s"]) * 24)))
+        skip = int(round(sh["s"] * 24))
+        sec = min(15.0, max(2.0, (sh["e"] - sh["s"])))
+        vid = f"V{k}"
+        g[vid] = {"class_type": "VHS_LoadVideo", "inputs": {
+            "video": video, "force_rate": 24, "custom_width": width if small_ref else 0, "custom_height": height if small_ref else 0,
+            "frame_load_cap": min(360, n),
+            "skip_first_frames": skip, "select_every_nth": 1, "format": "None"}}
+        stages[vid] = "encode"
+        if sh.get("pic", -1) < 0 or sh["pic"] >= len(images):   # this shot stays as it is, with its own sound
+            g[f"C{k}"] = {"class_type": "CreateVideo", "inputs": {
+                "images": [vid, 0], "audio": [vid, 2], "fps": float(FPS), "bit_depth": "auto", "color_space": "sRGB", "codec": "none"}}
+            stages[f"C{k}"] = "decode"
+            pieces[k] = [f"C{k}", 0]
+            continue
+        prompt = swap_prompt(sh.get("who") or "", extra)
+        pic = f"I{k}"
+        g[pic] = {"class_type": "LoadImage", "inputs": {"image": images[sh["pic"]]}}
+        ref = f"R{k}"
+        g[ref] = {"class_type": "MiniMaxH3ReferenceToVideo", "inputs": {
+            "clip": ["4", 0], "vae": ["5", 0], "audio_vae": ["6", 0], "prompt": prompt, "width": width, "height": height,
+            "length": frames(sec), "ref_image_size": "match", "ref_images.ref_image_0": [pic, 0], "ref_videos.ref_video_0": [vid, 0]}}
+        latent, sigmas, snd = [ref, 1], ["10", 0], [vid, 2]
+        if audio == "lock":   # this shot's own sound is locked in: the mouths follow it, and the right person speaks the right lines
+            lock_audio = [vid, 2]
+            a_end = sh.get("a_end")
+            if a_end is not None and sh["s"] < a_end < sh["e"] - 0.1:
+                # the sound leads the picture (the next person starts to speak while this one is still on the screen):
+                # only the part up to a_end drives this person's mouth, the rest is silence; the real sound stays in the video
+                g[f"X{k}"] = {"class_type": "TrimAudioDuration", "inputs": {"audio": [vid, 2], "start_index": 0.0, "duration": round(a_end - sh["s"], 3)}}
+                g[f"Y{k}"] = {"class_type": "EmptyAudio", "inputs": {"duration": round(sh["e"] - a_end, 3), "sample_rate": 44100, "channels": 2}}
+                g[f"W{k}"] = {"class_type": "AudioConcat", "inputs": {"audio1": [f"X{k}", 0], "audio2": [f"Y{k}", 0], "direction": "after"}}
+                lock_audio = [f"W{k}", 0]
+                stages.update({f"X{k}": "encode", f"Y{k}": "encode", f"W{k}": "encode"})
+            g[f"K{k}"] = {"class_type": "MiniMaxH3NativeAudioLock", "inputs": {
+                "model": ["1", 0], "av_latent": [ref, 1], "audio_vae": ["6", 0], "audio": lock_audio}}
+            sch = dict(g["10"]["inputs"]); sch["model"] = [f"K{k}", 0]
+            g[f"H{k}"] = {"class_type": g["10"]["class_type"], "inputs": sch}
+            latent, sigmas = [f"K{k}", 1], [f"H{k}", 0]   # the video keeps the real sound of the shot (snd stays the original)
+            stages[f"K{k}"] = "encode"
+        g[f"G{k}"] = {"class_type": "BasicGuider", "inputs": {"model": model, "conditioning": [ref, 0]}}
+        g[f"N{k}"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}}
+        g[f"S{k}"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": [f"N{k}", 0], "guider": [f"G{k}", 0], "sampler": ["12", 0], "sigmas": sigmas, "latent_image": latent}}
+        g[f"D{k}"] = {"class_type": "VAEDecode", "inputs": {"samples": [f"S{k}", 1], "vae": ["5", 0]}}
+        g[f"T{k}"] = {"class_type": "ImageFromBatch", "inputs": {"image": [f"D{k}", 0], "batch_index": 0, "length": n}}
+        g[f"A{k}"] = {"class_type": "VAEDecodeAudio", "inputs": {"samples": [f"S{k}", 1], "vae": ["6", 0]}}
+        g[f"C{k}"] = {"class_type": "CreateVideo", "inputs": {
+            "images": [f"T{k}", 0], "audio": snd, "fps": float(FPS), "bit_depth": "auto", "color_space": "sRGB", "codec": "none"}}
+        del g[f"A{k}"]   # the sound of the original video is kept, the one the model invents is not used
+        stages.update({pic: "encode", ref: "encode", f"S{k}": "sample", f"D{k}": "decode", f"T{k}": "decode", f"C{k}": "decode"})
+        pieces[k] = [f"C{k}", 0]
+    if len(pieces) == 1:
+        last = pieces[0]
+    else:
+        g["J"] = {"class_type": "ConcatenateVideo", "inputs": {**{f"videos.video{k}": v for k, v in pieces.items()}, "codec": "auto"}}
+        stages["J"] = "decode"
+        last = ["J", 0]
+    g["Z"] = {"class_type": "SaveVideo", "inputs": {"video": last, "filename_prefix": "H3Workspace/swap",
+                                                    "format": "auto", "format.codec": "auto"}}
+    stages["Z"] = "save"
     return g, stages
 
 
@@ -595,14 +789,20 @@ def action_graph(m, prompt, width, height, seconds, seed, images, audios, faithf
 
 
 def lipsync_scale(quality):
-    return 2.0 if quality == "1080p" else 1.5
+    return 2.0 if QUALITY.get(quality, 0) >= 1824 * 1024 else 1.5
 
 
-def lipsync_prompt(text, n_refs):
-    """Wrap free text into H3's structured prompt unless the user already wrote one."""
+def lipsync_prompt(text, n_refs, n_videos=0):
+    """Wrap free text into H3's structured prompt unless the user already wrote one.
+    Reference videos are tagged <Video N> as the official workflow asks; with pictures present the face comes from the pictures."""
     if "integrated_multimodal_description" in text:
         return text
     refs = " ".join(f"<Picture {i}> (from [Shot 1]) is fully referenced." for i in range(1, n_refs + 1))
+    if n_videos:
+        vids = ", ".join(f"<Video {i}>" for i in range(1, n_videos + 1))
+        refs += f" {vids} {'is' if n_videos == 1 else 'are'} referenced for motion, camera and setting only."
+        if n_refs:
+            refs += " The faces and identities must match the reference pictures exactly."
     return (f"For the target video, at 0.00 seconds into the target video, {refs}\n\n"
             f"integrated_multimodal_description: [Shot 1] {text}\n\n"
             "overall_soundscape: N/A\n\nnon_diegetic_music: N/A")
@@ -1152,7 +1352,31 @@ def upscale_image_graph(m, image, scale, seed, soften=0.0):
     return g, stages
 
 
-def upscale_graph(m, video, scale, seed):
+RELAY_PIXEL_SECONDS = 10 * 1376 * 768  # the whole clip is decoded in memory: about 10 s at 1376x768 is the limit (author's note)
+RELAY_SEC_PER_MP_FRAME = 0.7   # the author: 5 s of 720p in ~22 s on an RTX 5090 (0.2 s per megapixel-frame); a 4060 Ti is ~3.5x slower: an estimate, not measured here
+
+
+def relay_graph(m, video, seed, detail=1.0):
+    """RelayVSR x2: the whole video enlarged 2x in one sampling step (ComfyUI's built-in nodes), sound and fps kept."""
+    g = {
+        "1": {"class_type": "LoadVideo", "inputs": {"file": video}},
+        "2": {"class_type": "GetVideoComponents", "inputs": {"video": ["1", 0]}},
+        "3": {"class_type": "UNETLoader", "inputs": {"unet_name": m["relayvsr_unet"], "weight_dtype": "default"}},
+        "4": {"class_type": "RelayVSRConditioning", "inputs": {"model": ["3", 0], "images": ["2", 0]}},
+        "5": {"class_type": "KSampler", "inputs": {
+            "seed": seed, "steps": 1, "cfg": 1, "sampler_name": "euler", "scheduler": "simple", "denoise": 1,
+            "model": ["3", 0], "positive": ["4", 0], "negative": ["4", 0], "latent_image": ["4", 1]}},
+        "6": {"class_type": "VAELoader", "inputs": {"vae_name": m["relayvsr_vae"]}},
+        "7": {"class_type": "VSRDecode", "inputs": {"vae": ["6", 0], "samples": ["5", 0], "images": ["2", 0], "detail": detail}},
+        "8": {"class_type": "CreateVideo", "inputs": {"images": ["7", 0], "audio": ["2", 1], "fps": ["2", 2]}},
+        "9": {"class_type": "SaveVideo", "inputs": {
+            "video": ["8", 0], "filename_prefix": "H3Workspace/upscale", "format": "auto", "format.codec": "auto"}},
+    }
+    stages = {"1": "load", "2": "load", "3": "load", "6": "load", "4": "encode", "5": "sample", "7": "decode", "8": "save", "9": "save"}
+    return g, stages
+
+
+def upscale_graph(m, video, scale, seed, soften=0.0):
     g = {
         "1": {"class_type": "LoadVideo", "inputs": {"file": video}},
         "2": {"class_type": "GetVideoComponents", "inputs": {"video": ["1", 0]}},
@@ -1176,4 +1400,8 @@ def upscale_graph(m, video, scale, seed):
     }
     stages = {"1": "load", "2": "load", "5": "load", "6": "load", "3": "encode", "4": "encode", "7": "encode", "8": "encode",
               "9": "sample", "10": "decode", "11": "decode", "12": "save", "13": "save"}
+    if soften:  # softer result: SeedVR2 mixed with the plain enlarged video (the share of the plain one is `soften`)
+        g["14"] = {"class_type": "ImageBlend", "inputs": {"image1": ["11", 0], "image2": ["3", 0], "blend_factor": soften, "blend_mode": "normal"}}
+        g["12"]["inputs"]["images"] = ["14", 0]
+        stages["14"] = "decode"
     return g, stages

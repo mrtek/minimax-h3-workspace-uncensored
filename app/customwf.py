@@ -116,7 +116,7 @@ def analyze(graph, infos):
     widgets, missing_nodes, notes = [], [], []
     for nid, node in graph.items():
         cls = node["class_type"]
-        title = (node.get("_meta") or {}).get("title") or cls
+        title = str((node.get("_meta") or {}).get("title") or cls)
         info = infos.get(cls)
         if info is None:
             missing_nodes.append({"id": nid, "cls": cls, "title": title})
@@ -129,6 +129,9 @@ def analyze(graph, infos):
             sp = spec(info, name) or infer(value)
             if sp["kind"] == "link":
                 continue
+            if sp["kind"] == "combo":  # the form compares and shows these as text; numbers and true/false come back through coerce()
+                sp = dict(sp, options=[o if isinstance(o, str) else str(o) for o in sp["options"]])
+                value = value if isinstance(value, str) else str(value)
             role = role_of(cls, name, title, sp, nid in negatives)
             w = {"key": f"{nid}.{name}", "node": nid, "title": title, "cls": cls, "name": name, "value": value,
                  "role": role, **sp}

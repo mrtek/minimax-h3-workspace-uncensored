@@ -147,6 +147,16 @@ def mirrored(url):
     return url
 
 
+def system_proxy():
+    """The proxy a VPN/proxy program set in Windows (or HTTPS_PROXY), if any: our own requests would otherwise bypass it."""
+    try:
+        import urllib.request
+        px = urllib.request.getproxies()
+        return px.get("https") or px.get("http") or None
+    except Exception:
+        return None
+
+
 class Installer:
     """Runs the install steps and reports progress through `emit(dict)`."""
 
@@ -164,7 +174,7 @@ class Installer:
     async def step(self, sid, state, **kw):
         await self.emit({"type": "setup", "step": sid, "state": state, **kw})
 
-    async def download(self, url, dest, sid, label, size_hint=0):
+    async def download(self, url, dest, sid, label, size_hint=0, attempts=40):
         """Resumable download to dest (via dest.part)."""
         url = mirrored(url)
         dest = Path(dest)
@@ -172,11 +182,11 @@ class Installer:
             return
         dest.parent.mkdir(parents=True, exist_ok=True)
         part = dest.with_name(dest.name + ".part")
-        for attempt in range(40):  # a long outage: wait and continue from the saved .part file
+        for attempt in range(attempts):  # a long outage: wait and continue from the saved .part file
             have = part.stat().st_size if part.exists() else 0
             headers = {"Range": f"bytes={have}-"} if have else {}
             try:
-                async with self.session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(sock_read=120)) as r:
+                async with self.session.get(url, headers=headers, proxy=system_proxy(), timeout=aiohttp.ClientTimeout(sock_read=120)) as r:
                     if r.status == 416:  # already complete
                         break
                     if r.status not in (200, 206):
@@ -253,9 +263,18 @@ class Installer:
             await self.step("nodes", "progress", label=label, done=i, total=len(catalog.NODE_PACKS))
             if target.exists():
                 continue
-            url = f'https://github.com/{pack["repo"]}/archive/{pack["commit"]}.zip'
+            urls = (f'https://github.com/{pack["repo"]}/archive/{pack["commit"]}.zip',
+                    f'https://codeload.github.com/{pack["repo"]}/zip/{pack["commit"]}')  # second address: some networks block only one
             zpath = comfy_root.parent / "downloads" / f'{pack["name"]}.zip'
-            await self.download(url, zpath, "nodes", label)
+            for rnd in range(12):
+                try:
+                    await self.download(urls[rnd % 2], zpath, "nodes", label, attempts=2)
+                    break
+                except RuntimeError as e:
+                    if rnd == 11:
+                        raise
+                    await self.step("nodes", "progress", label=f"{label} — {str(e)[-120:]}; пробуем другой адрес…")
+                    await asyncio.sleep(5)
             with zipfile.ZipFile(zpath) as z:
                 top = z.namelist()[0].split("/")[0]
                 z.extractall(nodes_dir)
@@ -359,14 +378,59 @@ class ComfyProcess:
     def kill_orphans(py):
         """After a crash the app's own ComfyUI may stay in the background and hold comfyui.db and the port.
         Kill only python processes started from THIS install's python_embeded (never the user's own ComfyUI)."""
-        exe = str(py).replace("'", "''")
-        ps = ("Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
-              f"Where-Object {{ $_.ExecutablePath -eq '{exe}' }} | "
-              "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
+        if sys.platform != "win32":
+            return
+        target_exe = str(py).lower()
         try:
-            subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], timeout=30,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
-            time.sleep(1)
+            import ctypes
+            from ctypes import wintypes
+            kernel32 = ctypes.windll.kernel32
+            TH32CS_SNAPPROCESS = 0x00000002
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            PROCESS_TERMINATE = 0x0001
+
+            class PROCESSENTRY32W(ctypes.Structure):
+                _fields_ = [
+                    ('dwSize', wintypes.DWORD),
+                    ('cntUsage', wintypes.DWORD),
+                    ('th32ProcessID', wintypes.DWORD),
+                    ('th32DefaultHeapID', ctypes.c_size_t),
+                    ('th32ModuleID', wintypes.DWORD),
+                    ('cntThreads', wintypes.DWORD),
+                    ('th32ParentProcessID', wintypes.DWORD),
+                    ('pcPriClassBase', wintypes.LONG),
+                    ('dwFlags', wintypes.DWORD),
+                    ('szExeFile', ctypes.c_wchar * 260),
+                ]
+
+            hSnap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+            if not hSnap or hSnap == -1:
+                return
+            pe = PROCESSENTRY32W()
+            pe.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+            buf = ctypes.create_unicode_buffer(1024)
+            size = wintypes.DWORD(1024)
+
+            pids_to_kill = []
+            if kernel32.Process32FirstW(hSnap, ctypes.byref(pe)):
+                while True:
+                    if pe.szExeFile.lower() == 'python.exe':
+                        h = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pe.th32ProcessID)
+                        if h:
+                            size.value = 1024
+                            if kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                                if buf.value.lower() == target_exe:
+                                    pids_to_kill.append(pe.th32ProcessID)
+                            kernel32.CloseHandle(h)
+                    if not kernel32.Process32NextW(hSnap, ctypes.byref(pe)):
+                        break
+            kernel32.CloseHandle(hSnap)
+
+            for pid in pids_to_kill:
+                h = kernel32.OpenProcess(PROCESS_TERMINATE, False, pid)
+                if h:
+                    kernel32.TerminateProcess(h, 0)
+                    kernel32.CloseHandle(h)
         except Exception:
             pass
 
