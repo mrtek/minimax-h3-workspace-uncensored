@@ -294,7 +294,7 @@ textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft
 .agvar[open]{padding-bottom:12px}
 .agv .rd{grid-column:1/-1;font-size:14px;font-weight:700}
 .agv .rd.ok{color:#3fd18b} .agv .rd.no{color:#e6a45c}
-.agv{display:grid;grid-template-columns:1fr auto;gap:2px 10px;width:100%;text-align:left;padding:10px 12px;margin-top:6px;border-radius:11px;background:var(--bg-2);border:1.5px solid var(--line);transition:.15s}
+.agv{display:grid;grid-template-columns:1fr auto;gap:2px 10px;width:100%;text-align:left;padding:10px 12px;margin-top:6px;border-radius:11px;background:var(--bg-2);border:1.5px solid var(--line);transition:.15s;cursor:pointer}
 .agv:hover{border-color:var(--line-2)}
 .agv.on{border-color:var(--accent,#c0405a)}
 .agv b{font-size:13px}
@@ -5429,12 +5429,14 @@ $('#agClear').onclick = () => { const ta = $('#agIn'); ta.value = ''; ta.dispatc
 async function agStatus() {
   if (!API) return;
   const s = AG.status = await (await fetch('/api/agent/status')).json();
-  const st = s.installing ? ['weak', 'скачивается'] : !s.installed ? ['unsupported', 'не скачана'] : s.running ? ['ok', 'в памяти'] : ['ok', 'готова'];
+  const curVariant = (s.variants || []).find(o => o.current);
+  const curReady = s.custom ? s.installed : (curVariant ? curVariant.have : s.installed);
+  const st = s.installing ? ['weak', 'скачивается'] : !curReady ? ['unsupported', 'не скачана'] : s.running ? ['ok', 'в памяти'] : ['ok', 'готова'];
   $('#agState').className = 'verdict ' + st[0]; $('#agState').textContent = st[1];
-  const big = $('#agBig'), curName = s.custom ? s.title : ((s.variants || []).find(o => o.current) || {}).title || s.title;
-  big.className = 'agbig ' + (s.installing ? 'wait' : s.installed ? 'ok' : 'bad');
-  big.innerHTML = `<div class="t">${s.installing ? '⏳ Скачивается…' : s.installed ? '✓ ГОТОВО' : '✗ Не скачана'}</div>`
-    + `<div class="n"><b>${esc(curName || '')}</b>${s.installed ? (s.running ? ' — работает сейчас' : ' — запустится, когда нужна') : s.installing ? '' : ' — нажмите «Скачать» ниже'}</div>`;
+  const big = $('#agBig'), curName = s.custom ? s.title : (curVariant || {}).title || s.title;
+  big.className = 'agbig ' + (s.installing ? 'wait' : curReady ? 'ok' : 'bad');
+  big.innerHTML = `<div class="t">${s.installing ? '⏳ Скачивается…' : curReady ? '✓ ГОТОВО' : '✗ Не скачана'}</div>`
+    + `<div class="n"><b>${esc(curName || '')}</b>${curReady ? (s.running ? ' — работает сейчас' : ' — запустится, когда нужна') : s.installing ? '' : ' — нажмите «Скачать» ниже'}</div>`;
   $('#agModel').innerHTML = s.custom
     ? `<b style="color:var(--text)">${esc(s.title)}</b> — ваша модель<br><span style="font-family:var(--mono);font-size:11px;word-break:break-all">${esc(s.custom.model)}</span><br>`
       + (s.vision ? 'Картинки видит (найден mmproj). ' : '<span class="warn-t">Файла mmproj нет — картинки агент не увидит.</span> ')
@@ -5443,13 +5445,16 @@ async function agStatus() {
       + (s.installed ? 'Пока агент работает, генерация видео ждёт: обе модели вместе не помещаются в видеопамять — приложение переключает их само.' : `Нужно скачать один раз: ~${(s.size / 1e9).toFixed(1)} ГБ.`);
   const nReady = (s.variants || []).filter(o => o.have).length + (s.my_model ? 1 : 0);
   $('#agVarBox > summary').textContent = `Выбор моделей агента (готово: ${nReady} из ${(s.variants || []).length + (s.my_model ? 1 : 0)})`;
-  $('#agVariants').innerHTML = (s.my_model ? `<button class="agv${s.my_model.current ? ' on' : ''}" type="button" data-my="1"><b>Моя модель: ${esc(s.my_model.title)}</b><span class="tg">ваша</span><span class="rd ok">✓ ГОТОВО${s.my_model.current ? ' · ВЫБРАНА' : ''}</span></button>` : '')
-    + (s.variants || []).map(o => `<button class="agv${o.current ? ' on' : ''}" type="button" data-v="${o.key}"><b>${esc(o.title)}</b>`
+  $('#agVariants').innerHTML = (s.my_model ? `<div class="agv${s.my_model.current ? ' on' : ''}" data-my="1"><b>Моя модель: ${esc(s.my_model.title)}</b><span class="tg">ваша</span><span class="rd ok">✓ ГОТОВО${s.my_model.current ? ' · ВЫБРАНА' : ''}</span></div>` : '')
+    + (s.variants || []).map(o => `<div class="agv${o.current ? ' on' : ''}" data-v="${o.key}"><b>${esc(o.title)}</b>`
       + `<span class="tg${o.uncensored ? ' unc' : ''}">${o.uncensored ? 'без цензуры' : 'обычная'}</span>`
+      + `<div style="grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;margin-top:2px;gap:8px;flex-wrap:wrap">`
       + `<span class="rd ${o.have ? 'ok' : 'no'}">${o.have ? '✓ ГОТОВО' : `Нужно скачать · ${(o.size / 1e9).toFixed(1)} ГБ`}${o.current ? ' · ВЫБРАНА' : ''}</span>`
-      + (o.min_vram && !o.fits ? `<small>⚠ нужно от ${o.min_vram} ГБ видеопамяти: у вас может быть медленно</small>` : '') + `</button>`).join('')
+      + `${!o.have ? `<button class="btn mini pri" type="button" data-agdl="${o.key}" title="Скачать эту модель">Скачать (${(o.size / 1e9).toFixed(1)} ГБ)</button>` : ''}`
+      + `</div>`
+      + (o.min_vram && !o.fits ? `<small>⚠ нужно от ${o.min_vram} ГБ видеопамяти: у вас может быть медленно</small>` : '') + `</div>`).join('')
     + ((s.variants || []).some(o => o.current && o.uncensored) ? `<div class="hint" style="margin-top:8px">Эта модель не отказывается писать любые описания. Вы отвечаете за содержание: не используйте её для запрещённого и для людей без их согласия. Сам MiniMax H3 часть запросов всё равно может отклонить.</div>` : '');
-  const needModel = !s.installed;
+  const needModel = !curReady;
   $('#agInstall').hidden = s.installing || (s.custom && !s.has_model) || (!needModel && s.speech_ready);
   $('#agInstall').textContent = !needModel ? `Докачать распознавание речи (~${Math.round(s.speech_size / 1e6)} МБ)`
     : s.custom ? 'Скачать движок llama.cpp (37 МБ) и распознавание речи' : `Скачать модель (~${((s.size + s.speech_size) / 1e9).toFixed(1)} ГБ, вместе с распознаванием речи)`;
@@ -5484,6 +5489,14 @@ async function agStatus() {
   renderSkills(s.skills);
 }
 $('#agVariants').onclick = async e => {
+  const dlBtn = e.target.closest('[data-agdl]');
+  if (dlBtn) {
+    const vKey = dlBtn.dataset.agdl;
+    const dir = $('#agDir').value.trim(), s = AG.status || {};
+    if (!s.managed && !s.installed && !s.dir_chosen && !dir) { toast('Сначала укажите папку, куда скачать'); $('#agDir').focus(); return; }
+    try { await postJSON('/api/agent/install', { dir, variant: vKey }); agStatus(); } catch (err) { toast(err.message); }
+    return;
+  }
   const b = e.target.closest('.agv'); if (!b || b.classList.contains('on')) return;
   if (b.dataset.my) { try { await postJSON('/api/agent/model', { restore: true }); agStatus(); } catch (err) { toast(err.message); } return; }
   try { await postJSON('/api/agent/variant', { variant: b.dataset.v }); agStatus(); } catch (err) { toast(err.message); }

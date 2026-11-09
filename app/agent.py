@@ -24,37 +24,77 @@ HF = "https://huggingface.co/{repo}/resolve/main/{path}"
 LLM_VARIANTS = {
     "gemma4-12b": {"title": "Gemma 4 12B", "min_vram": 12, "repo": "ggml-org/gemma-4-12B-it-GGUF",
                    "model": "gemma-4-12B-it-Q4_0.gguf", "model_size": 7.22e9,
-                   "mmproj": "mmproj-gemma-4-12B-it-Q8_0.gguf", "mmproj_size": 0.16e9, "ctx": 49152},
+                   "mmproj": "mmproj-gemma-4-12B-it-Q8_0.gguf", "mmproj_size": 0.16e9, "ctx": 49152,
+                   "aliases": ["gemma-4-12B-it-Q4_K_M.gguf", "gemma-4-12B-it-Q4_K.gguf"],
+                   "mmproj_aliases": ["mmproj-gemma-4-12B-it-BF16.gguf"]},
     "gemma4-e4b": {"title": "Gemma 4 E4B (лёгкая)", "repo": "ggml-org/gemma-4-E4B-it-GGUF",
                    "model": "gemma-4-E4B-it-Q4_0.gguf", "model_size": 4.59e9,
-                   "mmproj": "mmproj-gemma-4-E4B-it-Q8_0.gguf", "mmproj_size": 0.56e9, "ctx": 32768},
+                   "mmproj": "mmproj-gemma-4-E4B-it-Q8_0.gguf", "mmproj_size": 0.56e9, "ctx": 32768,
+                   "aliases": ["gemma-4-E4B-it-Q4_K_M.gguf", "gemma-4-E4B-it-Q4_K.gguf"]},
     # the same Gemma 4 without refusals (abliterated, Huihui): the file names of the picture part are the same in both repos,
     # so each one is saved under its own name ("mmproj_as")
     "gemma4-12b-unc": {"title": "Gemma 4 12B без цензуры", "uncensored": True, "min_vram": 12,
                        "repo": "huihui-ai/Huihui-gemma-4-12B-it-qat-q4_0-unquantized-abliterated-GGUF",
                        "model": "Huihui-gemma-4-12B-it-qat-q4_0-unquantized-abliterated-Q4_K.gguf", "model_size": 7.381e9,
                        "mmproj": "mmproj-model-bf16.gguf", "mmproj_as": "mmproj-gemma4-12b-unc-bf16.gguf",
-                       "mmproj_size": 0.175e9, "ctx": 49152},
+                       "mmproj_size": 0.175e9, "ctx": 49152,
+                       "aliases": [
+                           "gemma-4-12B-it-qat-q4_0-uncensored-heretic-Q4_0.gguf",
+                           "gemma-4-12B-it-qat-q4_0-uncensored-heretic-Q4_K.gguf",
+                           "Huihui-gemma-4-12B-it-qat-q4_0-unquantized-abliterated-Q4_0.gguf"
+                       ],
+                       "mmproj_aliases": [
+                           "gemma-4-12B-it-qat-q4_0-uncensored-heretic-mmproj-BF16.gguf",
+                           "mmproj-gemma-4-12B-it-Q8_0.gguf"
+                       ]},
     "gemma4-e4b-unc": {"title": "Gemma 4 E4B без цензуры (лёгкая)", "uncensored": True,
                        "repo": "huihui-ai/Huihui-gemma-4-E4B-it-qat-q4_0-unquantized-abliterated-GGUF",
                        "model": "Huihui-gemma-4-E4B-it-qat-q4_0-unquantized-abliterated-Q4_K.gguf", "model_size": 5.302e9,
                        "mmproj": "mmproj-model-bf16.gguf", "mmproj_as": "mmproj-gemma4-e4b-unc-bf16.gguf",
-                       "mmproj_size": 0.992e9, "ctx": 32768},
+                       "mmproj_size": 0.992e9, "ctx": 32768,
+                       "aliases": [
+                           "gemma-4-E4B-it-qat-q4_0-uncensored-heretic-Q4_0.gguf",
+                           "gemma-4-E4B-it-qat-q4_0-uncensored-heretic-Q4_K.gguf",
+                           "Huihui-gemma-4-E4B-it-qat-q4_0-unquantized-abliterated-Q4_0.gguf"
+                       ],
+                       "mmproj_aliases": [
+                           "gemma-4-E4B-it-qat-q4_0-uncensored-heretic-mmproj-BF16.gguf",
+                           "mmproj-gemma-4-E4B-it-Q8_0.gguf"
+                       ]},
     # Qwen3-VL 8B (Apache 2.0) and its abliterated version
     "qwen3vl-8b": {"title": "Qwen3-VL 8B", "min_vram": 8,
                    "repo": "Qwen/Qwen3-VL-8B-Instruct-GGUF", "model": "Qwen3VL-8B-Instruct-Q4_K_M.gguf", "model_size": 5.028e9,
-                   "mmproj": "mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf", "mmproj_size": 0.752e9, "ctx": 32768},
+                   "mmproj": "mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf", "mmproj_size": 0.752e9, "ctx": 32768,
+                   "aliases": ["Qwen3VL-8B-Instruct-Q4_0.gguf"]},
     "qwen3vl-8b-unc": {"title": "Qwen3-VL 8B без цензуры", "uncensored": True, "min_vram": 8,
                        "repo": "noctrex/Huihui-Qwen3-VL-8B-Instruct-abliterated-GGUF",
                        "model": "Huihui-Qwen3-VL-8B-Instruct-abliterated-Q4_K_M.gguf", "model_size": 5.028e9,
                        "mmproj": "mmproj-F16.gguf", "mmproj_as": "mmproj-qwen3vl-8b-unc-F16.gguf",
-                       "mmproj_size": 1.159e9, "ctx": 32768},
+                       "mmproj_size": 1.159e9, "ctx": 32768,
+                       "aliases": [
+                           "Huihui-Qwen3-VL-8B-Instruct-abliterated-Q4_0.gguf",
+                           "Qwen3VL-8B-Instruct-abliterated-Q4_K_M.gguf"
+                       ]},
 }
 
 
 def variant_files(root, v):
     """(model path, picture-part path) where this variant keeps its files."""
-    return Path(root) / "models" / v["model"], Path(root) / "models" / v.get("mmproj_as", v["mmproj"])
+    m = Path(root) / "models" / v["model"]
+    p = Path(root) / "models" / v.get("mmproj_as", v["mmproj"])
+    if not m.exists():
+        for alias in v.get("aliases", []):
+            cand = Path(root) / "models" / alias
+            if cand.exists():
+                m = cand
+                break
+    if not p.exists():
+        for p_alias in v.get("mmproj_aliases", []):
+            cand_p = Path(root) / "models" / p_alias
+            if cand_p.exists():
+                p = cand_p
+                break
+    return m, p
 
 # Keywords that switch on the acting skill in "auto" mode (matched as word starts, any case).
 DEFAULT_SKILL_SETTINGS = {
@@ -506,13 +546,6 @@ class LlamaServer:
             return Path(self.custom["model"]), Path(self.custom["mmproj"]) if self.custom.get("mmproj") else None
         v = LLM_VARIANTS[variant]
         m, p = variant_files(self.root, v)
-        if not m.exists():
-            for other_var, other_v in LLM_VARIANTS.items():
-                cand_m = self.root / "models" / other_v["model"]
-                if cand_m.exists():
-                    m = cand_m
-                    p = self.root / "models" / other_v["mmproj"]
-                    break
         if p and not p.exists():
             for cand_p in [
                 self.root / "models" / "gemma-4-12B-it-qat-q4_0-uncensored-heretic-mmproj-BF16.gguf",

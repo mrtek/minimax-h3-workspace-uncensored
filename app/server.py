@@ -2643,11 +2643,20 @@ class App:
     async def h_agent_install(self, req):
         if self.agent_installer:
             return web.json_response({"error": "Уже скачивается"}, status=409)
-        variant = await self.llm_variant()
         try:
-            wanted = ((await req.json()).get("dir") or "").strip()
-        except ValueError:
-            wanted = ""
+            body = await req.json()
+        except Exception:
+            body = {}
+        wanted = (body.get("dir") or "").strip()
+        req_variant = body.get("variant")
+        if req_variant and req_variant in ag.LLM_VARIANTS:
+            self.config["llm_variant"] = req_variant
+            self.config.pop("llm_custom", None)
+            self.config.save()
+            self.llm.custom = None
+            variant = req_variant
+        else:
+            variant = await self.llm_variant()
         if self.config.get("engine") != "managed" and not self.llm.installed(variant):
             # with the user's own ComfyUI nothing goes anywhere the user did not name
             if not wanted and not self.config.get("llm_dir"):
