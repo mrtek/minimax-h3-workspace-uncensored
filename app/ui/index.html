@@ -1386,7 +1386,7 @@ equirements.txt</code><br>
           <div id="comfyUpdStatusHint" class="hint" style="color:var(--muted)">Нажмите «Проверить обновления», чтобы запросить свежий релиз с GitHub.</div>
         </div>
 <div class="card" id="clCard" style="margin-bottom:16px" hidden>
-          <div class="card-h"><h3>Свои LoRA <small style="color:var(--muted);font-weight:500">· подключение, триггеры и каталог</small></h3><span><button class="btn" id="clCivitai" type="button" style="background:linear-gradient(135deg, rgba(230,50,50,0.25), rgba(180,20,50,0.4));border:1px solid rgba(255,80,80,0.4)">🌐 Каталог Civitai</button> <button class="btn" id="clRe" type="button">Обновить список</button> <button class="btn pri" id="clAdd" type="button">+ Добавить LoRA</button></span></div>
+          <div class="card-h"><h3>Свои LoRA <small style="color:var(--muted);font-weight:500">· подключение, триггеры и каталог</small></h3><span><button class="btn" id="clCivitai" type="button" style="background:linear-gradient(135deg, rgba(230,50,50,0.25), rgba(180,20,50,0.4));border:1px solid rgba(255,80,80,0.4)">🌐 Каталог Civitai</button> <button class="btn" id="clFolder" type="button" title="Открыть папку ComfyUI\models\loras в Проводнике Windows">📁 Папка LoRA</button> <button class="btn" id="clRe" type="button" title="Пересканировать папку loras на наличие новых файлов">Обновить список</button> <button class="btn pri" id="clAdd" type="button" title="Добавить LoRA из папки models\loras">+ Добавить LoRA</button></span></div>
           <div class="hint" style="margin-bottom:10px">Здесь отображаются все подключенные LoRA. Для каждой модели показаны понятное назначение, рекомендуемая сила и ключевые слова-триггеры для Агента. Скачивайте новые LoRA напрямую из каталога Civitai или добавляйте свои в <b>ComfyUI\models\loras</b>.</div>
           <div id="clConflicts"></div>
           <div class="mlist" id="clList"></div>
@@ -2472,7 +2472,141 @@ function renderCL() {
       </div>` : ''}
     </div>`;
   }).join('')
-  : '<div class="hint">Пока нет добавленных LoRA. Выберите файл из списка ниже или скачайте из каталога Civitai.</div>';
+  : '<div class="hint">Пока нет добавленных LoRA. Нажмите «+ Добавить LoRA» выше или скачайте новые из каталога Civitai.</div>';
+  initCLCard();
+}
+
+function initCLCard() {
+  const list = $('#clList');
+  if (!list || list._initDone) return;
+  list._initDone = true;
+
+  list.addEventListener('click', e => {
+    const mEl = e.target.closest('.m');
+    if (!mEl) {
+      if (e.target.closest('.cl-trig-chip')) {
+        const trig = e.target.closest('.cl-trig-chip').dataset.trig;
+        if (trig) {
+          navigator.clipboard?.writeText(trig);
+          toast('Скопирован триггер: ' + trig);
+        }
+      }
+      return;
+    }
+    const idx = +mEl.dataset.i;
+    const it = CL.items[idx];
+    if (!it) return;
+
+    if (e.target.closest('.cl-on')) {
+      it.on = !it.on;
+      syncAllLoras();
+      const meta = getLoraMeta(it.file);
+      toast(`${meta.name || cleanLoraName(it.file)}: ${it.on ? 'включена' : 'выключена'}`);
+      return;
+    }
+    if (e.target.closest('.cl-edit')) {
+      openLoraEdit(it.file);
+      return;
+    }
+    if (e.target.closest('.cl-x')) {
+      const removed = CL.items.splice(idx, 1)[0];
+      syncAllLoras();
+      const meta = getLoraMeta(removed?.file);
+      toast(`Убрана LoRA: ${meta.name || cleanLoraName(removed?.file)}`);
+      return;
+    }
+    if (e.target.closest('.cl-trig-chip')) {
+      const trig = e.target.closest('.cl-trig-chip').dataset.trig;
+      if (trig) {
+        navigator.clipboard?.writeText(trig);
+        toast('Скопирован триггер: ' + trig);
+      }
+      return;
+    }
+  });
+
+  list.addEventListener('input', e => {
+    const mEl = e.target.closest('.m');
+    if (mEl && e.target.classList.contains('cl-s')) {
+      const idx = +mEl.dataset.i;
+      if (CL.items[idx]) {
+        CL.items[idx].strength = +e.target.value;
+        debouncedSaveCL();
+        activeLoraBoxes.forEach(render => { try { render(); } catch(err) {} });
+      }
+    }
+  });
+
+  list.addEventListener('change', e => {
+    const mEl = e.target.closest('.m');
+    if (mEl && e.target.classList.contains('cl-f')) {
+      const idx = +mEl.dataset.i;
+      if (CL.items[idx]) {
+        CL.items[idx].file = e.target.value;
+        const meta = getLoraMeta(e.target.value);
+        if (meta.recommended_weight) CL.items[idx].strength = meta.recommended_weight;
+        syncAllLoras();
+        toast(`Выбрана LoRA: ${meta.name || cleanLoraName(e.target.value)}`);
+      }
+    }
+  });
+
+  $('#clConflicts')?.addEventListener('click', e => {
+    const btn = e.target.closest('.lcb-act-btn');
+    if (btn) handleConflictAction(btn);
+  });
+
+  $('#clAdd')?.addEventListener('click', async () => {
+    if (!CL.files || !CL.files.length) {
+      await loadCL();
+    }
+    const allFiles = CL.files || [];
+    if (!allFiles.length) {
+      const go = confirm('В папке ComfyUI\\models\\loras пока нет файлов LoRA (.safetensors).\n\nНажмите «ОК», чтобы открыть каталог Civitai для поиска и скачивания LoRA,\nили «Отмена», чтобы открыть папку loras на диске.');
+      if (go) openCivitaiModal();
+      else postJSON('/api/loras/open-folder', {}).catch(err => toast(err.message));
+      return;
+    }
+    const unadded = allFiles.filter(f => !CL.items.some(x => x && x.file === f));
+    if (unadded.length > 0) {
+      const f = unadded[0];
+      const meta = getLoraMeta(f);
+      const w = meta.recommended_weight || 0.8;
+      CL.items.push({ file: f, strength: w, on: true });
+      syncAllLoras();
+      const left = unadded.length - 1;
+      toast(`Добавлена LoRA: ${meta.name || cleanLoraName(f)}` + (left > 0 ? ` (осталось ещё ${left})` : ''));
+      setTimeout(() => {
+        const last = $('#clList .m:last-child');
+        if (last) {
+          last.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          last.style.outline = '2px solid var(--accent, #ff7777)';
+          setTimeout(() => { last.style.outline = ''; }, 2000);
+        }
+      }, 100);
+      return;
+    }
+    const go = confirm(`Все найденные на диске LoRA (${allFiles.length} шт.) уже добавлены в список.\n\nНажмите «ОК», чтобы открыть каталог Civitai и скачать новые LoRA,\nили «Отмена», чтобы открыть папку models\\loras и скопировать свои файлы.`);
+    if (go) openCivitaiModal();
+    else {
+      postJSON('/api/loras/open-folder', {}).then(() => {
+        toast('Папка models\\loras открыта в Проводнике. После копирования нажмите «Обновить список».');
+      }).catch(err => toast(err.message));
+    }
+  });
+
+  $('#clRe')?.addEventListener('click', async () => {
+    toast('Обновляем список LoRA...');
+    await loadCL();
+    syncAllLoras();
+    toast(`Список LoRA обновлён. Найдено файлов: ${CL.files.length}`);
+  });
+
+  $('#clFolder')?.addEventListener('click', () => {
+    postJSON('/api/loras/open-folder', {}).then(() => {
+      toast('Папка models\\loras открыта в Проводнике');
+    }).catch(err => toast('Ошибка открытия папки: ' + err.message));
+  });
 }
 
 const LORA_DEFS = {

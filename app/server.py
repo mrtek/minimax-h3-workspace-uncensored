@@ -1810,6 +1810,20 @@ class App:
         conflicts = loras_registry.analyze_lora_conflicts(items, custom_meta=custom_meta, builtins=builtins)
         return web.json_response({"conflicts": conflicts})
 
+    async def h_loras_open_folder(self, _req):
+        root = self.comfy_root()
+        if not root:
+            return web.json_response({"error": "Папка ComfyUI не найдена"}, status=400)
+        loras_dir = root / "ComfyUI" / "models" / "loras"
+        loras_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            import os
+            os.startfile(str(loras_dir))
+        except Exception:
+            import subprocess
+            subprocess.Popen(["explorer", str(loras_dir)])
+        return web.json_response({"ok": True, "path": str(loras_dir)})
+
     async def h_loras_meta_save(self, req):
         data = await req.json()
         f = data.get("file")
@@ -3201,6 +3215,7 @@ def build_app(comfy_override=None):
         web.get("/api/loras/custom", state.h_loras_custom),
         web.post("/api/loras/custom", state.h_loras_custom_set),
         web.post("/api/loras/conflicts", state.h_loras_conflicts),
+        web.post("/api/loras/open-folder", state.h_loras_open_folder),
         web.post("/api/loras/meta/save", state.h_loras_meta_save),
         web.get("/api/civitai/search", state.h_civitai_search),
         web.post("/api/civitai/resolve", state.h_civitai_resolve),
