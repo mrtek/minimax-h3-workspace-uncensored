@@ -677,6 +677,8 @@ class App:
         missing = {m["role"] for m in self.missing}
         needed = catalog.roles_for(self.modes())
         models = [{"role": role, "title": catalog.ROLE_TITLES[role], "name": self.model_names[role],
+                   "desc": catalog.ROLE_DESCRIPTIONS.get(role, ""),
+                   "group": catalog.ROLE_GROUPS.get(role, "diffusion"),
                    "category": catalog.VARIANTS[role][variant]["category"],
                    "folder": catalog.VARIANTS[role][variant]["category"], "marks": catalog.marks_text(role),
                    "file": catalog.VARIANTS[role][variant]["file"], "url": engine.mirrored(catalog.VARIANTS[role][variant]["url"]),

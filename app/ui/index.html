@@ -432,6 +432,16 @@ details[open] summary::before{content:'－ '}
 .btn:hover{border-color:var(--accent)}
 .btn.pri{background:var(--grad);border:0;color:#fff}
 .mlist{display:grid;gap:8px}
+.folder-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:5px;font-family:var(--mono)}
+.folder-badge.diffusion_models{background:rgba(80,200,120,0.12);color:#55dd88;border:1px solid rgba(80,200,120,0.25)}
+.folder-badge.text_encoders{background:rgba(70,150,255,0.12);color:#70b0ff;border:1px solid rgba(70,150,255,0.25)}
+.folder-badge.vae{background:rgba(200,100,255,0.12);color:#d080ff;border:1px solid rgba(200,100,255,0.25)}
+.folder-badge.latent_upscale_models{background:rgba(255,170,50,0.12);color:#ffbb44;border:1px solid rgba(255,170,50,0.25)}
+.folder-badge.loras{background:rgba(255,80,80,0.12);color:#ff7777;border:1px solid rgba(255,80,80,0.25)}
+.folder-badge.vae_approx{background:rgba(180,180,180,0.12);color:#ccc;border:1px solid rgba(180,180,180,0.25)}
+.md-grp-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-top:12px;margin-bottom:8px;cursor:pointer;user-select:none;transition:background .15s}
+.md-grp-head:hover{background:rgba(255,255,255,0.06)}
+.md-grp-head .arr{font-size:11px;color:var(--muted);transition:transform .2s;display:inline-block;width:14px}
 .m{display:grid;grid-template-columns:1fr 150px 110px;gap:14px;align-items:center;padding:12px 14px;border-radius:12px;background:var(--bg-2);border:1px solid var(--line)}
 .m b{font-family:var(--mono);font-size:12.5px;font-weight:500;word-break:break-all}
 .m small{display:block;color:var(--dim);font-size:11.5px;font-family:Manrope}
@@ -1397,9 +1407,38 @@ equirements.txt</code><br>
           <div style="height:8px;border-radius:6px;background:var(--bg-2);overflow:hidden"><i id="mdDlB" style="display:block;height:100%;width:0;background:var(--grad);transition:width .4s"></i></div>
           <div class="hint" id="mdDlN" style="margin-top:6px"></div>
         </div>
-        <div class="card">
+        <div class="card" id="modelsCard">
           <div class="card-h"><h3>Модели</h3><span><span id="mdAdd"></span> <button class="btn pri" id="mdFix" hidden>Докачать недостающие</button> <button class="btn pri" id="mdFixExt" hidden>Скачать недостающие</button></span></div>
-          <label class="hint" style="display:flex;gap:8px;align-items:flex-start;margin:0 0 10px;cursor:pointer" title="Те же файлы, но с другого сервера. Помогает, когда Hugging Face грузит медленно или не открывается."><input type="checkbox" id="mdMirror" style="margin-top:3px"><span>Если Hugging Face грузит медленно: скачивать через зеркало <b>hf-mirror.com</b>. Файлы те же. Скачивание можно закрыть и продолжить позже, оно докачается с того же места.</span></label>
+          <label class="hint" style="display:flex;gap:8px;align-items:flex-start;margin:0 0 12px;cursor:pointer" title="Те же файлы, но с другого сервера. Помогает, когда Hugging Face грузит медленно или не открывается."><input type="checkbox" id="mdMirror" style="margin-top:3px"><span>Если Hugging Face грузит медленно: скачивать через зеркало <b>hf-mirror.com</b>. Файлы те же. Скачивание можно закрыть и продолжить позже, оно докачается с того же места.</span></label>
+
+          <!-- Top category tabs -->
+          <div class="md-tabs-bar" id="mdTabs" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.06)">
+            <button class="chip on" data-mdtab="all" type="button">Все модели <small class="hint" id="cntAll"></small></button>
+            <button class="chip" data-mdtab="video" type="button">🎬 Для видео <small class="hint" id="cntVideo"></small></button>
+            <button class="chip" data-mdtab="images" type="button">🖼 Для картинок <small class="hint" id="cntImages"></small></button>
+            <button class="chip" data-mdtab="upscale" type="button">🔍 Увеличение <small class="hint" id="cntUpscale"></small></button>
+            <button class="chip" data-mdtab="loras" type="button">⚡ LoRA и утилиты <small class="hint" id="cntLoras"></small></button>
+          </div>
+
+          <!-- Tools: search and missing filter -->
+          <div class="md-tools-bar" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px">
+            <div style="display:flex;gap:12px;align-items:center;flex:1;min-width:260px">
+              <div style="position:relative;flex:1;max-width:380px">
+                <input type="text" id="mdSearch" placeholder="Поиск по названию или роли…" style="width:100%;padding:7px 28px 7px 32px;background:var(--bg-2, #1b1b22);border:1px solid var(--line, #444);border-radius:8px;color:#fff;font-size:12.5px;outline:none">
+                <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none">🔍</span>
+                <button id="mdSearchClear" type="button" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;display:none;font-size:13px">✕</button>
+              </div>
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2,#ccc);cursor:pointer;user-select:none" title="Показать только модели, которых нет на диске">
+                <input type="checkbox" id="mdMissingOnly" style="cursor:pointer">
+                <span>Только недостающие</span>
+              </label>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button class="btn mini" id="mdExpandAll" type="button" title="Развернуть все секции">Развернуть всё</button>
+              <button class="btn mini" id="mdCollapseAll" type="button" title="Свернуть все секции">Свернуть всё</button>
+            </div>
+          </div>
+
           <div class="mlist" id="mlist"></div>
         </div>
       </div>
@@ -3858,17 +3897,202 @@ async function afterSetup() {
 /* status after setup */
 let MD_ENGINE = '', MD_EXTDIR = '', MD_NEED = [];
 let MD_EXT = false;
+let LAST_MODELS_DATA = null;
+let MD_TAB = 'all';
+let MD_SEARCH_QUERY = '';
+let MD_MISSING_ONLY = false;
+const MD_COLLAPSED_GROUPS = new Set();
+
+const MODEL_GROUPS_DEF = {
+  diffusion: { title: 'Основные модели генерации (Diffusion Models)', icon: '🧠', folder: 'diffusion_models' },
+  text_encoder: { title: 'Текстовые энкодеры (Text Encoders / CLIP)', icon: '📝', folder: 'text_encoders' },
+  vae: { title: 'VAE / Автоэнкодеры (Video, Audio & Image VAE)', icon: '🎨', folder: 'vae' },
+  upscaler: { title: 'Апскейлеры и Увеличение (Upscalers)', icon: '🔎', folder: 'latent_upscale_models' },
+  lora: { title: 'Вспомогательные модули и LoRA', icon: '⚡', folder: 'loras' },
+};
+const MODEL_GROUPS_ORDER = ['diffusion', 'text_encoder', 'vae', 'upscaler', 'lora'];
+
+function modelMatchesTab(m, tab) {
+  if (tab === 'all') return true;
+  const modes = m.modes || [];
+  if (tab === 'video') {
+    return modes.some(x => ['video', 'lipsync', 'refs', 'actor', 'swap', 'action', 'long'].includes(x));
+  }
+  if (tab === 'images') {
+    return modes.some(x => ['krea', 'kreareal', 'qwen', 'flux'].includes(x));
+  }
+  if (tab === 'upscale') {
+    return modes.some(x => ['upscale', 'relayvsr'].includes(x)) || ['upscaler', 'action_upscaler'].includes(m.role);
+  }
+  if (tab === 'loras') {
+    return m.group === 'lora' || m.folder === 'loras' || ['ref2v_turbo_lora', 'sla_lora', 'speed_slider_lora', 'vocal_model', 'realism_lora', 'motion_repair_lora', 'swap_lora', 'pika_lora', 'kreareal_lora'].includes(m.role);
+  }
+  return true;
+}
+
+function modelMatchesSearch(m, q) {
+  if (!q) return true;
+  const s = q.toLowerCase().trim();
+  const name = (m.name || '').toLowerCase();
+  const file = (m.file || '').toLowerCase();
+  const title = (m.title || '').toLowerCase();
+  const desc = (m.desc || '').toLowerCase();
+  const folder = (m.folder || '').toLowerCase();
+  const modes = (m.modes || []).join(' ').toLowerCase();
+  return name.includes(s) || file.includes(s) || title.includes(s) || desc.includes(s) || folder.includes(s) || modes.includes(s);
+}
+
+function paintModelsList() {
+  if (!LAST_MODELS_DATA || !LAST_MODELS_DATA.models) return;
+  const s = LAST_MODELS_DATA;
+  const allModels = s.models;
+
+  const filtered = allModels.filter(m => {
+    if (!modelMatchesTab(m, MD_TAB)) return false;
+    if (MD_MISSING_ONLY && m.have) return false;
+    if (MD_SEARCH_QUERY && !modelMatchesSearch(m, MD_SEARCH_QUERY)) return false;
+    return true;
+  });
+
+  if (!filtered.length) {
+    $('#mlist').innerHTML = `<div class="hint" style="text-align:center;padding:24px 16px;background:var(--bg-2);border:1px solid var(--line);border-radius:12px;margin:10px 0">По выбранным фильтрам моделей не найдено. Попробуйте сбросить поиск или изменить вкладку.</div>`;
+    return;
+  }
+
+  let html = '';
+  MODEL_GROUPS_ORDER.forEach(gKey => {
+    const groupModels = filtered.filter(m => (m.group || 'diffusion') === gKey);
+    if (!groupModels.length) return;
+    const grp = MODEL_GROUPS_DEF[gKey] || { title: gKey, icon: '📦', folder: '' };
+    const readyCount = groupModels.filter(m => m.have).length;
+    const allReady = readyCount === groupModels.length;
+    const isCollapsed = MD_COLLAPSED_GROUPS.has(gKey);
+
+    html += `<div class="md-grp-head" data-gkey="${gKey}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="arr">${isCollapsed ? '▶' : '▼'}</span>
+        <span style="font-size:15px">${grp.icon}</span>
+        <b style="font-size:13px;color:var(--text,#fff)">${grp.title}</b>
+        <span class="chip folder-badge ${grp.folder}" style="font-size:10px">${grp.folder}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11.5px;color:${allReady ? '#55dd88' : 'var(--muted)'};font-weight:600">${readyCount} из ${groupModels.length} готовы</span>
+      </div>
+    </div>`;
+
+    html += `<div class="md-grp-body" data-gkey="${gKey}" style="display:${isCollapsed ? 'none' : 'grid'};gap:8px;margin-bottom:12px">`;
+    html += groupModels.map(m => {
+      const optional = !m.modes.length;
+      const st = m.have ? '<span class="st ok">✓ есть</span>' : optional ? '<span class="st opt">необязательно</span>' : '<span class="st miss">нет</span>';
+      const modes = (m.modes || []).map(x => ({
+        video: 'Image-to-Video', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра',
+        swap: 'Замена персонажа', action: 'Экшн', long: 'Длинное видео', krea: 'Картинка по тексту',
+        kreareal: 'Картинка: реализм', qwen: 'Правка картинки', flux: 'Правка: FLUX.2',
+        upscale: 'Увеличение', relayvsr: 'Быстрое увеличение'
+      })[x]).filter(Boolean).join(', ') || 'дополнительно';
+
+      return `<div class="m" data-role="${esc(m.role)}">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <b>${esc(m.name.split('\\').pop())}</b>
+            <span class="chip folder-badge ${esc(m.folder || '')}" title="Папка ComfyUI: ${esc(m.folder || '')}">${esc(m.folder || '')}</span>
+          </div>
+          <div style="font-weight:600;font-size:12.5px;color:var(--text,#ddd);margin-top:2px">${esc(m.title)}</div>
+          ${m.desc ? `<div class="hint" style="color:var(--text-2,#bbb);font-size:11.5px;line-height:1.35;margin-top:2px">${esc(m.desc)}</div>` : ''}
+          <small style="margin-top:4px;display:block">
+            Нужен файл: <span class="mf" title="Нажмите, чтобы скопировать имя" style="cursor:pointer;font-family:monospace;color:var(--text-2,#ccc);text-decoration:underline dashed rgba(255,255,255,0.25)">${esc(m.file || '')}</span> · в папку <b>${esc(m.folder || '')}</b>${m.marks ? ` · в названии: ${esc(m.marks)}` : ''} · <span style="color:var(--sub,#888)">${esc(modes)}</span>
+          </small>
+        </div>
+        <span class="hint" style="text-align:right;font-weight:600">${GB(m.size)}</span>
+        ${st}
+        <div class="m-btns" style="grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap">
+          ${s.engine === 'external' && !m.have ? `<button class="btn mini pri" type="button" data-dlnow="${esc(m.role)}" title="Скачать этот файл прямо в папку моделей вашего ComfyUI">Скачать сюда (${GB(m.size)})</button>` : ''}
+          <button class="btn mini" type="button" data-dlmodel="${esc(m.role)}" title="Открыть страницу скачивания этого файла в браузере">Страница в интернете…</button>
+          <button class="btn mini" type="button" data-copyurl="${esc(m.url || '')}" title="Скопировать прямую ссылку, чтобы скачать менеджером загрузок или через другой компьютер">Копировать ссылку</button>
+          <button class="btn mini" type="button" data-copyname="${esc(m.file || '')}" title="Скопировать имя файла, чтобы найти его на компьютере или на сайте">Копировать имя</button>
+          <button class="btn mini" type="button" data-pickmodel="${esc(m.role)}" title="${m.have ? 'Заменить на другой файл (например, другую точность модели)' : 'Если файл у вас называется иначе — выберите его вручную'}">${m.have ? (m.picked ? 'Другой файл ✓' : 'Заменить…') : 'Указать файл…'}</button>
+          ${m.variants && m.variants.length > 1 ? `<button class="btn mini" type="button" data-variant="${esc(m.role)}" title="Поставить другую версию этой же модели, например полегче или новее">Другая версия…</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    html += `</div>`;
+  });
+
+  $('#mlist').innerHTML = html;
+}
+
+function initModelsTools() {
+  if (window._initModelsToolsDone) return;
+  window._initModelsToolsDone = true;
+
+  $('#mdTabs')?.addEventListener('click', e => {
+    const b = e.target.closest('button[data-mdtab]');
+    if (!b) return;
+    MD_TAB = b.dataset.mdtab;
+    $$('#mdTabs button').forEach(x => x.classList.toggle('on', x === b));
+    paintModelsList();
+  });
+
+  $('#mdSearch')?.addEventListener('input', e => {
+    MD_SEARCH_QUERY = e.target.value;
+    if ($('#mdSearchClear')) $('#mdSearchClear').style.display = MD_SEARCH_QUERY ? 'block' : 'none';
+    paintModelsList();
+  });
+
+  $('#mdSearchClear')?.addEventListener('click', () => {
+    const inp = $('#mdSearch');
+    if (inp) inp.value = '';
+    MD_SEARCH_QUERY = '';
+    $('#mdSearchClear').style.display = 'none';
+    paintModelsList();
+  });
+
+  $('#mdMissingOnly')?.addEventListener('change', e => {
+    MD_MISSING_ONLY = e.target.checked;
+    paintModelsList();
+  });
+
+  $('#mdExpandAll')?.addEventListener('click', () => {
+    MD_COLLAPSED_GROUPS.clear();
+    paintModelsList();
+  });
+
+  $('#mdCollapseAll')?.addEventListener('click', () => {
+    MODEL_GROUPS_ORDER.forEach(g => MD_COLLAPSED_GROUPS.add(g));
+    paintModelsList();
+  });
+
+  $('#mlist')?.addEventListener('click', e => {
+    const head = e.target.closest('.md-grp-head');
+    if (!head) return;
+    const gKey = head.dataset.gkey;
+    if (!gKey) return;
+    if (MD_COLLAPSED_GROUPS.has(gKey)) MD_COLLAPSED_GROUPS.delete(gKey);
+    else MD_COLLAPSED_GROUPS.add(gKey);
+    paintModelsList();
+  });
+}
+
 function renderModels(s) {
   if (!s.models) return;
   MD_ENGINE = s.engine;
+  LAST_MODELS_DATA = s;
+  initModelsTools();
+
   const have = s.models.filter(m => m.have).length;
   $('#modelsBadge').textContent = `${have} / ${s.models.length}`; $('#modelsBadge').hidden = false;
-  $('#mlist').innerHTML = s.models.map(m => {
-    const optional = !m.modes.length;
-    const st = m.have ? '<span class="st ok">✓ есть</span>' : optional ? '<span class="st opt">необязательно</span>' : '<span class="st miss">нет</span>';
-    const modes = m.modes.map(x => ({ video: 'Image-to-Video', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра', swap: 'Замена персонажа', action: 'Экшн', long: 'Длинное видео', krea: 'Картинка по тексту', kreareal: 'Картинка: реализм', qwen: 'Правка картинки', flux: 'Правка: FLUX.2', upscale: 'Увеличение', relayvsr: 'Быстрое увеличение' })[x]).join(', ') || 'дополнительно';
-    return `<div class="m"><b>${esc(m.name.split('\\').pop())}<small>${esc(m.title)} · ${modes}<br>Нужен файл: <span class="mf" title="Нажмите, чтобы скопировать имя">${esc(m.file || '')}</span> · положить в папку ${esc(m.folder || '')} вашего ComfyUI (подойдёт и любая подпапка в ней)${m.marks ? ` · в названии: ${esc(m.marks)}` : ''}</small></b><span class="hint">${GB(m.size)}</span>${st}<div class="m-btns" style="grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap">${s.engine === 'external' && !m.have ? `<button class="btn mini pri" type="button" data-dlnow="${m.role}" title="Скачать этот файл прямо в папку моделей вашего ComfyUI">Скачать сюда (${GB(m.size)})</button>` : ''}<button class="btn mini" type="button" data-dlmodel="${m.role}" title="Открыть страницу скачивания этого файла в браузере">Страница в интернете…</button><button class="btn mini" type="button" data-copyurl="${esc(m.url || '')}" title="Скопировать прямую ссылку, чтобы скачать менеджером загрузок или через другой компьютер">Копировать ссылку</button><button class="btn mini" type="button" data-copyname="${esc(m.file || '')}" title="Скопировать имя файла, чтобы найти его на компьютере или на сайте">Копировать имя</button><button class="btn mini" type="button" data-pickmodel="${m.role}" title="${m.have ? 'Заменить на другой файл (например, другую точность модели)' : 'Если файл у вас называется иначе — выберите его вручную'}">${m.have ? (m.picked ? 'Другой файл ✓' : 'Заменить…') : 'Указать файл…'}</button>${m.variants && m.variants.length > 1 ? `<button class="btn mini" type="button" data-variant="${m.role}" title="Поставить другую версию этой же модели, например полегче или новее">Другая версия…</button>` : ''}</div></div>`;
-  }).join('');
+
+  const allModels = s.models || [];
+  const tabKeys = ['all', 'video', 'images', 'upscale', 'loras'];
+  tabKeys.forEach(t => {
+    const list = allModels.filter(m => modelMatchesTab(m, t));
+    const h = list.filter(m => m.have).length;
+    const cap = t.charAt(0).toUpperCase() + t.slice(1);
+    const el = $('#cnt' + cap);
+    if (el) el.textContent = `(${h}/${list.length})`;
+  });
+
+  paintModelsList();
   $('#mdFix').hidden = s.engine !== 'managed' || s.models.every(m => m.have || !m.modes.length);
   MD_EXT = s.engine === 'external';
   $('#mdMirror').checked = !!s.hf_mirror;
