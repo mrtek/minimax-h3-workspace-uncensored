@@ -2131,31 +2131,885 @@ const REF_HINT = {
   max: 'Модель внимательно разглядывает ваши картинки в полном размере, поэтому лицо и одежда похожи сильнее всего. Но работает в 2–3 раза дольше. Берите для готового видео.',
   match: 'Модель смотрит на картинки в уменьшенном виде: быстрее, но сходство с лицом чуть хуже. Берите для проб, пока подбираете промпт.',
 };
-/* optional LoRAs: the same on/off switch and strength slider in every mode */
+/* optional and custom LoRAs across all generation modes */
+let CL = { files: [], items: [], meta: {}, civitai_token: '', hf_token: '' };
+const activeLoraBoxes = new Set();
+let clSaveTimer = null;
+let civDlInterval = null;
+let currentEditingFile = null;
+
+function cleanLoraFile(path) {
+  if (!path) return '';
+  return path.split('\\').pop().split('/').pop();
+}
+
+function cleanLoraName(path) {
+  if (!path) return '';
+  return cleanLoraFile(path).replace(/\.safetensors$/i, '');
+}
+
+function getLoraMeta(path) {
+  if (!path) return { name: '', desc: '', triggers: [], category: '' };
+  const cf = cleanLoraFile(path);
+  return (CL.meta && (CL.meta[path] || CL.meta[cf])) || {
+    name: cleanLoraName(path),
+    desc: '',
+    triggers: [],
+    category: 'Пользовательская LoRA'
+  };
+}
+
+function getLoraTitle(path) {
+  const m = getLoraMeta(path);
+  return m.name || cleanLoraName(path);
+}
+
+const saveCL = () => postJSON('/api/loras/custom', { items: CL.items }).catch(e => toast(e.message));
+
+function debouncedSaveCL() {
+  clearTimeout(clSaveTimer);
+  clSaveTimer = setTimeout(() => saveCL(), 400);
+}
+
+function syncAllLoras() {
+  saveCL();
+  renderCL();
+  activeLoraBoxes.forEach(render => {
+    try { render(); } catch(e) {}
+  });
+}
+
+async function loadCL() {
+  try {
+    const r = await (await fetch('/api/loras/custom')).json();
+    if (!r.files) return;
+    CL.files = r.files || [];
+    CL.items = r.items || [];
+    CL.meta = r.meta || {};
+    CL.civitai_token = r.civitai_token || '';
+    CL.hf_token = r.hf_token || '';
+    if ($('#civToken') && !$('#civToken').value) $('#civToken').value = CL.civitai_token;
+    if ($('#hfToken') && !$('#hfToken').value) $('#hfToken').value = CL.hf_token;
+    const clCard = $('#clCard');
+    if (clCard) clCard.hidden = false;
+    renderCL();
+    activeLoraBoxes.forEach(render => {
+      try { render(); } catch(e) {}
+    });
+  } catch {}
+}
+
+function evaluateLoraConflicts(items, metaMap, builtins) {
+  const conflicts = [];
+  const active = (items || []).filter(x => x && x.on && x.file);
+  const parsed = [];
+  let totalStrength = 0;
+
+  active.forEach(x => {
+    const fn = (x.file || '').split(/[/\\]/).pop().toLowerCase();
+    const meta = (metaMap && (metaMap[x.file] || metaMap[fn])) || getLoraMeta(x.file) || {};
+    const s = +x.strength || 0;
+    parsed.push({
+      file: x.file,
+      filename: (x.file || '').split(/[/\\]/).pop(),
+      name: meta.name || cleanLoraName(x.file),
+      strength: s,
+      lower: fn,
+      category: meta.category || '',
+    });
+    if (s > 0) totalStrength += s;
+  });
+
+  const b = builtins || {};
+  Object.keys(b).forEach(k => {
+    const bv = b[k];
+    if (bv && bv.on && k !== 'speed') {
+      const v = +bv.v || 0.5;
+      if (v > 0) totalStrength += v;
+    }
+  });
+
+  // 1. Splits / screen bifurcation (Раздвоение лица и губ)
+  const splits = parsed.filter(p => /splits|split.*os/i.test(p.lower));
+  splits.forEach(sp => {
+    conflicts.push({
+      id: 'splits_bifurcation',
+      level: 'danger',
+      title: `Раздвоение лица и губ на портретах (${sp.name})`,
+      desc: `Модель «${sp.filename}» натренирована на гимнастические шпагаты («splits») и деление планов. Внимание: на портретах и крупных планах её веса разрывают геометрию рта, создавая вторую нижнюю губу, раздвоенный подбородок и фантомные черты лица. Если вы не снимаете гимнастический шпагат во весь рост — обязательно отключите её.`,
+      culprits: [sp.file],
+      action: {
+        type: 'disable',
+        target: sp.file,
+        label: `Отключить ${sp.name}`,
+      }
+    });
+  });
+
+  // 2. Multi-Turbo clash (Конфликт планировщиков 4 шага vs 8 шагов)
+  const turbos = parsed.filter(p => /turbo.*4step|pika.*turbo|pika.*8step|fasth3.*preview|dmd2.*4step|fastvideo.*turbo|fasth3.*lora/i.test(p.lower));
+  if (turbos.length > 1) {
+    const names = turbos.map(t => `«${t.name}»`).join(', ');
+    conflicts.push({
+      id: 'turbo_clash',
+      level: 'danger',
+      title: `Конфликт турбо-ускорителей (${turbos.length} модели одновременно)`,
+      desc: `Одновременно включено несколько турбо-LoRA (${names}) с разным шагом сэмплирования (4 шага и 8 шагов). Их совместная работа ломает расписание шума (sigmas) диффузии, что приводит к сплошному шуму, чёрным кадрам или каше. Оставьте только один ускоритель.`,
+      culprits: turbos.map(t => t.file),
+      action: {
+        type: 'keep_one',
+        target: turbos[0].file,
+        culprits: turbos.map(t => t.file),
+        label: `Оставить только ${turbos[0].name}`,
+      }
+    });
+  }
+
+  // 3. Speed slider vs Motion repair (Конфликт динамики: ускорение vs сглаживание)
+  const hasSpeed = parsed.some(p => /speed_slider|speedslider/i.test(p.lower)) || (b.speed && b.speed.on && Math.abs(+b.speed.v) >= 1.5);
+  const hasRepair = parsed.some(p => /motion_repair/i.test(p.lower)) || (b.motion && b.motion.on);
+  if (hasSpeed && hasRepair) {
+    const repairItem = parsed.find(p => /motion_repair/i.test(p.lower));
+    conflicts.push({
+      id: 'speed_vs_repair',
+      level: 'warning',
+      title: 'Конфликт динамики: Speed Slider против Motion Repair',
+      desc: 'Включены одновременно ускорение («Speed Slider») и подавление дрожания («Motion Repair»). Один инструмент форсирует резкие межпакетные смещения, а второй пытается их сгладить. В результате видео может дёргаться рывками («желе»), заикаться или стробить.',
+      culprits: parsed.filter(p => /speed|motion/i.test(p.lower)).map(p => p.file),
+      action: {
+        type: 'disable',
+        target: repairItem ? repairItem.file : 'builtin_motion',
+        label: 'Отключить Motion Repair',
+      }
+    });
+  }
+
+  // 4. Overcooking / Total Weight Excess (Перегруз суммарного веса LoRA)
+  if (totalStrength > 1.35 || (parsed.length >= 3 && totalStrength > 1.2)) {
+    conflicts.push({
+      id: 'overcooking',
+      level: 'warning',
+      title: `Перегруз суммарного веса LoRA (${totalStrength.toFixed(2)} при норме до 1.0–1.2)`,
+      desc: `Включено ${parsed.length} LoRA с общим весом ${totalStrength.toFixed(2)}. В диффузионных моделях перегруз весов разрушает латентное пространство (эффект 'overbaking'): кожа становится неестественно восковой и пластиковой, мелкие черты лица «плавятся», появляются тёмные артефакты диффузии. Рекомендуется снизить веса до 0.5–0.6.`,
+      culprits: parsed.map(p => p.file),
+      action: {
+        type: 'scale_down',
+        target: '0.55',
+        label: 'Снизить силу активных LoRA до 0.55',
+      }
+    });
+  }
+
+  // 5. Multiple Heavy Anatomy / NSFW LoRAs (Наложение анатомических моделей)
+  const nsfw = parsed.filter(p => /dr34ml4y|unlocked|hmnsfw|aio.*sex|mysticxxx|rough.*sex|shrekman|deepthroat|cunnilingus|hmpussy|hmcumshot/i.test(p.lower));
+  if (nsfw.length >= 2) {
+    const names = nsfw.map(p => `«${p.name}»`).join(', ');
+    conflicts.push({
+      id: 'anatomy_stacking',
+      level: 'warning',
+      title: `Наложение анатомических LoRA (${nsfw.length} модели одновременно)`,
+      desc: `Одновременно включены ${names}. Эти модели переопределяют форму тел и интимных зон. Их одновременное наложение часто приводит к лишним конечностям, неестественной сцепке тел и деформации кожи. Рекомендуется оставить одну основную модель под текущую задачу.`,
+      culprits: nsfw.map(p => p.file),
+      action: {
+        type: 'keep_one',
+        target: nsfw[0].file,
+        culprits: nsfw.map(p => p.file),
+        label: `Оставить только ${nsfw[0].name}`,
+      }
+    });
+  }
+
+  // 6. Style Clash: 2D/Anime vs Realism
+  const anime = parsed.filter(p => /anime|2dan1m|cartoon|toon|3dcg/i.test(p.lower));
+  const realism = parsed.filter(p => /realism.*people|hyperrealistic|photo/i.test(p.lower)) || (b.realism && b.realism.on ? [{ file: 'builtin_realism', name: 'Реализм людей' }] : []);
+  if (anime.length && realism.length) {
+    conflicts.push({
+      id: 'style_clash',
+      level: 'warning',
+      title: 'Конфликт стилей: 2D/Аниме против фотореализма',
+      desc: `Активны одновременно аниме/2D LoRA (${anime[0].name}) и фотореализм (${realism[0].name}). Сеть получает взаимоисключающие стилевые команды, что приводит к гибридным лицам с восковыми пятнами и грязными текстурами.`,
+      culprits: [anime[0].file, realism[0].file],
+      action: {
+        type: 'disable',
+        target: anime[0].file,
+        label: `Отключить ${anime[0].name}`,
+      }
+    });
+  }
+
+  // 7. Duplicate Style: Multiple Latex models
+  const latex = parsed.filter(p => /latex/i.test(p.lower));
+  if (latex.length >= 2) {
+    const names = latex.map(p => `«${p.name}»`).join(', ');
+    conflicts.push({
+      id: 'duplicate_latex',
+      level: 'caution',
+      title: 'Дублирование стиля: несколько латексных LoRA',
+      desc: `Включены сразу две модели латекса (${names}). Их эффекты суммируются, вызывая чрезмерный зеркальный пересвет ткани и потерю фактуры складок.`,
+      culprits: latex.map(p => p.file),
+      action: {
+        type: 'keep_one',
+        target: latex[0].file,
+        culprits: latex.map(p => p.file),
+        label: `Оставить только ${latex[0].name}`,
+      }
+    });
+  }
+
+  return conflicts;
+}
+
+function renderConflictBoxHTML(conflicts) {
+  if (!conflicts || !conflicts.length) return '';
+  const colors = {
+    danger: { border: '#ff5555', bg: 'rgba(255, 60, 60, 0.15)', text: '#ff7777', badge: 'Критический конфликт' },
+    warning: { border: '#ffaa33', bg: 'rgba(255, 170, 50, 0.12)', text: '#ffbb44', badge: 'Предупреждение' },
+    caution: { border: '#ffd155', bg: 'rgba(255, 210, 80, 0.10)', text: '#ffe066', badge: 'Совет' },
+  };
+
+  return `<div class="lora-conflict-card" style="background:linear-gradient(135deg, rgba(230,40,40,0.12), rgba(20,20,30,0.7));border:1px solid rgba(255,80,80,0.4);border-radius:10px;padding:12px;margin-bottom:12px;box-shadow:0 4px 16px rgba(0,0,0,0.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:16px;line-height:1">⚠️</span>
+        <b style="color:#ff8888;font-size:13px;letter-spacing:0.2px">Обнаружены конфликты LoRA (${conflicts.length})</b>
+      </div>
+      <span style="font-size:11px;color:#ffa0a0;opacity:0.85">Могут ухудшить качество видео, исказить лицо или сломать кадры</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${conflicts.map((c, i) => {
+        const col = colors[c.level] || colors.warning;
+        return `<div class="lcb-row" data-ci="${i}" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-left:3.5px solid ${col.border};border-radius:6px;padding:8px 10px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:240px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+                <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:${col.border};background:${col.bg};padding:1px 5px;border-radius:3px">${col.badge}</span>
+                <b style="font-size:12px;color:${col.text}">${esc(c.title)}</b>
+              </div>
+              <div style="font-size:11.5px;color:var(--text-2, #ccc);line-height:1.4">${esc(c.desc)}</div>
+            </div>
+            ${c.action ? `<button type="button" class="btn mini lcb-act-btn" data-act="${esc(c.action.type)}" data-target="${esc(c.action.target || '')}" data-culprits="${esc(JSON.stringify(c.action.culprits || []))}" style="margin-top:2px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;white-space:nowrap;padding:4px 9px;font-size:11.5px;cursor:pointer;border-radius:6px">⚡ ${esc(c.action.label)}</button>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function handleConflictAction(btn) {
+  const act = btn.dataset.act;
+  const target = btn.dataset.target;
+  let culprits = [];
+  try { culprits = JSON.parse(btn.dataset.culprits || '[]'); } catch(e) {}
+
+  if (act === 'disable') {
+    const it = CL.items.find(x => x && (x.file === target || (x.file && x.file.endsWith(target))));
+    if (it) it.on = false;
+    syncAllLoras();
+    toast('Конфликтная LoRA отключена');
+  } else if (act === 'scale_down') {
+    const newWeight = parseFloat(target) || 0.55;
+    CL.items.forEach(x => {
+      if (x && x.on && +x.strength > newWeight) {
+        x.strength = newWeight;
+      }
+    });
+    syncAllLoras();
+    toast(`Сила активных LoRA снижена до ${newWeight}`);
+  } else if (act === 'keep_one') {
+    const keepFile = target;
+    culprits.forEach(f => {
+      if (f !== keepFile) {
+        const it = CL.items.find(x => x && (x.file === f || (x.file && x.file.endsWith(f))));
+        if (it) it.on = false;
+      }
+    });
+    syncAllLoras();
+    toast('Оставлена только одна активная LoRA из группы');
+  }
+}
+
+function renderCL() {
+  const el = $('#clList');
+  if (!el) return;
+  const conflicts = evaluateLoraConflicts(CL.items, CL.meta);
+  const confEl = $('#clConflicts');
+  if (confEl) {
+    confEl.innerHTML = renderConflictBoxHTML(conflicts);
+  }
+  el.innerHTML = CL.items.length ? CL.items.map((x, i) => {
+    const meta = getLoraMeta(x.file);
+    const title = meta.name || cleanLoraName(x.file);
+    const desc = meta.desc || '';
+    const cat = meta.category || '';
+    const triggers = meta.triggers || [];
+    const cleanFile = cleanLoraFile(x.file);
+
+    return `<div class="m" data-i="${i}" style="display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:12px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:8px;background:rgba(255,255,255,0.02)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:240px">
+          <b><select class="cl-f" style="max-width:340px;background:var(--bg-2,#1b1b22);color:var(--text,#fff);border:1px solid var(--line,#444);border-radius:6px;padding:4px 8px">${CL.files.map(f => {
+            const m = getLoraMeta(f);
+            return `<option value="${esc(f)}"${f === x.file ? ' selected' : ''}>${esc((m.category ? '[' + m.category + '] ' : '') + (m.name || cleanLoraName(f)))}</option>`;
+          }).join('')}${CL.files.includes(x.file) ? '' : `<option value="${esc(x.file)}" selected>${esc(title)}</option>`}</select></b>
+          ${cat ? `<span style="font-size:10px;background:rgba(255,255,255,0.08);color:var(--sub,#aaa);padding:2px 6px;border-radius:4px">${esc(cat)}</span>` : ''}
+          <span style="font-size:11px;color:var(--sub,#888);font-family:monospace" title="${esc(x.file)}">${esc(cleanFile)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="hint">сила <input class="cl-s" type="number" step="0.05" min="-4" max="4" value="${x.strength}" style="width:70px"></span>
+          <button class="chip cl-on${x.on ? ' on' : ''}" type="button">${x.on ? 'включена' : 'выключена'}</button>
+          <button class="btn mini cl-edit" type="button" title="Редактировать название и триггеры">✏</button>
+          <button class="btn mini cl-x" type="button" title="Убрать из списка">Убрать</button>
+        </div>
+      </div>
+      ${desc ? `<div class="hint" style="font-size:11.5px;color:var(--text-2,#bbb);margin-top:2px;line-height:1.35">${esc(desc)}</div>` : ''}
+      ${triggers.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:2px">
+        <span style="font-size:11px;color:var(--sub,#888);margin-right:2px">Триггеры для Агента:</span>
+        ${triggers.map(t => `<span class="cl-trig-chip" data-trig="${esc(t)}" title="Нажмите, чтобы скопировать триггер" style="cursor:pointer;font-size:11px;background:rgba(255,100,100,0.12);color:var(--accent,#ff7777);border:1px solid rgba(255,100,100,0.25);border-radius:4px;padding:1px 6px;user-select:all">${esc(t)}</span>`).join('')}
+      </div>` : ''}
+    </div>`;
+  }).join('')
+  : '<div class="hint">Пока нет добавленных LoRA. Выберите файл из списка ниже или скачайте из каталога Civitai.</div>';
+}
+
 const LORA_DEFS = {
   realism: { name: 'Реализм людей', hint: 'Для живых людей: естественная кожа и лицо. Если лицо выглядит «пластиково» — включите.', min: 0, max: 1, step: .05, v: .5, on: false },
   motion: { name: 'Исправление движения', hint: 'Если движение рвётся, дёргается или «плывёт» — включите.', min: 0, max: 1, step: .05, v: .5, on: false },
   dmad: { name: 'DMAD', hint: 'Усиливает динамику и чёткость движения. Как в исходном экшн-workflow: 0.8.', min: 0, max: 1.2, step: .05, v: .8, on: true },
   speed: { name: 'Speed Slider', hint: 'Скорость движения: 3–4 — быстро и резко; ближе к 0 — спокойнее; со знаком минус — замедление.', min: -8, max: 8, step: .5, v: 4, on: true },
 };
+
 function mountLoras(box, st, keys) {
+  if (!box) return;
   st.loras = st.loras || {};
-  keys.forEach(k => { st.loras[k] = st.loras[k] || { on: LORA_DEFS[k].on, v: LORA_DEFS[k].v }; });
-  box.innerHTML = keys.length ? `<div class="row"><div class="row-l">Дополнительные LoRA <span class="hint" style="font-family:inherit">включите нужные и задайте силу влияния</span></div>`
-    + keys.map(k => { const d = LORA_DEFS[k]; return `<div class="lora" data-k="${k}"><div class="lora-h"><button class="chip lora-t" type="button">${d.name}</button><span class="lora-v"></span></div>`
-      + `<input type="range" class="lora-r" min="${d.min}" max="${d.max}" step="${d.step}"><div class="hint">${d.hint}</div></div>`; }).join('') + '</div>' : '';
-  const paint = () => $$('.lora', box).forEach(el => {
-    const s = st.loras[el.dataset.k], r = $('.lora-r', el);
-    $('.lora-t', el).classList.toggle('on', s.on);
-    r.value = s.v; r.disabled = !s.on; r.style.opacity = s.on ? 1 : .35;
-    r.style.setProperty('--p', ((s.v - r.min) / (r.max - r.min) * 100) + '%');
-    $('.lora-v', el).textContent = s.on ? `сила ${(+s.v).toFixed(2).replace(/\.?0+$/, '')}` : 'выключена';
+  (keys || []).forEach(k => {
+    if (LORA_DEFS[k]) {
+      st.loras[k] = st.loras[k] || { on: LORA_DEFS[k].on, v: LORA_DEFS[k].v };
+    }
   });
-  box.onclick = e => { const el = e.target.closest('.lora'); if (!el || !e.target.closest('.lora-t')) return; const s = st.loras[el.dataset.k]; s.on = !s.on; paint(); };
-  box.oninput = e => { const el = e.target.closest('.lora'); if (!el) return; st.loras[el.dataset.k].v = +e.target.value; paint(); };
-  st._paintLoras = paint;
-  paint();
+
+  const render = () => {
+    let html = '';
+    
+    // 1. Built-in predefined LoRAs if keys specified
+    if (keys && keys.length) {
+      html += `<div class="row" style="margin-bottom:12px">
+        <div class="row-l">Встроенные LoRA <span class="hint" style="font-family:inherit">включите нужные</span></div>`
+        + keys.map(k => {
+          const d = LORA_DEFS[k];
+          if (!d) return '';
+          return `<div class="lora std-lora" data-k="${k}">
+            <div class="lora-h"><button class="chip lora-t" type="button">${d.name}</button><span class="lora-v"></span></div>
+            <input type="range" class="lora-r" min="${d.min}" max="${d.max}" step="${d.step}">
+            <div class="hint">${d.hint}</div>
+          </div>`;
+        }).join('') + '</div>';
+    }
+
+    // 2. Custom user LoRAs section
+    const customItems = CL.items || [];
+    const files = CL.files || [];
+    
+    html += `<div class="row custom-loras-section" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line, rgba(255,255,255,0.1))">
+      <div class="row-l" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span>Свои LoRA</span>
+        <span class="hint">${customItems.length ? customItems.filter(x => x.on).length + ' акт.' : 'нет активных'}</span>
+      </div>
+      <div class="mode-lora-conflicts">${renderConflictBoxHTML(evaluateLoraConflicts(customItems, CL.meta, st.loras))}</div>`;
+
+    if (customItems.length) {
+      html += customItems.map((c, i) => {
+        const meta = getLoraMeta(c.file);
+        const title = meta.name || cleanLoraName(c.file);
+        const desc = meta.desc || '';
+        const cat = meta.category || '';
+        const triggers = meta.triggers || [];
+        const cleanFile = cleanLoraFile(c.file);
+
+        return `<div class="lora custom-lora" data-ci="${i}" style="margin-bottom:12px;background:rgba(255,255,255,0.02);padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.06)">
+          <div class="lora-h" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <button class="chip cl-chip ${c.on ? 'on' : ''}" type="button" title="Включить / выключить" style="font-weight:600;font-size:12.5px">${esc(title)}</button>
+                ${cat ? `<span style="font-size:10px;background:rgba(255,255,255,0.08);color:var(--sub,#aaa);padding:2px 6px;border-radius:4px">${esc(cat)}</span>` : ''}
+              </div>
+              <div style="font-size:11px;color:var(--sub,#888);margin-top:3px;font-family:monospace" title="${esc(c.file)}">${esc(cleanFile)}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="lora-v cl-v" style="font-size:12px">${c.on ? 'сила ' + (+c.strength).toFixed(2).replace(/\.?0+$/, '') : 'выключена'}</span>
+              <button type="button" class="btn mini cl-edit" style="padding:2px 6px;font-size:11px;opacity:0.75" title="Редактировать название и триггеры">✏</button>
+              <button type="button" class="btn mini cl-del" style="padding:2px 6px;font-size:11px;opacity:0.75" title="Убрать эту LoRA">✕</button>
+            </div>
+          </div>
+          ${desc ? `<div class="hint" style="margin:5px 0 4px 0;line-height:1.35;font-size:11.5px;color:var(--text-2,#bbb)">${esc(desc)}</div>` : ''}
+          ${triggers.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 6px 0;align-items:center">
+            <span style="font-size:10.5px;color:var(--sub,#888);margin-right:2px">Триггеры:</span>
+            ${triggers.map(t => `<span class="cl-trig-chip" data-trig="${esc(t)}" title="Нажмите, чтобы скопировать триггер" style="cursor:pointer;font-size:11px;background:rgba(255,100,100,0.12);color:var(--accent,#ff7777);border:1px solid rgba(255,100,100,0.25);border-radius:4px;padding:1px 6px;user-select:all">${esc(t)}</span>`).join('')}
+          </div>` : ''}
+          <input type="range" class="lora-r cl-r" min="-2" max="3" step="0.05" value="${c.strength}" ${c.on ? '' : 'disabled'} style="opacity:${c.on ? 1 : 0.35};margin-top:4px">
+        </div>`;
+      }).join('');
+    }
+
+    // Selector to add a new custom LoRA + Civitai browser button
+    html += `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px">`;
+    if (files.length) {
+      html += `<select class="c-lora-picker" style="flex:1;min-width:200px;background:var(--bg-2, #1b1b22);color:var(--text, #fff);border:1px solid var(--line, #444);border-radius:8px;padding:6px 10px;font-size:12px;outline:none">
+          <option value="">+ Добавить LoRA из models\\loras...</option>
+          ${files.map(f => {
+            const m = getLoraMeta(f);
+            const t = m.name || cleanLoraName(f);
+            const cat = m.category ? `[${m.category}] ` : '';
+            return `<option value="${esc(f)}">${esc(cat + t + ' (' + cleanLoraFile(f) + ')')}</option>`;
+          }).join('')}
+        </select>
+        <button class="btn mini cl-reload-btn" type="button" title="Обновить список файлов в папке loras" style="padding:6px 10px">🔄</button>`;
+    } else {
+      html += `<div class="hint" style="flex:1">В папке models\\loras пока нет файлов.</div>
+        <button class="btn mini cl-reload-btn" type="button" style="padding:6px 10px">🔄 обновить</button>`;
+    }
+    html += `<button class="btn mini cl-civitai-btn" type="button" style="padding:6px 12px;background:linear-gradient(135deg, rgba(230,50,50,0.25), rgba(180,20,50,0.4));border:1px solid rgba(255,80,80,0.4);white-space:nowrap" title="Поиск и скачивание LoRA для MiniMax H3">🌐 Каталог Civitai</button>
+      </div>`;
+
+    html += `</div>`;
+    box.innerHTML = html;
+    paint();
+  };
+
+  const paint = () => {
+    $$('.std-lora', box).forEach(el => {
+      const s = st.loras[el.dataset.k], r = $('.lora-r', el);
+      if (!s || !r) return;
+      $('.lora-t', el).classList.toggle('on', !!s.on);
+      r.value = s.v; r.disabled = !s.on; r.style.opacity = s.on ? 1 : .35;
+      r.style.setProperty('--p', ((s.v - r.min) / (r.max - r.min) * 100) + '%');
+      $('.lora-v', el).textContent = s.on ? `сила ${(+s.v).toFixed(2).replace(/\.?0+$/, '')}` : 'выключена';
+    });
+    $$('.custom-lora', box).forEach(el => {
+      const idx = +el.dataset.ci;
+      const c = CL.items[idx];
+      if (!c) return;
+      $('.cl-chip', el).classList.toggle('on', !!c.on);
+      const r = $('.cl-r', el);
+      if (!r) return;
+      r.value = c.strength; r.disabled = !c.on; r.style.opacity = c.on ? 1 : .35;
+      r.style.setProperty('--p', ((c.strength - r.min) / (r.max - r.min) * 100) + '%');
+      $('.cl-v', el).textContent = c.on ? `сила ${(+c.strength).toFixed(2).replace(/\.?0+$/, '')}` : 'выключена';
+    });
+    const cfBox = $('.mode-lora-conflicts', box);
+    if (cfBox) {
+      cfBox.innerHTML = renderConflictBoxHTML(evaluateLoraConflicts(CL.items, CL.meta, st.loras));
+    }
+  };
+
+  box.onclick = e => {
+    if (e.target.closest('.lcb-act-btn')) {
+      handleConflictAction(e.target.closest('.lcb-act-btn'));
+      return;
+    }
+    if (e.target.closest('.cl-trig-chip')) {
+      const trig = e.target.closest('.cl-trig-chip').dataset.trig;
+      if (trig) {
+        navigator.clipboard?.writeText(trig);
+        toast('Скопирован триггер: ' + trig);
+      }
+      return;
+    }
+    const stdEl = e.target.closest('.std-lora');
+    if (stdEl && e.target.closest('.lora-t')) {
+      const s = st.loras[stdEl.dataset.k];
+      if (s) { s.on = !s.on; paint(); }
+      return;
+    }
+    const cEl = e.target.closest('.custom-lora');
+    if (cEl && e.target.closest('.cl-chip')) {
+      const idx = +cEl.dataset.ci;
+      if (CL.items[idx]) {
+        CL.items[idx].on = !CL.items[idx].on;
+        syncAllLoras();
+      }
+      return;
+    }
+    if (cEl && e.target.closest('.cl-edit')) {
+      const idx = +cEl.dataset.ci;
+      if (CL.items[idx]) openLoraEdit(CL.items[idx].file);
+      return;
+    }
+    if (cEl && e.target.closest('.cl-del')) {
+      const idx = +cEl.dataset.ci;
+      CL.items.splice(idx, 1);
+      syncAllLoras();
+      return;
+    }
+    if (e.target.closest('.cl-reload-btn')) {
+      loadCL().then(() => syncAllLoras());
+      return;
+    }
+    if (e.target.closest('.cl-civitai-btn')) {
+      openCivitaiModal();
+      return;
+    }
+  };
+
+  box.oninput = e => {
+    const stdEl = e.target.closest('.std-lora');
+    if (stdEl && e.target.classList.contains('lora-r')) {
+      if (st.loras[stdEl.dataset.k]) {
+        st.loras[stdEl.dataset.k].v = +e.target.value;
+        paint();
+      }
+      return;
+    }
+    const cEl = e.target.closest('.custom-lora');
+    if (cEl && e.target.classList.contains('cl-r')) {
+      const idx = +cEl.dataset.ci;
+      if (CL.items[idx]) {
+        CL.items[idx].strength = +e.target.value;
+        paint();
+        debouncedSaveCL();
+      }
+      return;
+    }
+  };
+
+  box.onchange = e => {
+    if (e.target.classList.contains('c-lora-picker') && e.target.value) {
+      const f = e.target.value;
+      if (!CL.items.some(x => x.file === f)) {
+        const m = getLoraMeta(f);
+        const stVal = m.recommended_weight || 0.8;
+        CL.items.push({ file: f, strength: stVal, on: true });
+        syncAllLoras();
+      }
+      e.target.value = '';
+    }
+  };
+
+  activeLoraBoxes.add(render);
+  render();
+  if (!CL.files.length) loadCL();
 }
+
+/* Modal and Civitai handling helpers */
+function openLoraEdit(file) {
+  currentEditingFile = file;
+  const m = getLoraMeta(file);
+  $('#lemFile').textContent = file;
+  $('#lemName').value = m.name || cleanLoraName(file);
+  $('#lemCat').value = m.category || '';
+  $('#lemDesc').value = m.desc || '';
+  $('#lemTrig').value = (m.triggers || []).join(', ');
+  $('#loraEditModal').hidden = false;
+}
+
+$('#lemCancel')?.addEventListener('click', () => { $('#loraEditModal').hidden = true; });
+$('#lemSave')?.addEventListener('click', async () => {
+  if (!currentEditingFile) return;
+  const name = $('#lemName').value.trim();
+  const category = $('#lemCat').value.trim();
+  const desc = $('#lemDesc').value.trim();
+  const triggers = $('#lemTrig').value.split(',').map(s => s.trim()).filter(Boolean);
+
+  try {
+    const r = await fetch('/api/loras/meta/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file: currentEditingFile, name, category, desc, triggers })
+    });
+    if (!r.ok) throw new Error(await r.text());
+    
+    CL.meta[currentEditingFile] = { file: currentEditingFile, name, category, desc, triggers };
+    $('#loraEditModal').hidden = true;
+    syncAllLoras();
+    toast('Настройки LoRA сохранены!');
+  } catch (err) {
+    toast('Ошибка сохранения: ' + err.message);
+  }
+});
+
+function openCivitaiModal() {
+  const m = $('#civitaiModal');
+  if (!m) return;
+  m.hidden = false;
+  if ($('#civToken')) $('#civToken').value = CL.civitai_token || '';
+  if (!$('#civResults .civ-card')) {
+    searchCivitai();
+  }
+  startPollCivDl();
+}
+
+function closeCivitaiModal() {
+  const m = $('#civitaiModal');
+  if (m) m.hidden = true;
+  stopPollCivDl();
+}
+
+$('#civClose')?.addEventListener('click', closeCivitaiModal);
+$('#civSearchBtn')?.addEventListener('click', () => searchCivitai());
+$('#civSearch')?.addEventListener('keydown', e => { if (e.key === 'Enter') searchCivitai(); });
+$('#civMirror')?.addEventListener('change', () => searchCivitai());
+
+$('#civTokenSave')?.addEventListener('click', async () => {
+  const civToken = ($('#civToken')?.value || '').trim();
+  const hfToken = ($('#hfToken')?.value || '').trim();
+  CL.civitai_token = civToken;
+  CL.hf_token = hfToken;
+  try {
+    await fetch('/api/loras/tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ civitai_token: civToken, hf_token: hfToken })
+    });
+    toast('Токены сохранены');
+  } catch (e) {
+    toast('Ошибка сохранения токенов: ' + e.message);
+  }
+});
+
+$('#civMirror')?.addEventListener('change', () => {
+  const m = $('#civMirror').value;
+  if (m === 'hf') {
+    $('#civSearch').placeholder = 'Поиск по Hugging Face (realism, turbo, style, orbit...)';
+  } else {
+    $('#civSearch').placeholder = 'Поиск по Civitai (nsfw, latex, speed, motion, girl...)';
+  }
+  searchCivitai();
+});
+
+$('#civLinkBtn')?.addEventListener('click', async () => {
+  const link = ($('#civLink').value || '').trim();
+  if (!link) { toast('Вставьте ссылку Civitai или Hugging Face'); return; }
+  const mirror = $('#civMirror').value || 'red';
+  toast('Проверяем ссылку модели...');
+  try {
+    const isHf = link.includes('huggingface.co') || (link.includes('/') && !link.includes('civitai') && !link.match(/^\d+$/));
+    const endpoint = isHf ? '/api/hf/resolve' : '/api/civitai/resolve';
+    const payload = isHf ? { link, token: ($('#hfToken')?.value || CL.hf_token || '') } : { link, mirror };
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Не удалось распознать ссылку');
+    const v = data.version;
+    await startDownloadCiv(v, data.name, v.description, data.source || (isHf ? 'HuggingFace' : 'Civitai'));
+  } catch (err) {
+    toast('Ошибка: ' + err.message);
+  }
+});
+
+let CATALOG_ITEMS = [];
+
+async function searchCivitai() {
+  const q = ($('#civSearch').value || '').trim();
+  const mirror = $('#civMirror').value || 'red';
+  const isHf = mirror === 'hf';
+  const resEl = $('#civResults');
+  resEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--sub,#aaa)">Загрузка моделей с ${isHf ? 'Hugging Face' : 'Civitai'}…</div>`;
+  try {
+    const civToken = ($('#civToken')?.value || CL.civitai_token || '').trim();
+    const hfToken = ($('#hfToken')?.value || CL.hf_token || '').trim();
+    const url = isHf
+      ? `/api/hf/search?query=${encodeURIComponent(q)}&token=${encodeURIComponent(hfToken)}`
+      : `/api/civitai/search?query=${encodeURIComponent(q)}&mirror=${encodeURIComponent(mirror)}&token=${encodeURIComponent(civToken)}`;
+    const r = await fetch(url);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Ошибка поиска');
+    CATALOG_ITEMS = data.items || [];
+    if (!CATALOG_ITEMS.length) {
+      resEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--sub,#aaa)">Ничего не найдено для MiniMax H3. Попробуйте изменить запрос.</div>';
+      return;
+    }
+    resEl.innerHTML = CATALOG_ITEMS.map((item, idx) => {
+      const versions = item.versions || [];
+      const v = versions[0] || {};
+      const img = item.images && item.images[0] ? item.images[0].url : '';
+      const triggers = v.trainedWords || [];
+      const isVideo = img && (img.toLowerCase().includes('.mp4') || img.toLowerCase().includes('.webm'));
+      const isHfItem = item.source === 'huggingface' || String(item.id || '').includes('/');
+      const srcBadge = isHfItem
+        ? '<span style="background:rgba(255,200,50,0.18);color:#ffd166;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">🤗 Hugging Face</span>'
+        : '<span style="background:rgba(50,150,255,0.18);color:#5bc0de;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">🌐 Civitai</span>';
+      const fallbackIcon = isHfItem ? '🤗' : '🌐';
+
+      const mediaHtml = img ? (isVideo
+        ? `<video src="${esc(img)}" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;object-position:top;pointer-events:none"></video>`
+        : `<img src="${esc(img)}" alt="" style="width:100%;height:100%;object-fit:cover;object-position:top" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;background:#181818;font-size:32px">${fallbackIcon}</div>`)
+        : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#181818;color:var(--sub,#666);font-size:36px">${fallbackIcon}</div>`;
+
+      const hasMulti = versions.length > 1;
+      const verSelectorHtml = hasMulti ? `
+        <div style="margin-top:6px;margin-bottom:6px">
+          <select class="inp civ-ver-select" style="width:100%;font-size:11px;padding:3px 6px;background:rgba(0,0,0,0.4)" data-idx="${idx}">
+            ${versions.map((ver, vIdx) => `<option value="${vIdx}">${esc(ver.filename || ver.name)}</option>`).join('')}
+          </select>
+        </div>` : '';
+
+      return `<div class="civ-card" data-idx="${idx}" style="background:var(--bg-2, rgba(255,255,255,0.03));border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;min-height:350px">
+        <div style="height:150px;min-height:150px;max-height:150px;background:#111;overflow:hidden;position:relative">
+          ${mediaHtml}
+          <div style="position:absolute;top:6px;left:6px">${srcBadge}</div>
+          <span class="civ-size-badge" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.75);font-size:10px;padding:2px 6px;border-radius:4px;color:#fff;${v.sizeMB > 0 ? '' : 'display:none'}">${esc(v.sizeMB)} MB</span>
+          ${item.downloads ? `<span style="position:absolute;bottom:6px;left:6px;background:rgba(0,0,0,0.7);font-size:10px;padding:1px 5px;border-radius:3px;color:#ddd">⬇ ${esc(item.downloads)}</span>` : ''}
+        </div>
+        <div style="padding:10px;flex:1;display:flex;flex-direction:column;justify-content:space-between">
+          <div>
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px;line-height:1.3" title="${esc(item.name)}">${esc(item.name)}</div>
+            <div class="civ-author-line" style="font-size:11px;color:var(--sub,#888);margin-bottom:6px">Автор: ${esc(item.creator || (isHfItem ? 'HF' : 'Civitai'))} · <span class="civ-ver-name">${esc(v.name || 'H3')}</span></div>
+            ${item.description ? `<div style="font-size:11px;color:var(--text-2,#bbb);line-height:1.35;margin-bottom:6px;max-height:48px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical" title="${esc(item.description)}">${esc(item.description)}</div>` : ''}
+            ${verSelectorHtml}
+            <div class="civ-triggers-box" style="font-size:11px;color:var(--accent,#ff7777);margin-bottom:8px">
+              ${triggers.length ? `<b>Триггеры:</b> <span style="user-select:all">${triggers.map(t => `<span class="cl-trig-chip" style="display:inline-block;cursor:pointer;background:rgba(255,100,100,0.12);padding:1px 5px;border-radius:4px;margin:1px 2px" title="Кликните чтобы скопировать">${esc(t)}</span>`).join(' ')}</span>` : '<span style="color:var(--sub,#777);font-size:11px">Триггеры не требуются</span>'}
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:8px">
+            <button class="btn mini primary civ-dl-btn" type="button" style="flex:1" data-idx="${idx}">⬇ Скачать в ComfyUI</button>
+            <a href="${esc(item.civitaiUrl)}" target="_blank" rel="noopener" class="btn mini" style="padding:4px 8px;text-decoration:none" title="Открыть страницу модели">🔗</a>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    resEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--accent,#ff5555)">Ошибка: ${esc(err.message)}</div>`;
+  }
+}
+
+$('#civResults')?.addEventListener('change', e => {
+  const sel = e.target.closest('.civ-ver-select');
+  if (!sel) return;
+  const card = sel.closest('.civ-card');
+  if (!card) return;
+  const idx = +sel.dataset.idx;
+  const item = CATALOG_ITEMS[idx];
+  if (!item || !item.versions) return;
+  const vIdx = +sel.value;
+  const ver = item.versions[vIdx];
+  if (!ver) return;
+
+  const verNameEl = card.querySelector('.civ-ver-name');
+  if (verNameEl) verNameEl.textContent = ver.name || 'H3';
+
+  const sizeBadge = card.querySelector('.civ-size-badge');
+  if (sizeBadge) {
+    sizeBadge.textContent = ver.sizeMB > 0 ? `${ver.sizeMB} MB` : '';
+    sizeBadge.style.display = ver.sizeMB > 0 ? '' : 'none';
+  }
+
+  const trigBox = card.querySelector('.civ-triggers-box');
+  if (trigBox) {
+    const words = ver.trainedWords || [];
+    if (words.length) {
+      trigBox.innerHTML = `<b>Триггеры:</b> <span style="user-select:all">${words.map(t => `<span class="cl-trig-chip" style="display:inline-block;cursor:pointer;background:rgba(255,100,100,0.12);padding:1px 5px;border-radius:4px;margin:1px 2px" title="Кликните чтобы скопировать">${esc(t)}</span>`).join(' ')}</span>`;
+    } else {
+      trigBox.innerHTML = `<span style="color:var(--sub,#777);font-size:11px">Триггеры не требуются</span>`;
+    }
+  }
+});
+
+$('#civResults')?.addEventListener('click', async e => {
+  const chip = e.target.closest('.cl-trig-chip');
+  if (chip) {
+    const text = chip.textContent.trim();
+    if (text) {
+      navigator.clipboard?.writeText(text);
+      toast('Триггер скопирован: ' + text);
+    }
+    return;
+  }
+  const btn = e.target.closest('.civ-dl-btn');
+  if (!btn) return;
+  const idx = +btn.dataset.idx;
+  const item = CATALOG_ITEMS[idx];
+  if (!item) return;
+  const card = btn.closest('.civ-card');
+  const sel = card ? card.querySelector('.civ-ver-select') : null;
+  const vIdx = sel ? +sel.value : 0;
+  const ver = (item.versions && item.versions[vIdx]) || (item.versions && item.versions[0]) || {};
+  const isHf = item.source === 'huggingface' || String(item.id || '').includes('/');
+  await startDownloadCiv(ver, item.name, item.description, isHf ? 'HuggingFace' : 'Civitai');
+});
+
+async function startDownloadCiv(ver, modelName, modelDesc, source = 'Civitai') {
+  const isHf = source === 'HuggingFace' || (ver.downloadUrl && ver.downloadUrl.includes('huggingface'));
+  const token = isHf
+    ? (($('#hfToken') ? $('#hfToken').value : '') || CL.hf_token || '')
+    : (($('#civToken') ? $('#civToken').value : '') || CL.civitai_token || '');
+  try {
+    const payload = {
+      url: ver.downloadUrl,
+      filename: ver.filename,
+      token: token,
+      name: modelName || ver.name,
+      desc: modelDesc || ver.description,
+      triggers: ver.trainedWords || [],
+      source: isHf ? 'HuggingFace' : 'Civitai'
+    };
+    const r = await fetch('/api/civitai/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error || 'Ошибка старта скачивания');
+    toast(`Начато скачивание LoRA (${payload.source}): ${ver.filename}`);
+    startPollCivDl();
+  } catch (err) {
+    toast('Ошибка: ' + err.message);
+  }
+}
+
+async function checkCivDlStatus() {
+  try {
+    const r = await fetch('/api/civitai/download/status');
+    const st = await r.json();
+    const box = $('#civProgressBox');
+    if (!box) return;
+    if (st.status === 'downloading') {
+      box.hidden = false;
+      $('#civDlTitle').textContent = `Скачивание: ${st.name || st.file}`;
+      $('#civDlSpeed').textContent = st.speed || '';
+      $('#civDlBar').style.width = (st.percent || 0) + '%';
+      const doneMB = (st.done / (1024 * 1024)).toFixed(1);
+      const totalMB = (st.total / (1024 * 1024)).toFixed(1);
+      $('#civDlText').textContent = `${doneMB} МБ / ${totalMB} МБ (${st.percent}%)`;
+    } else if (st.status === 'done') {
+      box.hidden = true;
+      stopPollCivDl();
+      toast('LoRA успешно скачана в ComfyUI!');
+      await loadCL();
+      syncAllLoras();
+    } else if (st.status === 'error') {
+      box.hidden = false;
+      $('#civDlTitle').textContent = `Ошибка скачивания: ${st.file}`;
+      $('#civDlSpeed').textContent = 'Сбой';
+      $('#civDlText').textContent = st.error || 'Неизвестная ошибка';
+      stopPollCivDl();
+    } else {
+      box.hidden = true;
+    }
+  } catch {}
+}
+
+function startPollCivDl() {
+  stopPollCivDl();
+  checkCivDlStatus();
+  civDlInterval = setInterval(checkCivDlStatus, 1500);
+}
+
+function stopPollCivDl() {
+  if (civDlInterval) {
+    clearInterval(civDlInterval);
+    civDlInterval = null;
+  }
+}
+
+$('#civDlCancel')?.addEventListener('click', async () => {
+  await fetch('/api/civitai/download/cancel', { method: 'POST' });
+  stopPollCivDl();
+  $('#civProgressBox').hidden = true;
+  toast('Скачивание отменено');
+});
+
 function loraForm(st, fd) {
   Object.entries(st.loras || {}).forEach(([k, s]) => fd.append('lora_' + k, s.on ? s.v : 'off'));
   if (CL.items && CL.items.length) {
@@ -5854,895 +6708,10 @@ $('#cwFile').onchange = async e => {
     const graph = JSON.parse(await f.text());
     const r = await fetch('/api/wf/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: f.name.replace(/\.json$/i, ''), graph }) });
     if (!r.ok) throw new Error(await r.text());
-    cwList((await r.json()).i/* optional and custom LoRAs across all generation modes */
-let CL = { files: [], items: [], meta: {}, civitai_token: '', hf_token: '' };
-const activeLoraBoxes = new Set();
-let clSaveTimer = null;
-let civDlInterval = null;
-let currentEditingFile = null;
-
-function cleanLoraFile(path) {
-  if (!path) return '';
-  return path.split('\\').pop().split('/').pop();
-}
-
-function cleanLoraName(path) {
-  if (!path) return '';
-  return cleanLoraFile(path).replace(/\.safetensors$/i, '');
-}
-
-function getLoraMeta(path) {
-  if (!path) return { name: '', desc: '', triggers: [], category: '' };
-  const cf = cleanLoraFile(path);
-  return (CL.meta && (CL.meta[path] || CL.meta[cf])) || {
-    name: cleanLoraName(path),
-    desc: '',
-    triggers: [],
-    category: 'Пользовательская LoRA'
-  };
-}
-
-function getLoraTitle(path) {
-  const m = getLoraMeta(path);
-  return m.name || cleanLoraName(path);
-}
-
-const saveCL = () => postJSON('/api/loras/custom', { items: CL.items }).catch(e => toast(e.message));
-
-function debouncedSaveCL() {
-  clearTimeout(clSaveTimer);
-  clSaveTimer = setTimeout(() => saveCL(), 400);
-}
-
-function syncAllLoras() {
-  saveCL();
-  renderCL();
-  activeLoraBoxes.forEach(render => {
-    try { render(); } catch(e) {}
-  });
-}
-
-async function loadCL() {
-  try {
-    const r = await (await fetch('/api/loras/custom')).json();
-    if (!r.files) return;
-    CL.files = r.files || [];
-    CL.items = r.items || [];
-    CL.meta = r.meta || {};
-    CL.civitai_token = r.civitai_token || '';
-    CL.hf_token = r.hf_token || '';
-    if ($('#civToken') && !$('#civToken').value) $('#civToken').value = CL.civitai_token;
-    if ($('#hfToken') && !$('#hfToken').value) $('#hfToken').value = CL.hf_token;
-    const clCard = $('#clCard');
-    if (clCard) clCard.hidden = false;
-    renderCL();
-    activeLoraBoxes.forEach(render => {
-      try { render(); } catch(e) {}
-    });
-  } catch {}
-}
-
-function evaluateLoraConflicts(items, metaMap, builtins) {
-  const conflicts = [];
-  const active = (items || []).filter(x => x && x.on && x.file);
-  const parsed = [];
-  let totalStrength = 0;
-
-  active.forEach(x => {
-    const fn = (x.file || '').split(/[/\\]/).pop().toLowerCase();
-    const meta = (metaMap && (metaMap[x.file] || metaMap[fn])) || getLoraMeta(x.file) || {};
-    const s = +x.strength || 0;
-    parsed.push({
-      file: x.file,
-      filename: (x.file || '').split(/[/\\]/).pop(),
-      name: meta.name || cleanLoraName(x.file),
-      strength: s,
-      lower: fn,
-      category: meta.category || '',
-    });
-    if (s > 0) totalStrength += s;
-  });
-
-  const b = builtins || {};
-  Object.keys(b).forEach(k => {
-    const bv = b[k];
-    if (bv && bv.on && k !== 'speed') {
-      const v = +bv.v || 0.5;
-      if (v > 0) totalStrength += v;
-    }
-  });
-
-  // 1. Splits / screen bifurcation (Раздвоение лица и губ)
-  const splits = parsed.filter(p => /splits|split.*os/i.test(p.lower));
-  splits.forEach(sp => {
-    conflicts.push({
-      id: 'splits_bifurcation',
-      level: 'danger',
-      title: `Раздвоение лица и губ на портретах (${sp.name})`,
-      desc: `Модель «${sp.filename}» натренирована на гимнастические шпагаты («splits») и деление планов. Внимание: на портретах и крупных планах её веса разрывают геометрию рта, создавая вторую нижнюю губу, раздвоенный подбородок и фантомные черты лица. Если вы не снимаете гимнастический шпагат во весь рост — обязательно отключите её.`,
-      culprits: [sp.file],
-      action: {
-        type: 'disable',
-        target: sp.file,
-        label: `Отключить ${sp.name}`,
-      }
-    });
-  });
-
-  // 2. Multi-Turbo clash (Конфликт планировщиков 4 шага vs 8 шагов)
-  const turbos = parsed.filter(p => /turbo.*4step|pika.*turbo|pika.*8step|fasth3.*preview|dmd2.*4step|fastvideo.*turbo|fasth3.*lora/i.test(p.lower));
-  if (turbos.length > 1) {
-    const names = turbos.map(t => `«${t.name}»`).join(', ');
-    conflicts.push({
-      id: 'turbo_clash',
-      level: 'danger',
-      title: `Конфликт турбо-ускорителей (${turbos.length} модели одновременно)`,
-      desc: `Одновременно включено несколько турбо-LoRA (${names}) с разным шагом сэмплирования (4 шага и 8 шагов). Их совместная работа ломает расписание шума (sigmas) диффузии, что приводит к сплошному шуму, чёрным кадрам или каше. Оставьте только один ускоритель.`,
-      culprits: turbos.map(t => t.file),
-      action: {
-        type: 'keep_one',
-        target: turbos[0].file,
-        culprits: turbos.map(t => t.file),
-        label: `Оставить только ${turbos[0].name}`,
-      }
-    });
-  }
-
-  // 3. Speed slider vs Motion repair (Конфликт динамики: ускорение vs сглаживание)
-  const hasSpeed = parsed.some(p => /speed_slider|speedslider/i.test(p.lower)) || (b.speed && b.speed.on && Math.abs(+b.speed.v) >= 1.5);
-  const hasRepair = parsed.some(p => /motion_repair/i.test(p.lower)) || (b.motion && b.motion.on);
-  if (hasSpeed && hasRepair) {
-    const repairItem = parsed.find(p => /motion_repair/i.test(p.lower));
-    conflicts.push({
-      id: 'speed_vs_repair',
-      level: 'warning',
-      title: 'Конфликт динамики: Speed Slider против Motion Repair',
-      desc: 'Включены одновременно ускорение («Speed Slider») и подавление дрожания («Motion Repair»). Один инструмент форсирует резкие межпакетные смещения, а второй пытается их сгладить. В результате видео может дёргаться рывками («желе»), заикаться или стробить.',
-      culprits: parsed.filter(p => /speed|motion/i.test(p.lower)).map(p => p.file),
-      action: {
-        type: 'disable',
-        target: repairItem ? repairItem.file : 'builtin_motion',
-        label: 'Отключить Motion Repair',
-      }
-    });
-  }
-
-  // 4. Overcooking / Total Weight Excess (Перегруз суммарного веса LoRA)
-  if (totalStrength > 1.35 || (parsed.length >= 3 && totalStrength > 1.2)) {
-    conflicts.push({
-      id: 'overcooking',
-      level: 'warning',
-      title: `Перегруз суммарного веса LoRA (${totalStrength.toFixed(2)} при норме до 1.0–1.2)`,
-      desc: `Включено ${parsed.length} LoRA с общим весом ${totalStrength.toFixed(2)}. В диффузионных моделях перегруз весов разрушает латентное пространство (эффект 'overbaking'): кожа становится неестественно восковой и пластиковой, мелкие черты лица «плавятся», появляются тёмные артефакты диффузии. Рекомендуется снизить веса до 0.5–0.6.`,
-      culprits: parsed.map(p => p.file),
-      action: {
-        type: 'scale_down',
-        target: '0.55',
-        label: 'Снизить силу активных LoRA до 0.55',
-      }
-    });
-  }
-
-  // 5. Multiple Heavy Anatomy / NSFW LoRAs (Наложение анатомических моделей)
-  const nsfw = parsed.filter(p => /dr34ml4y|unlocked|hmnsfw|aio.*sex|mysticxxx|rough.*sex|shrekman|deepthroat|cunnilingus|hmpussy|hmcumshot/i.test(p.lower));
-  if (nsfw.length >= 2) {
-    const names = nsfw.map(p => `«${p.name}»`).join(', ');
-    conflicts.push({
-      id: 'anatomy_stacking',
-      level: 'warning',
-      title: `Наложение анатомических LoRA (${nsfw.length} модели одновременно)`,
-      desc: `Одновременно включены ${names}. Эти модели переопределяют форму тел и интимных зон. Их одновременное наложение часто приводит к лишним конечностям, неестественной сцепке тел и деформации кожи. Рекомендуется оставить одну основную модель под текущую задачу.`,
-      culprits: nsfw.map(p => p.file),
-      action: {
-        type: 'keep_one',
-        target: nsfw[0].file,
-        culprits: nsfw.map(p => p.file),
-        label: `Оставить только ${nsfw[0].name}`,
-      }
-    });
-  }
-
-  // 6. Style Clash: 2D/Anime vs Realism
-  const anime = parsed.filter(p => /anime|2dan1m|cartoon|toon|3dcg/i.test(p.lower));
-  const realism = parsed.filter(p => /realism.*people|hyperrealistic|photo/i.test(p.lower)) || (b.realism && b.realism.on ? [{ file: 'builtin_realism', name: 'Реализм людей' }] : []);
-  if (anime.length && realism.length) {
-    conflicts.push({
-      id: 'style_clash',
-      level: 'warning',
-      title: 'Конфликт стилей: 2D/Аниме против фотореализма',
-      desc: `Активны одновременно аниме/2D LoRA (${anime[0].name}) и фотореализм (${realism[0].name}). Сеть получает взаимоисключающие стилевые команды, что приводит к гибридным лицам с восковыми пятнами и грязными текстурами.`,
-      culprits: [anime[0].file, realism[0].file],
-      action: {
-        type: 'disable',
-        target: anime[0].file,
-        label: `Отключить ${anime[0].name}`,
-      }
-    });
-  }
-
-  // 7. Duplicate Style: Multiple Latex models
-  const latex = parsed.filter(p => /latex/i.test(p.lower));
-  if (latex.length >= 2) {
-    const names = latex.map(p => `«${p.name}»`).join(', ');
-    conflicts.push({
-      id: 'duplicate_latex',
-      level: 'caution',
-      title: 'Дублирование стиля: несколько латексных LoRA',
-      desc: `Включены сразу две модели латекса (${names}). Их эффекты суммируются, вызывая чрезмерный зеркальный пересвет ткани и потерю фактуры складок.`,
-      culprits: latex.map(p => p.file),
-      action: {
-        type: 'keep_one',
-        target: latex[0].file,
-        culprits: latex.map(p => p.file),
-        label: `Оставить только ${latex[0].name}`,
-      }
-    });
-  }
-
-  return conflicts;
-}
-
-function renderConflictBoxHTML(conflicts) {
-  if (!conflicts || !conflicts.length) return '';
-  const colors = {
-    danger: { border: '#ff5555', bg: 'rgba(255, 60, 60, 0.15)', text: '#ff7777', badge: 'Критический конфликт' },
-    warning: { border: '#ffaa33', bg: 'rgba(255, 170, 50, 0.12)', text: '#ffbb44', badge: 'Предупреждение' },
-    caution: { border: '#ffd155', bg: 'rgba(255, 210, 80, 0.10)', text: '#ffe066', badge: 'Совет' },
-  };
-
-  return `<div class="lora-conflict-card" style="background:linear-gradient(135deg, rgba(230,40,40,0.12), rgba(20,20,30,0.7));border:1px solid rgba(255,80,80,0.4);border-radius:10px;padding:12px;margin-bottom:12px;box-shadow:0 4px 16px rgba(0,0,0,0.3)">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:16px;line-height:1">⚠️</span>
-        <b style="color:#ff8888;font-size:13px;letter-spacing:0.2px">Обнаружены конфликты LoRA (${conflicts.length})</b>
-      </div>
-      <span style="font-size:11px;color:#ffa0a0;opacity:0.85">Могут ухудшить качество видео, исказить лицо или сломать кадры</span>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      ${conflicts.map((c, i) => {
-        const col = colors[c.level] || colors.warning;
-        return `<div class="lcb-row" data-ci="${i}" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-left:3.5px solid ${col.border};border-radius:6px;padding:8px 10px">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
-            <div style="flex:1;min-width:240px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-                <span style="font-size:10px;font-weight:700;text-transform:uppercase;color:${col.border};background:${col.bg};padding:1px 5px;border-radius:3px">${col.badge}</span>
-                <b style="font-size:12px;color:${col.text}">${esc(c.title)}</b>
-              </div>
-              <div style="font-size:11.5px;color:var(--text-2, #ccc);line-height:1.4">${esc(c.desc)}</div>
-            </div>
-            ${c.action ? `<button type="button" class="btn mini lcb-act-btn" data-act="${esc(c.action.type)}" data-target="${esc(c.action.target || '')}" data-culprits="${esc(JSON.stringify(c.action.culprits || []))}" style="margin-top:2px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;white-space:nowrap;padding:4px 9px;font-size:11.5px;cursor:pointer;border-radius:6px">⚡ ${esc(c.action.label)}</button>` : ''}
-          </div>
-        </div>`;
-      }).join('')}
-    </div>
-  </div>`;
-}
-
-function handleConflictAction(btn) {
-  const act = btn.dataset.act;
-  const target = btn.dataset.target;
-  let culprits = [];
-  try { culprits = JSON.parse(btn.dataset.culprits || '[]'); } catch(e) {}
-
-  if (act === 'disable') {
-    const it = CL.items.find(x => x && (x.file === target || (x.file && x.file.endsWith(target))));
-    if (it) it.on = false;
-    syncAllLoras();
-    toast('Конфликтная LoRA отключена');
-  } else if (act === 'scale_down') {
-    const newWeight = parseFloat(target) || 0.55;
-    CL.items.forEach(x => {
-      if (x && x.on && +x.strength > newWeight) {
-        x.strength = newWeight;
-      }
-    });
-    syncAllLoras();
-    toast(`Сила активных LoRA снижена до ${newWeight}`);
-  } else if (act === 'keep_one') {
-    const keepFile = target;
-    culprits.forEach(f => {
-      if (f !== keepFile) {
-        const it = CL.items.find(x => x && (x.file === f || (x.file && x.file.endsWith(f))));
-        if (it) it.on = false;
-      }
-    });
-    syncAllLoras();
-    toast('Оставлена только одна активная LoRA из группы');
-  }
-}
-
-function renderCL() {
-  const el = $('#clList');
-  if (!el) return;
-  const conflicts = evaluateLoraConflicts(CL.items, CL.meta);
-  const confEl = $('#clConflicts');
-  if (confEl) {
-    confEl.innerHTML = renderConflictBoxHTML(conflicts);
-  }
-  el.innerHTML = CL.items.length ? CL.items.map((x, i) => {
-    const meta = getLoraMeta(x.file);
-    const title = meta.name || cleanLoraName(x.file);
-    const desc = meta.desc || '';
-    const cat = meta.category || '';
-    const triggers = meta.triggers || [];
-    const cleanFile = cleanLoraFile(x.file);
-
-    return `<div class="m" data-i="${i}" style="display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:12px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-bottom:8px;background:rgba(255,255,255,0.02)">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:240px">
-          <b><select class="cl-f" style="max-width:340px;background:var(--bg-2,#1b1b22);color:var(--text,#fff);border:1px solid var(--line,#444);border-radius:6px;padding:4px 8px">${CL.files.map(f => {
-            const m = getLoraMeta(f);
-            return `<option value="${esc(f)}"${f === x.file ? ' selected' : ''}>${esc((m.category ? '[' + m.category + '] ' : '') + (m.name || cleanLoraName(f)))}</option>`;
-          }).join('')}${CL.files.includes(x.file) ? '' : `<option value="${esc(x.file)}" selected>${esc(title)}</option>`}</select></b>
-          ${cat ? `<span style="font-size:10px;background:rgba(255,255,255,0.08);color:var(--sub,#aaa);padding:2px 6px;border-radius:4px">${esc(cat)}</span>` : ''}
-          <span style="font-size:11px;color:var(--sub,#888);font-family:monospace" title="${esc(x.file)}">${esc(cleanFile)}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span class="hint">сила <input class="cl-s" type="number" step="0.05" min="-4" max="4" value="${x.strength}" style="width:70px"></span>
-          <button class="chip cl-on${x.on ? ' on' : ''}" type="button">${x.on ? 'включена' : 'выключена'}</button>
-          <button class="btn mini cl-edit" type="button" title="Редактировать название и триггеры">✏</button>
-          <button class="btn mini cl-x" type="button" title="Убрать из списка">Убрать</button>
-        </div>
-      </div>
-      ${desc ? `<div class="hint" style="font-size:11.5px;color:var(--text-2,#bbb);margin-top:2px;line-height:1.35">${esc(desc)}</div>` : ''}
-      ${triggers.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:2px">
-        <span style="font-size:11px;color:var(--sub,#888);margin-right:2px">Триггеры для Агента:</span>
-        ${triggers.map(t => `<span class="cl-trig-chip" data-trig="${esc(t)}" title="Нажмите, чтобы скопировать триггер" style="cursor:pointer;font-size:11px;background:rgba(255,100,100,0.12);color:var(--accent,#ff7777);border:1px solid rgba(255,100,100,0.25);border-radius:4px;padding:1px 6px;user-select:all">${esc(t)}</span>`).join('')}
-      </div>` : ''}
-    </div>`;
-  }).join('')
-  : '<div class="hint">Пока нет добавленных LoRA. Выберите файл из списка ниже или скачайте из каталога Civitai.</div>';
-}
-
-const LORA_DEFS = {
-  realism: { name: 'Реализм людей', hint: 'Для живых людей: естественная кожа и лицо. Если лицо выглядит «пластиково» — включите.', min: 0, max: 1, step: .05, v: .5, on: false },
-  motion: { name: 'Исправление движения', hint: 'Если движение рвётся, дёргается или «плывёт» — включите.', min: 0, max: 1, step: .05, v: .5, on: false },
-  dmad: { name: 'DMAD', hint: 'Усиливает динамику и чёткость движения. Как в исходном экшн-workflow: 0.8.', min: 0, max: 1.2, step: .05, v: .8, on: true },
-  speed: { name: 'Speed Slider', hint: 'Скорость движения: 3–4 — быстро и резко; ближе к 0 — спокойнее; со знаком минус — замедление.', min: -8, max: 8, step: .5, v: 4, on: true },
+    cwList((await r.json()).id);
+  } catch (err) { toast(err instanceof SyntaxError ? 'Это не файл workflow (.json)' : err.message); }
 };
-
-function mountLoras(box, st, keys) {
-  if (!box) return;
-  st.loras = st.loras || {};
-  (keys || []).forEach(k => {
-    if (LORA_DEFS[k]) {
-      st.loras[k] = st.loras[k] || { on: LORA_DEFS[k].on, v: LORA_DEFS[k].v };
-    }
-  });
-
-  const render = () => {
-    let html = '';
-    
-    // 1. Built-in predefined LoRAs if keys specified
-    if (keys && keys.length) {
-      html += `<div class="row" style="margin-bottom:12px">
-        <div class="row-l">Встроенные LoRA <span class="hint" style="font-family:inherit">включите нужные</span></div>`
-        + keys.map(k => {
-          const d = LORA_DEFS[k];
-          if (!d) return '';
-          return `<div class="lora std-lora" data-k="${k}">
-            <div class="lora-h"><button class="chip lora-t" type="button">${d.name}</button><span class="lora-v"></span></div>
-            <input type="range" class="lora-r" min="${d.min}" max="${d.max}" step="${d.step}">
-            <div class="hint">${d.hint}</div>
-          </div>`;
-        }).join('') + '</div>';
-    }
-
-    // 2. Custom user LoRAs section
-    const customItems = CL.items || [];
-    const files = CL.files || [];
-    
-    html += `<div class="row custom-loras-section" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line, rgba(255,255,255,0.1))">
-      <div class="row-l" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <span>Свои LoRA</span>
-        <span class="hint">${customItems.length ? customItems.filter(x => x.on).length + ' акт.' : 'нет активных'}</span>
-      </div>
-      <div class="mode-lora-conflicts">${renderConflictBoxHTML(evaluateLoraConflicts(customItems, CL.meta, st.loras))}</div>`;
-
-    if (customItems.length) {
-      html += customItems.map((c, i) => {
-        const meta = getLoraMeta(c.file);
-        const title = meta.name || cleanLoraName(c.file);
-        const desc = meta.desc || '';
-        const cat = meta.category || '';
-        const triggers = meta.triggers || [];
-        const cleanFile = cleanLoraFile(c.file);
-
-        return `<div class="lora custom-lora" data-ci="${i}" style="margin-bottom:12px;background:rgba(255,255,255,0.02);padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.06)">
-          <div class="lora-h" style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-            <div style="flex:1">
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                <button class="chip cl-chip ${c.on ? 'on' : ''}" type="button" title="Включить / выключить" style="font-weight:600;font-size:12.5px">${esc(title)}</button>
-                ${cat ? `<span style="font-size:10px;background:rgba(255,255,255,0.08);color:var(--sub,#aaa);padding:2px 6px;border-radius:4px">${esc(cat)}</span>` : ''}
-              </div>
-              <div style="font-size:11px;color:var(--sub,#888);margin-top:3px;font-family:monospace" title="${esc(c.file)}">${esc(cleanFile)}</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <span class="lora-v cl-v" style="font-size:12px">${c.on ? 'сила ' + (+c.strength).toFixed(2).replace(/\.?0+$/, '') : 'выключена'}</span>
-              <button type="button" class="btn mini cl-edit" style="padding:2px 6px;font-size:11px;opacity:0.75" title="Редактировать название и триггеры">✏</button>
-              <button type="button" class="btn mini cl-del" style="padding:2px 6px;font-size:11px;opacity:0.75" title="Убрать эту LoRA">✕</button>
-            </div>
-          </div>
-          ${desc ? `<div class="hint" style="margin:5px 0 4px 0;line-height:1.35;font-size:11.5px;color:var(--text-2,#bbb)">${esc(desc)}</div>` : ''}
-          ${triggers.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 6px 0;align-items:center">
-            <span style="font-size:10.5px;color:var(--sub,#888);margin-right:2px">Триггеры:</span>
-            ${triggers.map(t => `<span class="cl-trig-chip" data-trig="${esc(t)}" title="Нажмите, чтобы скопировать триггер" style="cursor:pointer;font-size:11px;background:rgba(255,100,100,0.12);color:var(--accent,#ff7777);border:1px solid rgba(255,100,100,0.25);border-radius:4px;padding:1px 6px;user-select:all">${esc(t)}</span>`).join('')}
-          </div>` : ''}
-          <input type="range" class="lora-r cl-r" min="-2" max="3" step="0.05" value="${c.strength}" ${c.on ? '' : 'disabled'} style="opacity:${c.on ? 1 : 0.35};margin-top:4px">
-        </div>`;
-      }).join('');
-    }
-
-    // Selector to add a new custom LoRA + Civitai browser button
-    html += `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px">`;
-    if (files.length) {
-      html += `<select class="c-lora-picker" style="flex:1;min-width:200px;background:var(--bg-2, #1b1b22);color:var(--text, #fff);border:1px solid var(--line, #444);border-radius:8px;padding:6px 10px;font-size:12px;outline:none">
-          <option value="">+ Добавить LoRA из models\\loras...</option>
-          ${files.map(f => {
-            const m = getLoraMeta(f);
-            const t = m.name || cleanLoraName(f);
-            const cat = m.category ? `[${m.category}] ` : '';
-            return `<option value="${esc(f)}">${esc(cat + t + ' (' + cleanLoraFile(f) + ')')}</option>`;
-          }).join('')}
-        </select>
-        <button class="btn mini cl-reload-btn" type="button" title="Обновить список файлов в папке loras" style="padding:6px 10px">🔄</button>`;
-    } else {
-      html += `<div class="hint" style="flex:1">В папке models\\loras пока нет файлов.</div>
-        <button class="btn mini cl-reload-btn" type="button" style="padding:6px 10px">🔄 обновить</button>`;
-    }
-    html += `<button class="btn mini cl-civitai-btn" type="button" style="padding:6px 12px;background:linear-gradient(135deg, rgba(230,50,50,0.25), rgba(180,20,50,0.4));border:1px solid rgba(255,80,80,0.4);white-space:nowrap" title="Поиск и скачивание LoRA для MiniMax H3">🌐 Каталог Civitai</button>
-      </div>`;
-
-    html += `</div>`;
-    box.innerHTML = html;
-    paint();
-  };
-
-  const paint = () => {
-    $$('.std-lora', box).forEach(el => {
-      const s = st.loras[el.dataset.k], r = $('.lora-r', el);
-      if (!s || !r) return;
-      $('.lora-t', el).classList.toggle('on', !!s.on);
-      r.value = s.v; r.disabled = !s.on; r.style.opacity = s.on ? 1 : .35;
-      r.style.setProperty('--p', ((s.v - r.min) / (r.max - r.min) * 100) + '%');
-      $('.lora-v', el).textContent = s.on ? `сила ${(+s.v).toFixed(2).replace(/\.?0+$/, '')}` : 'выключена';
-    });
-    $$('.custom-lora', box).forEach(el => {
-      const idx = +el.dataset.ci;
-      const c = CL.items[idx];
-      if (!c) return;
-      $('.cl-chip', el).classList.toggle('on', !!c.on);
-      const r = $('.cl-r', el);
-      if (!r) return;
-      r.value = c.strength; r.disabled = !c.on; r.style.opacity = c.on ? 1 : .35;
-      r.style.setProperty('--p', ((c.strength - r.min) / (r.max - r.min) * 100) + '%');
-      $('.cl-v', el).textContent = c.on ? `сила ${(+c.strength).toFixed(2).replace(/\.?0+$/, '')}` : 'выключена';
-    });
-    const cfBox = $('.mode-lora-conflicts', box);
-    if (cfBox) {
-      cfBox.innerHTML = renderConflictBoxHTML(evaluateLoraConflicts(CL.items, CL.meta, st.loras));
-    }
-  };
-
-  box.onclick = e => {
-    if (e.target.closest('.lcb-act-btn')) {
-      handleConflictAction(e.target.closest('.lcb-act-btn'));
-      return;
-    }
-    if (e.target.closest('.cl-trig-chip')) {
-      const trig = e.target.closest('.cl-trig-chip').dataset.trig;
-      if (trig) {
-        navigator.clipboard?.writeText(trig);
-        toast('Скопирован триггер: ' + trig);
-      }
-      return;
-    }
-    const stdEl = e.target.closest('.std-lora');
-    if (stdEl && e.target.closest('.lora-t')) {
-      const s = st.loras[stdEl.dataset.k];
-      if (s) { s.on = !s.on; paint(); }
-      return;
-    }
-    const cEl = e.target.closest('.custom-lora');
-    if (cEl && e.target.closest('.cl-chip')) {
-      const idx = +cEl.dataset.ci;
-      if (CL.items[idx]) {
-        CL.items[idx].on = !CL.items[idx].on;
-        syncAllLoras();
-      }
-      return;
-    }
-    if (cEl && e.target.closest('.cl-edit')) {
-      const idx = +cEl.dataset.ci;
-      if (CL.items[idx]) openLoraEdit(CL.items[idx].file);
-      return;
-    }
-    if (cEl && e.target.closest('.cl-del')) {
-      const idx = +cEl.dataset.ci;
-      CL.items.splice(idx, 1);
-      syncAllLoras();
-      return;
-    }
-    if (e.target.closest('.cl-reload-btn')) {
-      loadCL().then(() => syncAllLoras());
-      return;
-    }
-    if (e.target.closest('.cl-civitai-btn')) {
-      openCivitaiModal();
-      return;
-    }
-  };
-
-  box.oninput = e => {
-    const stdEl = e.target.closest('.std-lora');
-    if (stdEl && e.target.classList.contains('lora-r')) {
-      if (st.loras[stdEl.dataset.k]) {
-        st.loras[stdEl.dataset.k].v = +e.target.value;
-        paint();
-      }
-      return;
-    }
-    const cEl = e.target.closest('.custom-lora');
-    if (cEl && e.target.classList.contains('cl-r')) {
-      const idx = +cEl.dataset.ci;
-      if (CL.items[idx]) {
-        CL.items[idx].strength = +e.target.value;
-        paint();
-        debouncedSaveCL();
-      }
-      return;
-    }
-  };
-
-  box.onchange = e => {
-    if (e.target.classList.contains('c-lora-picker') && e.target.value) {
-      const f = e.target.value;
-      if (!CL.items.some(x => x.file === f)) {
-        const m = getLoraMeta(f);
-        const stVal = m.recommended_weight || 0.8;
-        CL.items.push({ file: f, strength: stVal, on: true });
-        syncAllLoras();
-      }
-      e.target.value = '';
-    }
-  };
-
-  activeLoraBoxes.add(render);
-  render();
-  if (!CL.files.length) loadCL();
-}
-
-/* Modal and Civitai handling helpers */
-function openLoraEdit(file) {
-  currentEditingFile = file;
-  const m = getLoraMeta(file);
-  $('#lemFile').textContent = file;
-  $('#lemName').value = m.name || cleanLoraName(file);
-  $('#lemCat').value = m.category || '';
-  $('#lemDesc').value = m.desc || '';
-  $('#lemTrig').value = (m.triggers || []).join(', ');
-  $('#loraEditModal').hidden = false;
-}
-
-$('#lemCancel')?.addEventListener('click', () => { $('#loraEditModal').hidden = true; });
-$('#lemSave')?.addEventListener('click', async () => {
-  if (!currentEditingFile) return;
-  const name = $('#lemName').value.trim();
-  const category = $('#lemCat').value.trim();
-  const desc = $('#lemDesc').value.trim();
-  const triggers = $('#lemTrig').value.split(',').map(s => s.trim()).filter(Boolean);
-
-  try {
-    const r = await fetch('/api/loras/meta/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file: currentEditingFile, name, category, desc, triggers })
-    });
-    if (!r.ok) throw new Error(await r.text());
-    
-    CL.meta[currentEditingFile] = { file: currentEditingFile, name, category, desc, triggers };
-    $('#loraEditModal').hidden = true;
-    syncAllLoras();
-    toast('Настройки LoRA сохранены!');
-  } catch (err) {
-    toast('Ошибка сохранения: ' + err.message);
-  }
-});
-
-function openCivitaiModal() {
-  const m = $('#civitaiModal');
-  if (!m) return;
-  m.hidden = false;
-  if ($('#civToken')) $('#civToken').value = CL.civitai_token || '';
-  if (!$('#civResults .civ-card')) {
-    searchCivitai();
-  }
-  startPollCivDl();
-}
-
-function closeCivitaiModal() {
-  const m = $('#civitaiModal');
-  if (m) m.hidden = true;
-  stopPollCivDl();
-}
-
-$('#civClose')?.addEventListener('click', closeCivitaiModal);
-$('#civSearchBtn')?.addEventListener('click', () => searchCivitai());
-$('#civSearch')?.addEventListener('keydown', e => { if (e.key === 'Enter') searchCivitai(); });
-$('#civMirror')?.addEventListener('change', () => searchCivitai());
-
-$('#civTokenSave')?.addEventListener('click', async () => {
-  const civToken = ($('#civToken')?.value || '').trim();
-  const hfToken = ($('#hfToken')?.value || '').trim();
-  CL.civitai_token = civToken;
-  CL.hf_token = hfToken;
-  try {
-    await fetch('/api/loras/tokens', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ civitai_token: civToken, hf_token: hfToken })
-    });
-    toast('Токены сохранены');
-  } catch (e) {
-    toast('Ошибка сохранения токенов: ' + e.message);
-  }
-});
-
-$('#civMirror')?.addEventListener('change', () => {
-  const m = $('#civMirror').value;
-  if (m === 'hf') {
-    $('#civSearch').placeholder = 'Поиск по Hugging Face (realism, turbo, style, orbit...)';
-  } else {
-    $('#civSearch').placeholder = 'Поиск по Civitai (nsfw, latex, speed, motion, girl...)';
-  }
-  searchCivitai();
-});
-
-$('#civLinkBtn')?.addEventListener('click', async () => {
-  const link = ($('#civLink').value || '').trim();
-  if (!link) { toast('Вставьте ссылку Civitai или Hugging Face'); return; }
-  const mirror = $('#civMirror').value || 'red';
-  toast('Проверяем ссылку модели...');
-  try {
-    const isHf = link.includes('huggingface.co') || (link.includes('/') && !link.includes('civitai') && !link.match(/^\d+$/));
-    const endpoint = isHf ? '/api/hf/resolve' : '/api/civitai/resolve';
-    const payload = isHf ? { link, token: ($('#hfToken')?.value || CL.hf_token || '') } : { link, mirror };
-    const r = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Не удалось распознать ссылку');
-    const v = data.version;
-    await startDownloadCiv(v, data.name, v.description, data.source || (isHf ? 'HuggingFace' : 'Civitai'));
-  } catch (err) {
-    toast('Ошибка: ' + err.message);
-  }
-});
-
-let CATALOG_ITEMS = [];
-
-async function searchCivitai() {
-  const q = ($('#civSearch').value || '').trim();
-  const mirror = $('#civMirror').value || 'red';
-  const isHf = mirror === 'hf';
-  const resEl = $('#civResults');
-  resEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--sub,#aaa)">Загрузка моделей с ${isHf ? 'Hugging Face' : 'Civitai'}…</div>`;
-  try {
-    const civToken = ($('#civToken')?.value || CL.civitai_token || '').trim();
-    const hfToken = ($('#hfToken')?.value || CL.hf_token || '').trim();
-    const url = isHf
-      ? `/api/hf/search?query=${encodeURIComponent(q)}&token=${encodeURIComponent(hfToken)}`
-      : `/api/civitai/search?query=${encodeURIComponent(q)}&mirror=${encodeURIComponent(mirror)}&token=${encodeURIComponent(civToken)}`;
-    const r = await fetch(url);
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Ошибка поиска');
-    CATALOG_ITEMS = data.items || [];
-    if (!CATALOG_ITEMS.length) {
-      resEl.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--sub,#aaa)">Ничего не найдено для MiniMax H3. Попробуйте изменить запрос.</div>';
-      return;
-    }
-    resEl.innerHTML = CATALOG_ITEMS.map((item, idx) => {
-      const versions = item.versions || [];
-      const v = versions[0] || {};
-      const img = item.images && item.images[0] ? item.images[0].url : '';
-      const triggers = v.trainedWords || [];
-      const isVideo = img && (img.toLowerCase().includes('.mp4') || img.toLowerCase().includes('.webm'));
-      const isHfItem = item.source === 'huggingface' || String(item.id || '').includes('/');
-      const srcBadge = isHfItem
-        ? '<span style="background:rgba(255,200,50,0.18);color:#ffd166;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">🤗 Hugging Face</span>'
-        : '<span style="background:rgba(50,150,255,0.18);color:#5bc0de;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">🌐 Civitai</span>';
-      const fallbackIcon = isHfItem ? '🤗' : '🌐';
-
-      const mediaHtml = img ? (isVideo
-        ? `<video src="${esc(img)}" autoplay loop muted playsinline style="width:100%;height:100%;object-fit:cover;object-position:top;pointer-events:none"></video>`
-        : `<img src="${esc(img)}" alt="" style="width:100%;height:100%;object-fit:cover;object-position:top" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div style="display:none;width:100%;height:100%;align-items:center;justify-content:center;background:#181818;font-size:32px">${fallbackIcon}</div>`)
-        : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#181818;color:var(--sub,#666);font-size:36px">${fallbackIcon}</div>`;
-
-      const hasMulti = versions.length > 1;
-      const verSelectorHtml = hasMulti ? `
-        <div style="margin-top:6px;margin-bottom:6px">
-          <select class="inp civ-ver-select" style="width:100%;font-size:11px;padding:3px 6px;background:rgba(0,0,0,0.4)" data-idx="${idx}">
-            ${versions.map((ver, vIdx) => `<option value="${vIdx}">${esc(ver.filename || ver.name)}</option>`).join('')}
-          </select>
-        </div>` : '';
-
-      return `<div class="civ-card" data-idx="${idx}" style="background:var(--bg-2, rgba(255,255,255,0.03));border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;min-height:350px">
-        <div style="height:150px;min-height:150px;max-height:150px;background:#111;overflow:hidden;position:relative">
-          ${mediaHtml}
-          <div style="position:absolute;top:6px;left:6px">${srcBadge}</div>
-          <span class="civ-size-badge" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.75);font-size:10px;padding:2px 6px;border-radius:4px;color:#fff;${v.sizeMB > 0 ? '' : 'display:none'}">${esc(v.sizeMB)} MB</span>
-          ${item.downloads ? `<span style="position:absolute;bottom:6px;left:6px;background:rgba(0,0,0,0.7);font-size:10px;padding:1px 5px;border-radius:3px;color:#ddd">⬇ ${esc(item.downloads)}</span>` : ''}
-        </div>
-        <div style="padding:10px;flex:1;display:flex;flex-direction:column;justify-content:space-between">
-          <div>
-            <div style="font-weight:600;font-size:13px;margin-bottom:4px;line-height:1.3" title="${esc(item.name)}">${esc(item.name)}</div>
-            <div class="civ-author-line" style="font-size:11px;color:var(--sub,#888);margin-bottom:6px">Автор: ${esc(item.creator || (isHfItem ? 'HF' : 'Civitai'))} · <span class="civ-ver-name">${esc(v.name || 'H3')}</span></div>
-            ${item.description ? `<div style="font-size:11px;color:var(--text-2,#bbb);line-height:1.35;margin-bottom:6px;max-height:48px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical" title="${esc(item.description)}">${esc(item.description)}</div>` : ''}
-            ${verSelectorHtml}
-            <div class="civ-triggers-box" style="font-size:11px;color:var(--accent,#ff7777);margin-bottom:8px">
-              ${triggers.length ? `<b>Триггеры:</b> <span style="user-select:all">${triggers.map(t => `<span class="cl-trig-chip" style="display:inline-block;cursor:pointer;background:rgba(255,100,100,0.12);padding:1px 5px;border-radius:4px;margin:1px 2px" title="Кликните чтобы скопировать">${esc(t)}</span>`).join(' ')}</span>` : '<span style="color:var(--sub,#777);font-size:11px">Триггеры не требуются</span>'}
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:8px">
-            <button class="btn mini primary civ-dl-btn" type="button" style="flex:1" data-idx="${idx}">⬇ Скачать в ComfyUI</button>
-            <a href="${esc(item.civitaiUrl)}" target="_blank" rel="noopener" class="btn mini" style="padding:4px 8px;text-decoration:none" title="Открыть страницу модели">🔗</a>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-  } catch (err) {
-    resEl.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--accent,#ff5555)">Ошибка: ${esc(err.message)}</div>`;
-  }
-}
-
-$('#civResults')?.addEventListener('change', e => {
-  const sel = e.target.closest('.civ-ver-select');
-  if (!sel) return;
-  const card = sel.closest('.civ-card');
-  if (!card) return;
-  const idx = +sel.dataset.idx;
-  const item = CATALOG_ITEMS[idx];
-  if (!item || !item.versions) return;
-  const vIdx = +sel.value;
-  const ver = item.versions[vIdx];
-  if (!ver) return;
-
-  const verNameEl = card.querySelector('.civ-ver-name');
-  if (verNameEl) verNameEl.textContent = ver.name || 'H3';
-
-  const sizeBadge = card.querySelector('.civ-size-badge');
-  if (sizeBadge) {
-    sizeBadge.textContent = ver.sizeMB > 0 ? `${ver.sizeMB} MB` : '';
-    sizeBadge.style.display = ver.sizeMB > 0 ? '' : 'none';
-  }
-
-  const trigBox = card.querySelector('.civ-triggers-box');
-  if (trigBox) {
-    const words = ver.trainedWords || [];
-    if (words.length) {
-      trigBox.innerHTML = `<b>Триггеры:</b> <span style="user-select:all">${words.map(t => `<span class="cl-trig-chip" style="display:inline-block;cursor:pointer;background:rgba(255,100,100,0.12);padding:1px 5px;border-radius:4px;margin:1px 2px" title="Кликните чтобы скопировать">${esc(t)}</span>`).join(' ')}</span>`;
-    } else {
-      trigBox.innerHTML = `<span style="color:var(--sub,#777);font-size:11px">Триггеры не требуются</span>`;
-    }
-  }
-});
-
-$('#civResults')?.addEventListener('click', async e => {
-  const chip = e.target.closest('.cl-trig-chip');
-  if (chip) {
-    const text = chip.textContent.trim();
-    if (text) {
-      navigator.clipboard?.writeText(text);
-      toast('Триггер скопирован: ' + text);
-    }
-    return;
-  }
-  const btn = e.target.closest('.civ-dl-btn');
-  if (!btn) return;
-  const idx = +btn.dataset.idx;
-  const item = CATALOG_ITEMS[idx];
-  if (!item) return;
-  const card = btn.closest('.civ-card');
-  const sel = card ? card.querySelector('.civ-ver-select') : null;
-  const vIdx = sel ? +sel.value : 0;
-  const ver = (item.versions && item.versions[vIdx]) || (item.versions && item.versions[0]) || {};
-  const isHf = item.source === 'huggingface' || String(item.id || '').includes('/');
-  await startDownloadCiv(ver, item.name, item.description, isHf ? 'HuggingFace' : 'Civitai');
-});
-
-async function startDownloadCiv(ver, modelName, modelDesc, source = 'Civitai') {
-  const isHf = source === 'HuggingFace' || (ver.downloadUrl && ver.downloadUrl.includes('huggingface'));
-  const token = isHf
-    ? (($('#hfToken') ? $('#hfToken').value : '') || CL.hf_token || '')
-    : (($('#civToken') ? $('#civToken').value : '') || CL.civitai_token || '');
-  try {
-    const payload = {
-      url: ver.downloadUrl,
-      filename: ver.filename,
-      token: token,
-      name: modelName || ver.name,
-      desc: modelDesc || ver.description,
-      triggers: ver.trainedWords || [],
-      source: isHf ? 'HuggingFace' : 'Civitai'
-    };
-    const r = await fetch('/api/civitai/download', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const res = await r.json();
-    if (!r.ok) throw new Error(res.error || 'Ошибка старта скачивания');
-    toast(`Начато скачивание LoRA (${payload.source}): ${ver.filename}`);
-    startPollCivDl();
-  } catch (err) {
-    toast('Ошибка: ' + err.message);
-  }
-}
-
-async function checkCivDlStatus() {
-  try {
-    const r = await fetch('/api/civitai/download/status');
-    const st = await r.json();
-    const box = $('#civProgressBox');
-    if (!box) return;
-    if (st.status === 'downloading') {
-      box.hidden = false;
-      $('#civDlTitle').textContent = `Скачивание: ${st.name || st.file}`;
-      $('#civDlSpeed').textContent = st.speed || '';
-      $('#civDlBar').style.width = (st.percent || 0) + '%';
-      const doneMB = (st.done / (1024 * 1024)).toFixed(1);
-      const totalMB = (st.total / (1024 * 1024)).toFixed(1);
-      $('#civDlText').textContent = `${doneMB} МБ / ${totalMB} МБ (${st.percent}%)`;
-    } else if (st.status === 'done') {
-      box.hidden = true;
-      stopPollCivDl();
-      toast('LoRA успешно скачана в ComfyUI!');
-      await loadCL();
-      syncAllLoras();
-    } else if (st.status === 'error') {
-      box.hidden = false;
-      $('#civDlTitle').textContent = `Ошибка скачивания: ${st.file}`;
-      $('#civDlSpeed').textContent = 'Сбой';
-      $('#civDlText').textContent = st.error || 'Неизвестная ошибка';
-      stopPollCivDl();
-    } else {
-      box.hidden = true;
-    }
-  } catch {}
-}
-
-function startPollCivDl() {
-  stopPollCivDl();
-  checkCivDlStatus();
-  civDlInterval = setInterval(checkCivDlStatus, 1500);
-}
-
-function stopPollCivDl() {
-  if (civDlInterval) {
-    clearInterval(civDlInterval);
-    civDlInterval = null;
-  }
-}
-
-$('#civDlCancel')?.addEventListener('click', async () => {
-  await fetch('/api/civitai/download/cancel', { method: 'POST' });
-  stopPollCivDl();
-  $('#civProgressBox').hidden = true;
-  toast('Скачивание отменено');
-});
-
-function loraForm(st, fd) {
-  Object.entries(st.loras || {}).forEach(([k, s]) => fd.append('lora_' + k, s.on ? s.v : 'off'));
-  if (CL.items && CL.items.length) {
-    const active = CL.items.filter(x => x.on && x.file);
-    if (active.length) {
-      fd.append('custom_loras', JSON.stringify(active));
-    }
-  }
-}
-
+$('.nav[data-view="custom"]').addEventListener('click', () => cwList(CW.id));
 
 /* ---------- ComfyUI Update Checker & Updater ---------- */
 let COMFY_UPD = { current: '', latest: '', has_update: false, running: false, interval: null };
@@ -6852,11 +6821,6 @@ async function startComfyUpdate() {
   }, 1000);
 }
 
-
-.on = !CL.items[i].on; else if (e.target.closest('.cl-x')) CL.items.splice(i, 1); else return;
-  renderCL(); saveCL();
-});
-$('.nav[data-view="models"]').addEventListener('click', loadCL);
 if (API) {
   connectEvents(); loadStatus(); loadCloud(); pollSystem(); loadCL(); checkComfyUpdate();
   fetch('/api/status').then(r => r.json()).then(s => {
@@ -6997,6 +6961,7 @@ applyZoom();
   $('#comfyUpdCancelBtn')?.addEventListener('click', closeComfyUpdateModal);
   $('#comfyUpdStartBtn')?.addEventListener('click', startComfyUpdate);
   $('#comfyUpdDoneBtn')?.addEventListener('click', closeComfyUpdateModal);
+  $('#clCivitai')?.addEventListener('click', openCivitaiModal);
 
 </script>
 </body>
