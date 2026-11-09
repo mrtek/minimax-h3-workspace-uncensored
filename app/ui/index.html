@@ -7372,10 +7372,16 @@ applyZoom();
         <span id="mtEngineText">Быстрый FFmpeg</span>
       </div>
 
-      <button class="go mt-go">
+      <button class="go mt-go" id="mtGoFf" type="button" style="width:100%">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>
-        <span id="mtGoText">Склеить</span>
+        <span id="mtGoFfText">⚡ Склеить (FFmpeg)</span>
       </button>
+
+      <button type="button" class="btn" id="mtGoComfy" style="width:100%;margin-top:8px;padding:10px 14px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="opacity:0.85"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+        <span id="mtGoComfyText">Склеить через ComfyUI</span>
+      </button>
+      <div id="mtComfyHint" class="hint" style="text-align:center;font-size:11px;margin-top:4px;color:var(--muted)">Склейка стандартными нодами ComfyUI (медленнее, без звуковой дорожки)</div>
 
       <!-- Montage progress bar -->
       <div id="mtJoinProgressBox" style="display:none;width:100%;margin-top:10px">
@@ -7454,16 +7460,21 @@ applyZoom();
         $('#mtFfDownloadBtn', root).style.display = 'none';
         $('#mtFfCheckUpdBtn', root).style.display = 'inline-block';
         $('#mtEngineDot', root).style.background = '#4ade80';
-        $('#mtEngineText', root).textContent = 'Режим: Быстрый FFmpeg (без потерь качества)';
-        $('#mtGoText', root).textContent = '⚡ Склеить (FFmpeg)';
+        $('#mtEngineText', root).textContent = 'Быстрый FFmpeg (без потерь качества)';
+        $('#mtGoFf', root).style.display = 'flex';
+        $('#mtGoFfText', root).textContent = '⚡ Склеить (FFmpeg)';
+        $('#mtGoComfy', root).classList.remove('go');
+        $('#mtGoComfyText', root).textContent = 'Склеить через ComfyUI';
       } else {
         $('#mtFfBadge', root).innerHTML = `<span style="background:#7c2d12;color:#fb923c;padding:2px 7px;border-radius:99px">⚠ Не установлен</span>`;
-        $('#mtFfStatusText', root).textContent = 'Портативный FFmpeg не установлен в папке проекта. Скачайте его в один клик (~100 МБ) для мгновенной склейки и поддержки аудио, либо используйте медленный режим ComfyUI.';
+        $('#mtFfStatusText', root).textContent = 'Портативный FFmpeg не установлен в папке проекта. Скачайте его в один клик (~100 МБ) для мгновенной склейки и поддержки аудио, либо используйте склейку через ComfyUI.';
         $('#mtFfDownloadBtn', root).style.display = 'inline-block';
         $('#mtFfCheckUpdBtn', root).style.display = 'none';
         $('#mtEngineDot', root).style.background = '#f59e0b';
-        $('#mtEngineText', root).textContent = 'Режим: ComfyUI (медленнее, без аудиодорожки)';
-        $('#mtGoText', root).textContent = 'Склеить (через ComfyUI)';
+        $('#mtEngineText', root).textContent = 'ComfyUI (медленнее, без аудиодорожки)';
+        $('#mtGoFf', root).style.display = 'none';
+        $('#mtGoComfy', root).classList.add('go');
+        $('#mtGoComfyText', root).textContent = 'Склеить через ComfyUI';
       }
 
       if (st.downloading && st.download_state) {
@@ -7589,33 +7600,41 @@ applyZoom();
   };
 
   /* ---------- MONTAGE EXECUTION ---------- */
-  $('.mt-go', root).onclick = async () => {
+  async function executeMontage(forceComfy = false) {
     const st = $('.mt-status', root);
     const progBox = $('#mtJoinProgressBox', root);
     const progBar = $('#mtJoinProgressBar', root);
+    const btnFf = $('#mtGoFf', root);
+    const btnComfy = $('#mtGoComfy', root);
 
     if (MT.busy) return;
     if (MT.ids.length < 2) { st.textContent = 'Добавьте хотя бы два клипа'; return; }
 
+    const isFf = !forceComfy && MT.ff && MT.ff.installed;
+    if (!forceComfy && (!MT.ff || !MT.ff.installed)) {
+      toast('FFmpeg не установлен. Используйте склейку через ComfyUI или скачайте FFmpeg.');
+      return;
+    }
+
     MT.busy = true;
-    $('.mt-go', root).disabled = true;
+    if (btnFf) btnFf.disabled = true;
+    if (btnComfy) btnComfy.disabled = true;
     progBox.style.display = 'block';
     progBar.style.width = '5%';
 
-    const isFf = MT.ff && MT.ff.installed;
     st.textContent = isFf ? 'Подготовка FFmpeg монтажа…' : 'Отправляем клипы в ComfyUI…';
 
     try {
       const fd = new FormData();
       fd.append('ids', JSON.stringify(MT.ids));
-      if (MT.audioFile) {
+      if (MT.audioFile && isFf) {
         fd.append('audio', MT.audioFile);
         fd.append('audio_loop', $('#mtAudioLoop', root).checked ? 'true' : 'false');
         fd.append('audio_mode', $('#mtAudioMode', root).value);
         fd.append('music_vol', ($('#mtMusicVol', root).value / 100).toFixed(2));
         fd.append('video_vol', ($('#mtVideoVol', root).value / 100).toFixed(2));
       }
-      if (!isFf) {
+      if (forceComfy || !isFf) {
         fd.append('force_comfy', '1');
       }
 
@@ -7625,7 +7644,7 @@ applyZoom();
       try { res = JSON.parse(txt); } catch { res = { error: txt }; }
       if (!r.ok) throw new Error(res.error || r.statusText);
 
-      const qTitle = isFf ? `Монтаж FFmpeg: ${MT.ids.length} клипов` : `Монтаж: ${MT.ids.length} клипов`;
+      const qTitle = isFf ? `Монтаж FFmpeg: ${MT.ids.length} клипов` : `Монтаж ComfyUI: ${MT.ids.length} клипов`;
       qAdd(res.prompt_id, 'montage', qTitle);
       st.textContent = isFf ? 'Склеиваем через FFmpeg…' : 'Склеиваем в ComfyUI…';
 
@@ -7639,7 +7658,8 @@ applyZoom();
         } else if (ev.type === 'done') {
           offPrompt(res.prompt_id);
           MT.busy = false;
-          $('.mt-go', root).disabled = false;
+          if (btnFf) btnFf.disabled = false;
+          if (btnComfy) btnComfy.disabled = false;
           progBox.style.display = 'none';
           const v = $('.mt-res', root);
           v.src = ev.item.url;
@@ -7652,24 +7672,30 @@ applyZoom();
         } else if (ev.type === 'error') {
           offPrompt(res.prompt_id);
           MT.busy = false;
-          $('.mt-go', root).disabled = false;
+          if (btnFf) btnFf.disabled = false;
+          if (btnComfy) btnComfy.disabled = false;
           progBox.style.display = 'none';
           st.textContent = 'Ошибка: ' + ev.message;
         } else if (ev.type === 'interrupted') {
           offPrompt(res.prompt_id);
           MT.busy = false;
-          $('.mt-go', root).disabled = false;
+          if (btnFf) btnFf.disabled = false;
+          if (btnComfy) btnComfy.disabled = false;
           progBox.style.display = 'none';
           st.textContent = 'Остановлено';
         }
       });
     } catch (err) {
       MT.busy = false;
-      $('.mt-go', root).disabled = false;
+      if (btnFf) btnFf.disabled = false;
+      if (btnComfy) btnComfy.disabled = false;
       progBox.style.display = 'none';
       st.textContent = 'Ошибка: ' + err.message;
     }
-  };
+  }
+
+  $('#mtGoFf', root).onclick = () => executeMontage(false);
+  $('#mtGoComfy', root).onclick = () => executeMontage(true);
 
   IMG_PANELS.push(render);
   render();
