@@ -1048,12 +1048,12 @@ details[open] summary::before{content:'－ '}
           <div class="card">
             <div class="card-h"><h3>Модель агента</h3><span class="verdict" id="agState" hidden></span></div>
             <div id="agBig" class="agbig"></div>
+            <div id="agDl" hidden style="margin:8px 0 14px">
+              <div class="pb big"><i id="agBar"></i></div>
+              <div class="pnow-s" style="margin-top:6px;display:flex;justify-content:space-between;align-items:center"><span id="agDlTxt"></span><button class="btn mini" id="agDlStop">Стоп</button></div>
+            </div>
             <details id="agVarBox" class="agvar"><summary>Выбор моделей агента</summary><div id="agVariants"></div></details>
             <details class="agvar" id="agMore"><summary>Подробности</summary><div id="agModel" class="hint"></div></details>
-            <div id="agDl" hidden style="margin-top:12px">
-              <div class="pb big"><i id="agBar"></i></div>
-              <div class="pnow-s"><span id="agDlTxt"></span><button class="btn" id="agDlStop">Стоп</button></div>
-            </div>
             <div id="agDirWrap" hidden style="margin-top:12px">
               <div class="hint" id="agDirHint" style="margin-bottom:6px">Куда скачать помощника. Всё останется только в этой папке, больше нигде.</div>
               <div class="path on"><input id="agDir" spellcheck="false" placeholder="D:\H3Assistant"><button class="btn" data-pick="agDir">Обзор…</button></div>
@@ -5450,7 +5450,7 @@ async function agStatus() {
       + `<span class="tg${o.uncensored ? ' unc' : ''}">${o.uncensored ? 'без цензуры' : 'обычная'}</span>`
       + `<div style="grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;margin-top:2px;gap:8px;flex-wrap:wrap">`
       + `<span class="rd ${o.have ? 'ok' : 'no'}">${o.have ? '✓ ГОТОВО' : `Нужно скачать · ${(o.size / 1e9).toFixed(1)} ГБ`}${o.current ? ' · ВЫБРАНА' : ''}</span>`
-      + `${!o.have ? `<button class="btn mini pri" type="button" data-agdl="${o.key}" title="Скачать эту модель">Скачать (${(o.size / 1e9).toFixed(1)} ГБ)</button>` : ''}`
+      + `${!o.have ? `<button class="btn mini pri" type="button" data-agdl="${o.key}" ${s.installing ? "disabled" : ""} title="Скачать эту модель">${s.installing && o.current ? "Скачивается…" : `Скачать (${(o.size / 1e9).toFixed(1)} ГБ)`}</button>` : ''}`
       + `</div>`
       + (o.min_vram && !o.fits ? `<small>⚠ нужно от ${o.min_vram} ГБ видеопамяти: у вас может быть медленно</small>` : '') + `</div>`).join('')
     + ((s.variants || []).some(o => o.current && o.uncensored) ? `<div class="hint" style="margin-top:8px">Эта модель не отказывается писать любые описания. Вы отвечаете за содержание: не используйте её для запрещённого и для людей без их согласия. Сам MiniMax H3 часть запросов всё равно может отклонить.</div>` : '');

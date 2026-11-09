@@ -2650,9 +2650,7 @@ class App:
         wanted = (body.get("dir") or "").strip()
         req_variant = body.get("variant")
         if req_variant and req_variant in ag.LLM_VARIANTS:
-            self.config["llm_variant"] = req_variant
-            self.config.pop("llm_custom", None)
-            self.config.save()
+            self.config.update(llm_variant=req_variant, llm_custom=None)
             self.llm.custom = None
             variant = req_variant
         else:
