@@ -578,31 +578,36 @@ class App:
 
     # ---------- helpers ----------
 
-    def public(self, item):
+    def item_file_exists(self, item):
         p = self.file_path(item)
-        # a video deleted from disk stays in the list until the user removes it, but is marked
-        return {k: v for k, v in item.items() if k != "file"} | {"url": f"/api/file/{item['id']}",
-                                                                 "missing": bool(p) and not p.exists()}
+        return bool(p and p.exists())
+
+    def public(self, item):
+        # a video or image deleted from disk stays in the list until the user removes it, but is marked
+        return {k: v for k, v in item.items() if k != "file"} | {
+            "url": f"/api/file/{item['id']}",
+            "missing": not self.item_file_exists(item),
+        }
 
     def file_path(self, item):
+        if not item or "file" not in item:
+            return None
         if item["file"].get("type") == "local":
             return Path(item["file"]["path"])
-        orig = None
-        if self.output_dir and item["file"].get("type") == "output":
-            orig = self.output_dir / item["file"].get("subfolder", "") / item["file"]["filename"]
-        if orig and orig.exists():
-            return orig
         local = item.get("local")   # the program's own copy: it stays when ComfyUI's output folder is cleaned
         if local and Path(local).exists():
             return Path(local)
         out = self.output_dir or self._detect_output_dir()
-        if out and out.exists():
-            fn = item["file"]["filename"]
-            sf = item["file"].get("subfolder", "")
+        fn = item["file"].get("filename", "")
+        sf = item["file"].get("subfolder", "")
+        if out and fn:
             for cand in [out / sf / fn, out / fn]:
                 if cand.exists():
                     return cand
-        return orig
+            return out / sf / fn if sf else out / fn
+        if local:
+            return Path(local)
+        return None
 
     # ---------- own copies of the results (they must not vanish when ComfyUI's output folder is cleaned) ----------
 
@@ -631,16 +636,24 @@ class App:
 
     async def archive_item(self, item):
         """Copy the finished file of a library item into the program's own results folder."""
-        if not self.keep_copies() or item.get("local") and Path(item["local"]).exists():
+        if not self.keep_copies() or (item.get("local") and Path(item["local"]).exists()):
             return False
-        f = item["file"]
-        if f.get("type") == "local":
+        f = item.get("file")
+        if not f or f.get("type") == "local":
             return False
         try:
             dest_dir = self.results_dir()
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = dest_dir / f"{str(item.get('date', ''))[:10].replace('-', '')}_{item['id']}_{f['filename']}"
-            src = self.output_dir / f.get("subfolder", "") / f["filename"] if self.output_dir and f.get("type") == "output" else None
+            out = self.output_dir or self._detect_output_dir()
+            fn = f.get("filename", "")
+            sf = f.get("subfolder", "")
+            src = None
+            if out and fn:
+                for cand in [out / sf / fn, out / fn]:
+                    if cand.exists():
+                        src = cand
+                        break
             if src and src.exists():
                 await asyncio.to_thread(shutil.copy2, src, dest)
             else:   # output folder unknown (own ComfyUI): take the file from ComfyUI itself
@@ -648,9 +661,9 @@ class App:
                 async with self.session.get(self.comfy + "/view", params=params) as r:
                     if r.status != 200:
                         return False
-                    with open(dest, "wb") as out:
+                    with open(dest, "wb") as out_f:
                         async for chunk in r.content.iter_chunked(1 << 20):
-                            out.write(chunk)
+                            out_f.write(chunk)
             item["local"] = str(dest)
             self.library.save()
             return True
@@ -2746,19 +2759,18 @@ class App:
         if not item:
             raise web.HTTPNotFound()
         recycled = False
-        for path in {p for p in (self.file_path(item), Path(item["local"]) if item.get("local") else None) if p}:
-            if path.exists():   # the original and the program's own copy both go to the Recycle Bin
+        paths_to_delete = {p for p in (self.file_path(item), Path(item["local"]) if item.get("local") else None) if p}
+        for path in paths_to_delete:
+            if path.exists():   # the original and the program's own copy both go to the Recycle Bin / unlinked
                 ok = await asyncio.to_thread(send_to_recycle_bin, path)
                 recycled = recycled or ok
-                if not ok:
-                    return web.json_response({"error": "Не удалось переместить файл в корзину"}, status=500)
         self.library.remove(item["id"])
         return web.json_response({"ok": True, "recycled": recycled})
 
     async def h_results_get(self, _req):
         items = self.library.items
-        lost = sum(1 for x in items if (p := self.file_path(x)) and not p.exists())
-        nocopy = sum(1 for x in items if not (x.get("local") and Path(x["local"]).exists()) and (p := self.file_path(x)) and p.exists())
+        lost = sum(1 for x in items if not self.item_file_exists(x))
+        nocopy = sum(1 for x in items if self.item_file_exists(x) and not (x.get("local") and Path(x["local"]).exists()))
         return web.json_response({"dir": str(self.results_dir()), "keep": self.keep_copies(), "lost": lost, "nocopy": nocopy,
                                   "default": str(self.default_results_dir())})
 
@@ -2788,7 +2800,7 @@ class App:
 
     async def h_results_clean(self, req):
         """Remove the Library records whose files are gone from the disk (nothing on the disk is touched)."""
-        gone = [x["id"] for x in self.library.items if (p := self.file_path(x)) and not p.exists()]
+        gone = [x["id"] for x in self.library.items if not self.item_file_exists(x)]
         for i in gone:
             self.library.remove(i)
         return web.json_response({"removed": len(gone), **json.loads((await self.h_results_get(req)).text)})
@@ -3375,11 +3387,55 @@ def comfy_error_text(res):
 
 
 def send_to_recycle_bin(path):
-    ps = ("Add-Type -AssemblyName Microsoft.VisualBasic; "
-          "[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($env:H3_DEL, 'OnlyErrorDialogs', 'SendToRecycleBin')")
-    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                       env={**os.environ, "H3_DEL": str(path)}, capture_output=True)
-    return r.returncode == 0 and not path.exists()
+    """Move file to Windows Recycle Bin via native Win32 SHFileOperationW, falling back to unlink."""
+    path = Path(path)
+    if not path.exists():
+        return True
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class SHFILEOPSTRUCTW(ctypes.Structure):
+                _fields_ = [
+                    ("hwnd", wintypes.HWND),
+                    ("wFunc", wintypes.UINT),
+                    ("pFrom", wintypes.LPCWSTR),
+                    ("pTo", wintypes.LPCWSTR),
+                    ("fFlags", wintypes.WORD),
+                    ("fAnyOperationsAborted", wintypes.BOOL),
+                    ("hNameMappings", wintypes.LPVOID),
+                    ("lpszProgressTitle", wintypes.LPCWSTR),
+                ]
+
+            FO_DELETE = 3
+            FOF_ALLOWUNDO = 0x0040
+            FOF_NOCONFIRMATION = 0x0010
+            FOF_SILENT = 0x0004
+            FOF_NOERRORUI = 0x0400
+
+            fileop = SHFILEOPSTRUCTW()
+            fileop.hwnd = None
+            fileop.wFunc = FO_DELETE
+            fileop.pFrom = str(path.resolve()) + "\0\0"
+            fileop.pTo = None
+            fileop.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
+            fileop.fAnyOperationsAborted = False
+            fileop.hNameMappings = None
+            fileop.lpszProgressTitle = None
+
+            res = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(fileop))
+            if res == 0 and not path.exists():
+                return True
+        except Exception:
+            pass
+
+    # Direct deletion fallback
+    try:
+        path.unlink(missing_ok=True)
+        return not path.exists()
+    except Exception:
+        return False
 
 
 def build_app(comfy_override=None):

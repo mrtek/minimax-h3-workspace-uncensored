@@ -4270,7 +4270,7 @@ $('.nav[data-view="models"]').addEventListener('click', async () => {
 });
 
 /* ---------- LIBRARY ---------- */
-const MODE_NAME = { montage: 'Монтаж', custom: 'Свой workflow', video: 'Видео', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра', swap: 'Замена персонажа', action: 'Экшн', long: 'Длинное видео', krea: 'Картинка по тексту', qwen: 'Правка картинки', upscale: 'Увеличение', relayvsr: 'Увеличение' };
+const MODE_NAME = { montage: 'Монтаж', custom: 'Свой workflow', video: 'Видео', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра', swap: 'Замена персонажа', action: 'Экшн', long: 'Длинное видео', krea: 'Картинка по тексту', qwen: 'Правка картинки', upscale: 'Увеличение', relayvsr: 'Увеличение', flux: 'Картинка (FLUX)', storyboard: 'Раскадровка', character: 'Персонаж' };
 const LIB = [];
 const IMG_PANELS = [];  // refresh functions of the picture result windows
 let libFilter = 'all', selecting = false, selected = new Set(), openId = null;
@@ -4317,7 +4317,7 @@ function fmtDate(d) {
   const days = Math.floor((new Date(now.toDateString()) - new Date(d.toDateString())) / 864e5);
   return days === 0 ? `сегодня, ${hm}` : days === 1 ? `вчера, ${hm}` : d.toLocaleDateString('ru', { day: 'numeric', month: 'short' }) + `, ${hm}`;
 }
-const fileName = it => `h3_${it.mode}_${it.date.toISOString().slice(0, 16).replace(/[-:T]/g, '')}.${it.ext || 'mp4'}`;
+const fileName = it => `h3_${it.mode}_${it.date.toISOString().slice(0, 16).replace(/[-:T]/g, '')}.${it.ext || (it.kind === 'image' ? 'png' : 'mp4')}`;
 
 /* ---------- общая очередь заданий ---------- */
 const QUEUE = [];
@@ -4397,7 +4397,7 @@ function renderLib() {
           <button data-act="fav" title="Избранное">${ICON.star}</button>
           <button data-act="del" title="Удалить">${ICON.del}</button>
         </div>
-        <span class="li-mode">${MODE_NAME[it.mode]}</span>
+        <span class="li-mode">${MODE_NAME[it.mode] || it.mode || (it.kind === 'image' ? 'Картинка' : 'Видео')}</span>
         ${it.len ? `<span class="li-len">${it.len.toFixed(1).replace('.0', '')} с</span>` : ''}
       </div>
       <div class="li-b"><p>${esc(it.prompt) || '<span style="color:var(--dim)">без промпта</span>'}</p><small>${[it.res, it.aspect, fmtDate(it.date)].filter(Boolean).join(' · ')}</small></div>
@@ -4445,20 +4445,50 @@ async function saveItems(items) {
   toast(items.length === 1 ? `Сохранение ${fileName(items[0])} — здесь откроется окно выбора папки` : `Сохранение ${items.length} видео — здесь откроется окно выбора папки`);
 }
 function askDelete(ids) {
-  $('#cfTitle').textContent = ids.length === 1 ? 'Удалить видео?' : `Удалить ${ids.length} видео?`;
+  const items = ids.map(byId).filter(Boolean);
+  const allImgs = items.length > 0 && items.every(it => it.kind === 'image');
+  const allVids = items.length > 0 && items.every(it => it.kind !== 'image');
+  const count = ids.length;
+
+  if (count === 1) {
+    $('#cfTitle').textContent = allImgs ? 'Удалить изображение?' : 'Удалить видео?';
+  } else {
+    $('#cfTitle').textContent = allImgs ? `Удалить ${count} изображений?` : allVids ? `Удалить ${count} видео?` : `Удалить выбранные файлы (${count})?`;
+  }
   $('#cfText').textContent = 'Файлы переместятся в корзину Windows — их можно будет восстановить.';
   $('#confirm').hidden = false;
   $('#cfOk').onclick = async () => {
+    const toRemove = [];
     if (API) {
       for (const id of [...ids]) {
-        const r = await fetch(`/api/library/${id}`, { method: 'DELETE' });
-        if (!r.ok) { toast((await r.json().catch(() => ({}))).error || 'Не удалось удалить'); ids = ids.filter(x => x !== id); }
+        try {
+          const r = await fetch(`/api/library/${id}`, { method: 'DELETE' });
+          if (r.ok) {
+            toRemove.push(id);
+          } else {
+            const err = await r.json().catch(() => ({}));
+            toast(err.error || 'Не удалось удалить');
+          }
+        } catch {
+          toast('Ошибка связи с сервером при удалении');
+        }
       }
+    } else {
+      toRemove.push(...ids);
     }
-    ids.forEach(id => { const i = LIB.findIndex(x => x.id === id); if (i >= 0) LIB.splice(i, 1); selected.delete(id); });
+    toRemove.forEach(id => {
+      const i = LIB.findIndex(x => x.id === id);
+      if (i >= 0) LIB.splice(i, 1);
+      selected.delete(id);
+    });
     $('#confirm').hidden = true;
-    if (ids.includes(openId)) closeViewer();
-    renderLib(); toast(ids.length === 1 ? 'Видео удалено' : `Удалено: ${ids.length}`);
+    if (toRemove.includes(openId)) closeViewer();
+    renderLib();
+    if (toRemove.length) {
+      toast(allImgs ? (toRemove.length === 1 ? 'Изображение удалено' : `Удалено изображений: ${toRemove.length}`)
+        : allVids ? (toRemove.length === 1 ? 'Видео удалено' : `Удалено видео: ${toRemove.length}`)
+        : `Удалено файлов: ${toRemove.length}`);
+    }
   };
 }
 function setFav(it, fav) {
@@ -4476,7 +4506,7 @@ function openViewer(id) {
   img.onload = () => { if (pic && !it.res && img.naturalWidth) $('#vwKv').insertAdjacentHTML('afterbegin', `<span>Разрешение</span><b>${dimTxt(img.naturalWidth, img.naturalHeight)}</b>`); };
   vid.onloadedmetadata = () => { if (!pic && !it.res && vid.videoWidth) $('#vwKv').insertAdjacentHTML('afterbegin', `<span>Разрешение</span><b>${dimTxt(vid.videoWidth, vid.videoHeight)}</b>`); };
   if (pic) { vid.removeAttribute('src'); img.src = it.url; } else if (it.url) { vid.src = it.url; vid.play().catch(() => {}); } else img.src = it.thumb;
-  $('#vwTitle').textContent = `${MODE_NAME[it.mode]} · ${it.sub}`;
+  $('#vwTitle').textContent = `${MODE_NAME[it.mode] || it.mode || (it.kind === 'image' ? 'Картинка' : 'Видео')}${it.sub ? ' · ' + it.sub : ''}`;
   $('#vwKv').innerHTML = [...(it.res ? [['Разрешение', /^\d+×\d+$/.test(it.res) ? dimTxt(...it.res.split('×')) : it.res]] : []), ...(it.aspect ? [['Формат', it.aspect]] : []), ...(it.q ? [['Качество', it.q]] : []), ...(it.len ? [['Длина', `${it.len.toFixed(1)} с · ${frames(it.len)} кадров`]] : []), ['Создано', fmtDate(it.date)], ...(it.seed != null ? [['Seed', String(it.seed)]] : []), ['Файл', fileName(it)]]
     .map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join('');
   $('#vwPrompt').textContent = it.prompt || 'без промпта';
@@ -4490,6 +4520,7 @@ function openViewer(id) {
 const dimTxt = (w, h) => `${w}×${h} · ${(w * h / 1e6).toFixed(1).replace('.', ',')} МП`;
 function closeViewer() { $('#viewer').hidden = true; openId = null; const v = $('#viewer video'); v.pause(); v.removeAttribute('src'); }
 function goTo(view) {
+  if (view === 'flux') view = 'krea';
   const n = $(`.nav[data-view="${view}"]`);
   if (n) { n.click(); return; }
   $$('.nav').forEach(x => x.classList.remove('active'));   // a page that has no button of its own (a preset)
@@ -4557,6 +4588,13 @@ $('#vwRepeat').onclick = () => {
     const r = RM[it.mode]; Object.assign(r.S, { aspect: it.aspect, q: it.q, dur: Math.round(it.len) }, it.steps ? { steps: it.steps } : {});
     const ta = r.prompt(); if (ta) ta.value = it.prompt; else toast('Нет поля для описания: откройте раздел и добавьте сцену вручную');
     r.upd(); goTo(it.mode);
+  }
+  else if (it.mode === 'flux') {
+    if (IMG.krea) { IMG.krea.fill({ ...it, engine: 'flux' }); goTo('krea'); }
+  }
+  else if (it.kind === 'image') {
+    if (IMG.krea) { IMG.krea.fill(it); goTo('krea'); }
+    else if (IMG.qwen) { IMG.qwen.fill(it); goTo('qwen'); }
   }
   else { Object.assign(L, { aspect: it.aspect, q: it.q, refSize: it.ref_size || L.refSize }); $('#lPrompt').value = it.prompt; lUpd(); goTo('lipsync'); }
   toast('Настройки перенесены — можно генерировать');
@@ -6926,6 +6964,7 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
     } catch {}
   }
   imgSeedWire(root, S); upd();
+  IMG.flux = { fill: it => { if (IMG.krea) IMG.krea.fill({ ...it, engine: 'flux' }); } };
   IMG.qwen = { fill: it => { if (it.engine) S.engine = it.engine; if (it.frames !== undefined) S.frames = !!it.frames; if (String(it.sub || '').startsWith('Раскадровка по кадрам')) S.frames = true; else if (String(it.sub || '').startsWith('Раскадровка')) S.frames = false; if (it.kind === 'story' || String(it.sub || '').startsWith('Раскадровка')) { S.kind = 'story'; $('.qw-prompt', root).value = it.prompt || ''; } else if (it.sub === 'Лист персонажа') S.kind = 'sheet'; else { S.kind = 'edit'; $('.qw-prompt', root).value = it.prompt || ''; } upd(); } };
 })();
 

@@ -94,6 +94,65 @@ def init_job_object():
         pass
 
 
+def kill_all_descendants(parent_pid):
+    """Recursively terminate all child and descendant processes using Win32 Toolhelp snapshot."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        TH32CS_SNAPPROCESS = 0x00000002
+        PROCESS_TERMINATE = 0x0001
+
+        class PROCESSENTRY32W(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", wintypes.DWORD),
+                ("cntUsage", wintypes.DWORD),
+                ("th32ProcessID", wintypes.DWORD),
+                ("th32DefaultHeapID", ctypes.POINTER(wintypes.ULONG)),
+                ("th32ModuleID", wintypes.DWORD),
+                ("cntThreads", wintypes.DWORD),
+                ("th32ParentProcessID", wintypes.DWORD),
+                ("pcPriClassBase", wintypes.LONG),
+                ("dwFlags", wintypes.DWORD),
+                ("szExeFile", wintypes.WCHAR * 260),
+            ]
+
+        hSnapshot = ctypes.windll.kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+        if hSnapshot == -1 or not hSnapshot:
+            return
+        pe = PROCESSENTRY32W()
+        pe.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+        children = {}
+        if ctypes.windll.kernel32.Process32FirstW(hSnapshot, ctypes.byref(pe)):
+            while True:
+                children.setdefault(pe.th32ParentProcessID, []).append(pe.th32ProcessID)
+                if not ctypes.windll.kernel32.Process32NextW(hSnapshot, ctypes.byref(pe)):
+                    break
+        ctypes.windll.kernel32.CloseHandle(hSnapshot)
+
+        descendants = []
+        queue = [parent_pid]
+        while queue:
+            curr = queue.pop(0)
+            for child_pid in children.get(curr, []):
+                descendants.append(child_pid)
+                queue.append(child_pid)
+
+        # Terminate deepest descendants first (leaves before roots)
+        for cpid in reversed(descendants):
+            try:
+                hProc = ctypes.windll.kernel32.OpenProcess(PROCESS_TERMINATE, False, cpid)
+                if hProc:
+                    ctypes.windll.kernel32.TerminateProcess(hProc, 0)
+                    ctypes.windll.kernel32.CloseHandle(hProc)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def cleanup_stale_environment():
     """Kill lingering background processes from previous crashed sessions
     and remove stale webview lock files.
@@ -105,6 +164,21 @@ def cleanup_stale_environment():
         subprocess.run(["taskkill", "/F", "/IM", "llama-server.exe"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                        creationflags=0x08000000, timeout=1)
+    except Exception:
+        pass
+
+    try:
+        ps = '''
+        param($dir)
+        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+            ($_.Name -eq "msedgewebview2.exe") -and ($_.CommandLine -like "*$dir*")
+        } | ForEach-Object {
+            Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+        '''
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps, "-dir", "Minimax"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       creationflags=0x08000000, timeout=2)
     except Exception:
         pass
 
@@ -332,10 +406,15 @@ def do_exit(srv=None, code=0):
 
     threading.Thread(target=_emergency_watchdog, daemon=True, name="exit-watchdog").start()
 
-    # 1. Close Job Object handle: Windows kernel immediately terminates child processes (ComfyUI / LLM)
+    # 1. Kill all descendant processes (WebView2 workers, StorageService, ComfyUI, LLM)
+    if sys.platform == "win32":
+        kill_all_descendants(os.getpid())
+
+    # 2. Terminate and close Job Object handle: Windows kernel immediately terminates child processes
     if sys.platform == "win32" and _JOB_HANDLE:
         try:
             import ctypes
+            ctypes.windll.kernel32.TerminateJobObject(_JOB_HANDLE, 0)
             ctypes.windll.kernel32.CloseHandle(_JOB_HANDLE)
         except Exception:
             pass
