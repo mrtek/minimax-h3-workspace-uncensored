@@ -8094,7 +8094,7 @@ const I18N_MT = {
     'mt.desc_comfy': 'Склейка клипов с помощью нод ComfyUI, поклиповое увеличение разрешения (RelayVSR / SeedVR2) и плёночное зерно.',
     'mt.desc_ffmpeg': 'Быстрый нелинейный монтаж на локальном FFmpeg: видеопереходы, фоновая музыка, форматы 9:16/16:9, цветокоррекция и титры.',
     'mt.clips_head': 'Клипы из Библиотеки',
-    'mt.clips_hint': 'нажмите на клип, чтобы добавить',
+    'mt.clips_hint': 'нажмите на клип, чтобы добавить в монтаж',
     'mt.from_pc': '+ С компьютера',
     'mt.order_head': 'Порядок склейки',
     'mt.order_hint': 'Нажмите на клип в ленте, чтобы посмотреть с этого места (справа). Порядок меняется перетаскиванием или стрелками. Потяните правый край блока, чтобы сделать клип короче (или вернуть длину).',
@@ -8136,7 +8136,7 @@ const I18N_MT = {
     'mt.desc_comfy': 'Join clips with ComfyUI nodes, per-clip upscale (RelayVSR / SeedVR2) and film grain.',
     'mt.desc_ffmpeg': 'Fast non-linear montage with local FFmpeg: transitions, music, 9:16/16:9, color grading and titles.',
     'mt.clips_head': 'Library Clips',
-    'mt.clips_hint': 'click a clip to add it',
+    'mt.clips_hint': 'click a clip to add it to montage',
     'mt.from_pc': '+ From PC',
     'mt.order_head': 'Clip Order',
     'mt.order_hint': 'Click a clip to preview. Drag or use arrows to change order. Pull the right edge to trim.',
@@ -8185,10 +8185,15 @@ function mtT(k, fb) {
     cuts: [],
     drag: null,
     busy: false,
+    upBusy: false,
+    chaining: false,
+    cancel: false,
+    curPrompt: null,
     up: {},
     n: 0,
     px: 26,
     res: false,
+    resFf: null,
     audioFile: null,
     ff: null,
     // Studio options
@@ -8252,8 +8257,27 @@ function mtT(k, fb) {
     <!-- ==================== TAB 1: COMFYUI MONTAGE (ORIGINAL) ==================== -->
     <div id="mtPaneComfy" ${MT.subTab !== 'comfy' ? 'style="display:none"' : ''}>
       <div class="grid"><div class="col">
-        <div class="card"><div class="card-h"><h3><span class="n">1</span>${mtT('mt.clips_head')}</h3><span class="hint">${mtT('mt.clips_hint')}</span><button type="button" class="btn mini mt-pc" title="Добавить видео со своего компьютера">${mtT('mt.from_pc')}</button><input type="file" class="mt-file" accept="video/*" multiple hidden></div><div class="mt-lib"></div><div class="hint mt-hid" style="margin-top:8px"></div></div>
-        <div class="card"><div class="card-h"><h3><span class="n">2</span>${mtT('mt.order_head')}</h3><span class="counter mt-total"></span><span class="mt-zoom"><button type="button" class="btn mini" data-z="-1" title="Мельче">−</button><button type="button" class="btn mini" data-z="0" title="Уместить всю ленту по ширине">По ширине</button><button type="button" class="btn mini" data-z="1" title="Крупнее">+</button></span></div>
+        <div class="card">
+          <div class="card-h">
+            <h3><span class="n">1</span>${mtT('mt.clips_head')}</h3>
+            <span class="hint">${mtT('mt.clips_hint')}</span>
+            <button type="button" class="btn mini mt-pc" title="Добавить видео со своего компьютера">${mtT('mt.from_pc')}</button>
+            <input type="file" class="mt-file" accept="video/*" multiple hidden>
+          </div>
+          <div class="mt-lib"></div>
+          <div class="hint mt-hid" style="margin-top:8px"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-h">
+            <h3><span class="n">2</span>${mtT('mt.order_head')}</h3>
+            <span class="counter mt-total"></span>
+            <span class="mt-zoom">
+              <button type="button" class="btn mini" data-z="-1" title="Мельче">−</button>
+              <button type="button" class="btn mini" data-z="0" title="Уместить всю ленту по ширине">По ширине</button>
+              <button type="button" class="btn mini" data-z="1" title="Крупнее">+</button>
+            </span>
+          </div>
           <div class="mt-strip"></div>
           <div class="mt-vh" title="Потяните вниз или вверх, чтобы клипы стали крупнее или мельче. Двойной щелчок: как было"><i></i></div>
           <div class="hint mt-hint" style="margin-top:8px">${mtT('mt.order_hint')}</div>
@@ -8323,20 +8347,37 @@ function mtT(k, fb) {
       </div>
 
       <div class="grid"><div class="col">
-        <!-- Studio Card 1: Clip Strip -->
+        <!-- Studio Card 1: Library Clips -->
         <div class="card">
           <div class="card-h">
-            <h3><span class="n">1</span>${mtT('mt.order_head')}</h3>
-            <span class="counter mt-total-ff"></span>
-            <span class="mt-zoom"><button type="button" class="btn mini" data-z="-1">−</button><button type="button" class="btn mini" data-z="0">По ширине</button><button type="button" class="btn mini" data-z="1">+</button></span>
+            <h3><span class="n">1</span>${mtT('mt.clips_head')}</h3>
+            <span class="hint">${mtT('mt.clips_hint')}</span>
+            <button type="button" class="btn mini mt-pc" title="Добавить видео со своего компьютера">${mtT('mt.from_pc')}</button>
+            <input type="file" class="mt-file" accept="video/*" multiple hidden>
           </div>
-          <div class="mt-strip mt-strip-ff"></div>
-          <div class="hint" style="margin-top:8px">Синхронизировано с Библиотекой. Перетаскивайте клипы, обрезайте край или меняйте порядок.</div>
+          <div class="mt-lib"></div>
+          <div class="hint mt-hid" style="margin-top:8px"></div>
         </div>
 
-        <!-- Studio Card 2: Transitions & Speed -->
+        <!-- Studio Card 2: Sequence Strip -->
         <div class="card">
-          <div class="card-h"><h3><span class="n">2</span>${mtT('mt.trans_head')}</h3><span class="badge" style="background:#1e293b;color:#38bdf8">xfade</span></div>
+          <div class="card-h">
+            <h3><span class="n">2</span>${mtT('mt.order_head')}</h3>
+            <span class="counter mt-total"></span>
+            <span class="mt-zoom">
+              <button type="button" class="btn mini" data-z="-1">−</button>
+              <button type="button" class="btn mini" data-z="0">По ширине</button>
+              <button type="button" class="btn mini" data-z="1">+</button>
+            </span>
+          </div>
+          <div class="mt-strip"></div>
+          <div class="mt-vh" title="Потяните вниз или вверх, чтобы клипы стали крупнее или мельче. Двойной щелчок: как было"><i></i></div>
+          <div class="hint mt-hint" style="margin-top:8px">${mtT('mt.order_hint')}</div>
+        </div>
+
+        <!-- Studio Card 3: Transitions & Speed -->
+        <div class="card">
+          <div class="card-h"><h3><span class="n">3</span>${mtT('mt.trans_head')}</h3><span class="badge" style="background:#1e293b;color:#38bdf8">xfade</span></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px">
             <div>
               <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.trans_label')}</label>
@@ -8379,9 +8420,9 @@ function mtT(k, fb) {
           </div>
         </div>
 
-        <!-- Studio Card 3: Format & Framing -->
+        <!-- Studio Card 4: Format & Framing -->
         <div class="card">
-          <div class="card-h"><h3><span class="n">3</span>${mtT('mt.format_head')}</h3><span class="hint">TikTok / Shorts / Кино</span></div>
+          <div class="card-h"><h3><span class="n">4</span>${mtT('mt.format_head')}</h3><span class="hint">TikTok / Shorts / Кино</span></div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px">
             <div>
               <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.aspect_label')}</label>
@@ -8404,10 +8445,10 @@ function mtT(k, fb) {
           </div>
         </div>
 
-        <!-- Studio Card 4: Color & Filters -->
+        <!-- Studio Card 5: Color & Filters -->
         <div class="card">
           <div class="card-h">
-            <h3><span class="n">4</span>${mtT('mt.color_head')}</h3>
+            <h3><span class="n">5</span>${mtT('mt.color_head')}</h3>
             <button type="button" class="btn mini" id="stResetColor" style="padding:2px 8px;font-size:11px">${mtT('mt.reset_color')}</button>
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;align-items:end">
@@ -8446,9 +8487,9 @@ function mtT(k, fb) {
           </div>
         </div>
 
-        <!-- Studio Card 5: Audio & Music -->
+        <!-- Studio Card 6: Audio & Music -->
         <div class="card">
-          <div class="card-h"><h3><span class="n">5</span>${mtT('mt.audio_head')}</h3><span class="hint">саундтрек и сведение</span></div>
+          <div class="card-h"><h3><span class="n">6</span>${mtT('mt.audio_head')}</h3><span class="hint">саундтрек и сведение</span></div>
           <div style="display:flex;flex-direction:column;gap:10px">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <input type="file" id="stAudioInput" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg" style="display:none">
@@ -8486,9 +8527,9 @@ function mtT(k, fb) {
           </div>
         </div>
 
-        <!-- Studio Card 6: Titles & Text -->
+        <!-- Studio Card 7: Titles & Text -->
         <div class="card">
-          <div class="card-h"><h3><span class="n">6</span>${mtT('mt.title_head')}</h3><span class="hint">водяной знак или заголовок</span></div>
+          <div class="card-h"><h3><span class="n">7</span>${mtT('mt.title_head')}</h3><span class="hint">водяной знак или заголовок</span></div>
           <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;align-items:end">
             <div>
               <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.title_text')}</label>
@@ -8525,7 +8566,22 @@ function mtT(k, fb) {
 
       <!-- Studio Right Column: Preview & Export -->
       <div class="preview">
-        <div class="screen"><div class="frame" style="aspect-ratio:16/9;width:100%"><div class="res mt-empty-ff"><b>Студия FFmpeg</b>добавьте клипы и настройте монтаж: готовый ролик появится здесь</div><video class="result mt-res-ff" controls loop playsinline hidden></video></div></div>
+        <div class="screen">
+          <div class="frame" style="aspect-ratio:16/9;width:100%">
+            <div class="res mt-empty-ff"><b>Студия FFmpeg</b>добавьте клипы: здесь можно посмотреть, как они идут подряд, а потом появится готовый ролик</div>
+            <video class="result mt-pv-ff" playsinline hidden></video>
+            <video class="result mt-res-ff" controls loop playsinline hidden></video>
+          </div>
+        </div>
+        <div class="mt-bar-ff mt-bar" hidden>
+          <button type="button" class="btn mt-play" title="Играть / пауза (пробел)">▶</button>
+          <input type="range" class="mt-seek" min="0" max="0" value="0" title="Перемотка">
+          <span class="mt-time">0:00 / 0:00</span>
+        </div>
+        <div class="mt-tabs-ff mt-tabs" hidden>
+          <button type="button" class="btn mini on" data-pv="seq">Предпросмотр</button>
+          <button type="button" class="btn mini" data-pv="res">Готовый ролик</button>
+        </div>
 
         <div id="mtStudioNvencPill" style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);margin:6px 0">
           <span style="width:8px;height:8px;border-radius:50%;background:#4ade80"></span>
@@ -8552,6 +8608,7 @@ function mtT(k, fb) {
   $$('.mt-subtab-btn', root).forEach(btn => {
     btn.onclick = () => {
       const tab = btn.dataset.mttab;
+      setPlaying(false);
       MT.subTab = tab;
       try { localStorage.setItem('h3-mt-subtab', tab); } catch {}
       $$('.mt-subtab-btn', root).forEach(b => b.classList.toggle('pri', b.dataset.mttab === tab));
@@ -8573,47 +8630,48 @@ function mtT(k, fb) {
     MT.ids = MT.ids.filter((_, i) => keep[i]);
     const hid = hidden(), all = LIB.filter(it => it.kind !== 'image' && !it.missing && it.url), vids = all.filter(it => !hid.includes(it.id)), nh = all.length - vids.length;
 
-    // 1. Library cards
-    const libEl = $('.mt-lib', root);
-    if (libEl) {
-      libEl.innerHTML = vids.length ? vids.map(it => `<button type="button" class="mt-card" data-id="${it.id}" title="${esc(it.prompt || '')}"><video src="${it.url}#t=0.5" preload="metadata" muted playsinline></video><span class="mt-plus">+</span><span class="mt-x" data-hide="${it.id}" role="button" title="Убрать из этого списка (в Библиотеке клип останется)">✕</span><span class="mt-len">${lenTxt(it)}</span><small>${esc(it.prompt || MODE_NAME[it.mode] || '')}</small></button>`).join('')
-        : '<div class="hint">В Библиотеке пока нет видео. Сначала сгенерируйте клипы.</div>';
-    }
-    const hidEl = $('.mt-hid', root);
-    if (hidEl) {
-      hidEl.innerHTML = nh ? `Убрано из списка: ${nh} · <button type="button" class="a-change" data-showall>Вернуть все</button>` : '';
-    }
+    // 1. Library cards in both tabs
+    const libCardsHtml = vids.length ? vids.map(it => `<button type="button" class="mt-card" data-id="${it.id}" title="${esc(it.prompt || '')}"><video src="${it.url}#t=0.5" preload="metadata" muted playsinline></video><span class="mt-plus">+</span><span class="mt-x" data-hide="${it.id}" role="button" title="Убрать из этого списка (в Библиотеке клип останется)">✕</span><span class="mt-len">${lenTxt(it)}</span><small>${esc(it.prompt || MODE_NAME[it.mode] || '')}</small></button>`).join('')
+      : '<div class="hint">В Библиотеке пока нет видео. Сначала сгенерируйте клипы.</div>';
 
-    // 2. Strips
-    const stripComfy = $('.mt-strip', $('#mtPaneComfy'));
-    const stripFf = $('.mt-strip-ff', root);
+    $$('.mt-lib', root).forEach(el => { el.innerHTML = libCardsHtml; });
+
+    const hidHtml = nh ? `Убрано из списка: ${nh} · <button type="button" class="a-change" data-showall>Вернуть все</button>` : '';
+    $$('.mt-hid', root).forEach(el => { el.innerHTML = hidHtml; });
+
+    // 2. Strips in both tabs
     const stripHtml = MT.ids.length ? MT.ids.map((id, i) => {
       const it = get(id), d = durOf(i);
       return `<div class="mt-item" draggable="true" data-i="${i}" style="width:${wOf(d)}px"><video src="${it.url}#t=0.5" preload="metadata" muted playsinline></video><span class="mt-n">${i + 1}</span>${window.mtPipeDone && window.mtPipeDone(id) ? '<span class="mt-ok" title="Клип обработан">✓</span>' : ''}<span class="mt-len">${d.toFixed(1).replace('.0', '')} с${MT.cuts[i] != null ? ' ✂' : ''}</span><div class="mt-b"><button type="button" data-mv="-1" title="Влево">◀</button><button type="button" data-rm title="Убрать">✕</button><button type="button" data-mv="1" title="Вправо">▶</button></div><i class="mt-rh" title="Потяните, чтобы сделать клип короче или длиннее"></i></div>`;
     }).join('') : '<div class="hint">Пока пусто: нажмите на клипы сверху или добавьте видео.</div>';
 
-    if (stripComfy) {
-      stripComfy.innerHTML = stripHtml;
-      if (MT.ids.length) stripComfy.insertAdjacentHTML('beforeend', '<i class="mt-ph"></i>');
-    }
-    if (stripFf) {
-      stripFf.innerHTML = stripHtml;
-    }
+    $$('.mt-strip', root).forEach(el => {
+      el.innerHTML = stripHtml;
+      if (MT.ids.length) el.insertAdjacentHTML('beforeend', '<i class="mt-ph"></i>');
+    });
 
     const total = MT.ids.reduce((a, id, i) => a + durOf(i), 0);
     const totTxt = MT.ids.length ? `${MT.ids.length} клипов · ≈ ${Math.round(total)} с` : '';
-    const totEl = $('.mt-total', root);
-    if (totEl) totEl.textContent = totTxt;
-    const totFf = $('.mt-total-ff', root);
-    if (totFf) totFf.textContent = totTxt;
+    $$('.mt-total', root).forEach(el => { el.textContent = totTxt; });
 
     syncPlayer();
     if (window.mtSaveState) { window.mtSaveState(); window.mtPipePaint(); }
   }
 
-  /* Preview Player logic (for Comfy pane) */
+  /* Active Pane Helpers */
+  const getPane = () => MT.subTab === 'ffmpeg' ? $('#mtPaneFfmpeg') : $('#mtPaneComfy');
+  const getPv = () => MT.subTab === 'ffmpeg' ? $('.mt-pv-ff', root) : $('.mt-pv', root);
+  const getBar = () => MT.subTab === 'ffmpeg' ? $('.mt-bar-ff', root) : $('.mt-bar', root);
+  const getSeek = () => MT.subTab === 'ffmpeg' ? $('.mt-seek', getBar()) : $('.mt-seek', root);
+  const getPlayBtn = () => MT.subTab === 'ffmpeg' ? $('.mt-play', getBar()) : $('.mt-play', root);
+  const getTimeEl = () => MT.subTab === 'ffmpeg' ? $('.mt-time', getBar()) : $('.mt-time', root);
+  const getResEl = () => MT.subTab === 'ffmpeg' ? $('.mt-res-ff', root) : $('.mt-res', root);
+  const getEmptyEl = () => MT.subTab === 'ffmpeg' ? $('.mt-empty-ff', root) : $('.mt-empty', root);
+  const getTabsEl = () => MT.subTab === 'ffmpeg' ? $('.mt-tabs-ff', root) : $('.mt-tabs', root);
+  const getStrip = () => $('.mt-strip', getPane());
+
+  /* Preview Player logic (works for both Comfy and FFmpeg Studio) */
   const P = { g: 0, i: 0, playing: false, raf: 0, drag: false, mode: 'seq', loading: false, tok: 0 };
-  const pv = $('.mt-pv', root), bar = $('.mt-bar', root), seek = $('.mt-seek', root), playBtn = $('.mt-play', root), timeEl = $('.mt-time', root);
   const mmss = s => { s = Math.max(0, s); return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); };
   const totalLen = () => MT.ids.reduce((a, _, i) => a + durOf(i), 0);
   const startOf = i => { let a = 0; for (let j = 0; j < i; j++) a += durOf(j); return a; };
@@ -8629,6 +8687,7 @@ function mtT(k, fb) {
   }
   function loadAt(i, off, play) {
     const id = MT.ids[i], it = get(id); if (!it) return;
+    const pv = getPv();
     const tok = ++P.tok, go = () => { if (tok !== P.tok) return; P.loading = false; try { if (pv) pv.currentTime = off; } catch {} if (play && pv) pv.play().catch(() => {}); };
     if (pv && pv.dataset.id !== id) { P.loading = true; pv.dataset.id = id; pv.src = it.url; pv.addEventListener('loadedmetadata', go, { once: true }); pv.load(); } else go();
   }
@@ -8637,10 +8696,11 @@ function mtT(k, fb) {
     g = Math.min(Math.max(0, g), totalLen()); const L = locate(g); P.g = g; P.i = L.i; loadAt(L.i, L.off, play); updateUI();
   }
   function updateUI() {
-    const tot = totalLen();
+    const tot = totalLen(), seek = getSeek(), timeEl = getTimeEl(), strip = getStrip();
     if (seek && !P.drag) seek.value = Math.round(P.g * 10);
     if (timeEl) timeEl.textContent = mmss(P.g) + ' / ' + mmss(tot);
-    const strip = $('.mt-strip', $('#mtPaneComfy')), ph = $('.mt-ph', strip), items = $$('.mt-item', strip);
+    if (!strip) return;
+    const ph = $('.mt-ph', strip), items = $$('.mt-item', strip);
     if (!ph || !items.length) return;
     items.forEach((x, k) => x.classList.toggle('cur', k === P.i));
     const el = items[P.i]; if (!el) return;
@@ -8648,8 +8708,16 @@ function mtT(k, fb) {
     ph.style.left = x + 'px';
     if (P.playing && (x < strip.scrollLeft + 20 || x > strip.scrollLeft + strip.clientWidth - 20)) strip.scrollLeft = Math.max(0, x - 60);
   }
-  function setPlaying(on) { P.playing = on; if (playBtn) playBtn.textContent = on ? '⏸' : '▶'; clearInterval(P.raf); if (on) P.raf = setInterval(tick, 40); else if (pv) pv.pause(); }
+  function setPlaying(on) {
+    P.playing = on;
+    const playBtn = getPlayBtn(), pv = getPv();
+    if (playBtn) playBtn.textContent = on ? '⏸' : '▶';
+    clearInterval(P.raf);
+    if (on) P.raf = setInterval(tick, 40);
+    else if (pv) pv.pause();
+  }
   function tick() {
+    const pv = getPv();
     if (!P.playing || !pv) return;
     if (!P.loading) {
       const d = durOf(P.i), t = pv.currentTime;
@@ -8666,29 +8734,30 @@ function mtT(k, fb) {
     seekTo(P.g >= totalLen() - 0.05 ? 0 : P.g, true); setPlaying(true);
   }
   function showMode(m) {
-    P.mode = m; const n = MT.ids.length, seq = m === 'seq' && n > 0, res = m === 'res' && MT.res;
+    P.mode = m; const n = MT.ids.length;
+    const hasRes = MT.subTab === 'ffmpeg' ? MT.resFf : MT.res;
+    const seq = m === 'seq' && n > 0, res = m === 'res' && !!hasRes;
     if (!seq) setPlaying(false);
+    const pv = getPv(), bar = getBar(), resEl = getResEl(), emptyEl = getEmptyEl(), tabs = getTabsEl();
     if (pv) pv.hidden = !seq;
     if (bar) bar.hidden = !seq;
-    const resEl = $('.mt-res', root);
     if (resEl) resEl.hidden = !res;
-    const emptyEl = $('.mt-empty', root);
     if (emptyEl) emptyEl.hidden = seq || res;
-    const tabs = $('.mt-tabs', root);
     if (tabs) {
-      tabs.hidden = !MT.res;
+      tabs.hidden = !hasRes;
       $$('[data-pv]', tabs).forEach(b => b.classList.toggle('on', b.dataset.pv === m));
     }
     if (m === 'seq' && resEl && !resEl.paused) resEl.pause();
   }
   function syncPlayer() {
-    const n = MT.ids.length, tot = totalLen();
+    const n = MT.ids.length, tot = totalLen(), seek = getSeek(), pv = getPv();
     if (seek) seek.max = Math.round(tot * 10);
+    const hasRes = MT.subTab === 'ffmpeg' ? MT.resFf : MT.res;
     if (!n) {
       setPlaying(false);
       if (pv) { pv.removeAttribute('src'); delete pv.dataset.id; }
       P.g = 0; P.i = 0;
-      if (P.mode === 'seq') P.mode = MT.res ? 'res' : 'seq';
+      if (P.mode === 'seq') P.mode = hasRes ? 'res' : 'seq';
     } else {
       setPlaying(false);
       seekTo(Math.min(P.g, tot), false);
@@ -8697,14 +8766,14 @@ function mtT(k, fb) {
     updateUI();
   }
 
-  if (playBtn) playBtn.onclick = togglePlay;
-  if (seek) {
-    seek.oninput = () => { P.drag = true; seekTo(seek.value / 10, P.playing); };
-    seek.onchange = () => { P.drag = false; };
-  }
+  $$('.mt-play', root).forEach(b => { b.onclick = togglePlay; });
+  $$('.mt-seek', root).forEach(s => {
+    s.oninput = () => { P.drag = true; seekTo(s.value / 10, P.playing); };
+    s.onchange = () => { P.drag = false; };
+  });
 
   function fitPx() {
-    const strip = $('.mt-strip', root);
+    const strip = getStrip();
     const W = (strip ? strip.clientWidth : 800) - 8, n = MT.ids.length; if (!n) return 26;
     for (let px = 90; px > 8; px--) {
       const w = MT.ids.reduce((a, _, i) => a + Math.max(Math.round(px * 2.85), Math.round(durOf(i) * px)), 0) + 8 * (n - 1);
@@ -8721,28 +8790,33 @@ function mtT(k, fb) {
     if (st) st.textContent = 'Сцены из Видеостудии уже стоят по порядку. Нажмите «Склеить» в нужной вкладке.';
   };
 
-  const pcBtn = $('.mt-pc', root);
-  if (pcBtn) pcBtn.onclick = () => $('.mt-file', root)?.click();
-  const fileIn = $('.mt-file', root);
-  if (fileIn) fileIn.onchange = async e => {
-    const files = [...e.target.files]; e.target.value = '';
-    for (const f of files) {
-      const url = URL.createObjectURL(f);
-      const meta = await new Promise(res => {
-        const v = document.createElement('video');
-        v.preload = 'metadata'; v.muted = true;
-        v.onloadedmetadata = () => res({ len: v.duration || 0, res: v.videoWidth ? `${v.videoWidth}×${v.videoHeight}` : '' });
-        v.onerror = () => res(null);
-        v.src = url;
-      });
-      if (!meta) { toast('Не удалось открыть файл «' + f.name + '». Нужно видео (mp4, mov, webm).'); URL.revokeObjectURL(url); continue; }
-      const k = 'k' + (++MT.n);
-      MT.up[k] = { id: 'up:' + k, file: f, url, len: meta.len, res: meta.res, prompt: f.name };
-      MT.ids.push('up:' + k);
-      MT.cuts.push(null);
-    }
-    render();
-  };
+  $$('.mt-pc', root).forEach(b => {
+    b.onclick = () => {
+      const inEl = b.closest('.card-h')?.querySelector('.mt-file') || $('.mt-file', root);
+      if (inEl) inEl.click();
+    };
+  });
+  $$('.mt-file', root).forEach(fileIn => {
+    fileIn.onchange = async e => {
+      const files = [...e.target.files]; e.target.value = '';
+      for (const f of files) {
+        const url = URL.createObjectURL(f);
+        const meta = await new Promise(res => {
+          const v = document.createElement('video');
+          v.preload = 'metadata'; v.muted = true;
+          v.onloadedmetadata = () => res({ len: v.duration || 0, res: v.videoWidth ? `${v.videoWidth}×${v.videoHeight}` : '' });
+          v.onerror = () => res(null);
+          v.src = url;
+        });
+        if (!meta) { toast('Не удалось открыть файл «' + f.name + '». Нужно видео (mp4, mov, webm).'); URL.revokeObjectURL(url); continue; }
+        const k = 'k' + (++MT.n);
+        MT.up[k] = { id: 'up:' + k, file: f, url, len: meta.len, res: meta.res, prompt: f.name };
+        MT.ids.push('up:' + k);
+        MT.cuts.push(null);
+      }
+      render();
+    };
+  });
 
   const move = (i, j) => {
     if (j < 0 || j >= MT.ids.length) return;
@@ -8862,18 +8936,17 @@ function mtT(k, fb) {
     MT.audioFile = file;
     const mb = (file.size / (1024 * 1024)).toFixed(1);
     $('#stAudioName', root).textContent = `${file.name} (${mb} МБ)`;
-    $('#stAudioOptsBox', root).style.display = 'flex';
     $('#stAudioClearBtn', root).style.display = 'inline-block';
+    $('#stAudioOptsBox', root).style.display = 'flex';
   };
-  const stClearBtn = $('#stAudioClearBtn', root);
-  if (stClearBtn) stClearBtn.onclick = () => {
+  const stAudioClrBtn = $('#stAudioClearBtn', root);
+  if (stAudioClrBtn) stAudioClrBtn.onclick = () => {
     MT.audioFile = null;
     if (stAudioIn) stAudioIn.value = '';
     $('#stAudioName', root).textContent = mtT('mt.audio_no');
+    $('#stAudioClearBtn', root).style.display = 'none';
     $('#stAudioOptsBox', root).style.display = 'none';
-    stClearBtn.style.display = 'none';
   };
-
   const stMusicVol = $('#stMusicVol', root);
   if (stMusicVol) stMusicVol.oninput = e => { $('#stMusicVolVal', root).textContent = e.target.value + '%'; };
   const stVideoVol = $('#stVideoVol', root);
@@ -8948,204 +9021,116 @@ function mtT(k, fb) {
     if (ev.status === 'downloading') {
       $('#mtFfProgLabel', root).textContent = 'Скачивание FFmpeg...';
       const curMb = (ev.bytes / (1024 * 1024)).toFixed(1);
-      const totMb = (ev.total / (1024 * 1024)).toFixed(1);
-      $('#mtFfProgStats', root).textContent = `${curMb} МБ / ${totMb} МБ (${ev.pct}%)`;
-      $('#mtFfProgBar', root).style.width = ev.pct + '%';
-      $('#mtFfProgSpeed', root).textContent = (ev.speed_mb || 0) + ' МБ/с';
+      const totMb = ev.total > 0 ? (ev.total / (1024 * 1024)).toFixed(1) : '?';
+      const pct = ev.percent != null ? Math.round(ev.percent) : 0;
+      $('#mtFfProgBar', root).style.width = pct + '%';
+      $('#mtFfProgStats', root).textContent = `${curMb} / ${totMb} МБ (${pct}%)`;
+      const spdMb = ((ev.speed || 0) / (1024 * 1024)).toFixed(2);
+      $('#mtFfProgSpeed', root).textContent = `${spdMb} МБ/с`;
     } else if (ev.status === 'extracting') {
-      $('#mtFfProgLabel', root).textContent = 'Распаковка архива и установка...';
-      $('#mtFfProgStats', root).textContent = 'Архив скачан';
+      $('#mtFfProgLabel', root).textContent = 'Распаковка архива...';
       $('#mtFfProgBar', root).style.width = '100%';
-      $('#mtFfProgSpeed', root).textContent = '';
-    } else if (ev.status === 'done') {
-      box.style.display = 'none';
-      toast('✓ Портативный FFmpeg успешно установлен!');
-      refreshFfStatus();
-    } else if (ev.status === 'cancelled') {
-      box.style.display = 'none';
-      toast('Загрузка FFmpeg отменена');
-      refreshFfStatus();
-    } else if (ev.status === 'error') {
-      box.style.display = 'none';
-      toast('Ошибка: ' + ev.error);
-      refreshFfStatus();
+      $('#mtFfProgStats', root).textContent = 'Распаковка файлов...';
     }
   }
 
-  window.onFfmpegDownload = ev => updateFfProgress(ev);
-
-  const dlBtn = $('#mtFfDownloadBtn', root);
-  if (dlBtn) dlBtn.onclick = async () => {
-    $('#mtFfProgressBox', root).style.display = 'block';
-    $('#mtFfProgLabel', root).textContent = 'Запуск загрузки...';
-    $('#mtFfProgBar', root).style.width = '5%';
+  $('#mtFfOpenFolderBtn', root)?.addEventListener('click', async () => {
+    try { await fetch('/api/ffmpeg/open-folder', { method: 'POST' }); } catch (e) { toast('Не удалось открыть папку: ' + e.message); }
+  });
+  $('#mtFfQuickFolder', root)?.addEventListener('click', async () => {
+    try { await fetch('/api/ffmpeg/open-folder', { method: 'POST' }); } catch (e) { toast('Не удалось открыть папку: ' + e.message); }
+  });
+  $('#mtFfSetFolderBtn', root)?.addEventListener('click', async () => {
     try {
-      const r = await fetch('/api/ffmpeg/download', { method: 'POST' });
-      const j = await r.json();
-      if (!j.ok) throw new Error(j.error || 'Ошибка старта загрузки');
-    } catch (e) {
-      toast('Ошибка: ' + e.message);
-      $('#mtFfProgressBox', root).style.display = 'none';
-    }
-  };
-
-  const cancelFfBtn = $('#mtFfCancelBtn', root);
-  if (cancelFfBtn) cancelFfBtn.onclick = async () => {
-    try { await fetch('/api/ffmpeg/cancel', { method: 'POST' }); } catch {}
-  };
-
-  const checkUpdBtn = $('#mtFfCheckUpdBtn', root);
-  if (checkUpdBtn) checkUpdBtn.onclick = async () => {
-    toast('Проверяем обновления FFmpeg...');
-    try {
-      const r = await fetch('/api/ffmpeg/check-update', { method: 'POST' });
-      const j = await r.json();
-      if (j.has_update) {
-        confirmBox('Доступно обновление FFmpeg', `Найдена новая версия FFmpeg (${j.latest_version}). Текущая: ${j.current_version}. Обновить сейчас?`, 'Обновить', () => {
-          $('#mtFfDownloadBtn', root)?.click();
-        });
-      } else {
-        toast(`У вас установлена актуальная версия FFmpeg (${j.current_version || ''})`);
-      }
-    } catch (e) {
-      toast('Не удалось проверить обновления: ' + e.message);
-    }
-  };
-
-  const openFolderBtn = $('#mtFfOpenFolderBtn', root);
-  if (openFolderBtn) openFolderBtn.onclick = async () => {
-    try { await fetch('/api/ffmpeg/open-folder', { method: 'POST' }); } catch (e) { toast('Ошибка: ' + e.message); }
-  };
-  const quickFolderBtn = $('#mtFfQuickFolder', root);
-  if (quickFolderBtn) quickFolderBtn.onclick = openFolderBtn.onclick;
-
-  const setFolderBtn = $('#mtFfSetFolderBtn', root);
-  if (setFolderBtn) setFolderBtn.onclick = async () => {
-    const cur = MT.ff?.dir || '';
-    const folder = prompt('Укажите папку для портативного FFmpeg:', cur);
-    if (folder && folder.trim() && folder.trim() !== cur) {
-      try {
-        const r = await fetch('/api/ffmpeg/set-folder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder: folder.trim() })
-        });
-        toast('Папка FFmpeg обновлена');
-        refreshFfStatus();
-      } catch (e) { toast('Ошибка: ' + e.message); }
-    }
-  };
-
-  const resetFolderBtn = $('#mtFfResetFolderBtn', root);
-  if (resetFolderBtn) resetFolderBtn.onclick = async () => {
-    try {
-      await fetch('/api/ffmpeg/set-folder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true })
-      });
-      toast('Сброшено на папку по умолчанию');
-      refreshFfStatus();
+      const res = await fetch('/api/ffmpeg/choose-folder', { method: 'POST' });
+      const d = await res.json();
+      if (d.ok) { toast('Папка FFmpeg обновлена: ' + d.folder); refreshFfStatus(); }
+      else if (d.error && d.error !== 'cancelled') toast('Ошибка выбора папки: ' + d.error);
     } catch (e) { toast('Ошибка: ' + e.message); }
-  };
-
-  /* ---------- COMFYUI MONTAGE EXECUTION ---------- */
-  async function joinComfy(ids, durs) {
-    const st = $('.mt-status', root);
-    if (MT.busy && !MT.chaining) return;
-    if (ids.length < 2) { if (st) st.textContent = 'Добавьте хотя бы два клипа'; return; }
-    const key = orderKey();
-    MT.busy = true; MT.joining = true;
-    const btn = $('#mtGoComfy', root); if (btn) btn.disabled = true;
-    if (st) st.textContent = 'Отправляем клипы в ComfyUI…';
-    pipePaint();
-
-    const cleanup = () => {
-      MT.busy = false; MT.joining = false; MT.chaining = false;
-      if (btn) btn.disabled = false;
-      pipePaint();
-    };
-    const fail = msg => { cleanup(); if (st) st.textContent = msg; };
-
+  });
+  $('#mtFfResetFolderBtn', root)?.addEventListener('click', async () => {
     try {
-      const fd = new FormData();
-      fd.append('ids', JSON.stringify(ids));
-      fd.append('durs', JSON.stringify(durs));
-      fd.append('force_comfy', '1');
-      ids.filter(id => id.startsWith('up:')).forEach(id => {
-        const u = get(id), k = id.slice(3);
-        fd.append('res_' + k, u.res || '');
-        fd.append('len_' + k, String(u.len || 0));
-        fd.append('file_' + k, u.file, u.file.name);
-      });
-
-      const r = await fetch('/api/montage', { method: 'POST', body: fd });
-      const txt = await r.text();
-      let res;
-      try { res = JSON.parse(txt); } catch { res = { error: txt }; }
-      if (!r.ok) throw new Error(res.error || r.statusText);
-
-      qAdd(res.prompt_id, 'montage', `ComfyUI: ${ids.length} клипов`);
-      if (st) st.textContent = 'Склеиваем в ComfyUI…';
-
-      onPrompt(res.prompt_id, ev => {
-        if (ev.prompt_id !== res.prompt_id) return;
-        if (ev.type === 'done') {
-          offPrompt(res.prompt_id);
-          cleanup();
-          PIPE.joined = { id: ev.item.id, key };
-          pipeSave();
-          showDone(byId(ev.item.id) || normItem(ev.item));
-        } else if (ev.type === 'error') {
-          offPrompt(res.prompt_id);
-          fail('Склейка ComfyUI не удалась: ' + ev.message);
-        } else if (ev.type === 'interrupted') {
-          offPrompt(res.prompt_id);
-          fail('Склейка остановлена');
+      const res = await fetch('/api/ffmpeg/reset-folder', { method: 'POST' });
+      const d = await res.json();
+      if (d.ok) { toast('Папка сброшена на стандартную: ' + d.folder); refreshFfStatus(); }
+    } catch (e) { toast('Ошибка сброса: ' + e.message); }
+  });
+  $('#mtFfCheckUpdBtn', root)?.addEventListener('click', async () => {
+    toast('Проверка обновлений FFmpeg...');
+    try {
+      const res = await fetch('/api/ffmpeg/check-update');
+      const d = await res.json();
+      if (d.has_update) {
+        if (confirm(`Найдена новая версия FFmpeg (${d.latest_version}). Текущая: ${d.current_version || 'нет'}. Обновить сейчас?`)) {
+          startFfDownload();
         }
-      });
-    } catch (err) { fail('Склейка не удалась: ' + err.message); }
+      } else {
+        toast('Установлена актуальная версия FFmpeg.');
+      }
+    } catch (e) { toast('Ошибка проверки обновлений: ' + e.message); }
+  });
+  $('#mtFfDownloadBtn', root)?.addEventListener('click', () => startFfDownload());
+  $('#mtFfCancelBtn', root)?.addEventListener('click', async () => {
+    try { await fetch('/api/ffmpeg/download-cancel', { method: 'POST' }); toast('Загрузка отменена'); } catch {}
+  });
+
+  async function startFfDownload() {
+    try {
+      const res = await fetch('/api/ffmpeg/download', { method: 'POST' });
+      const d = await res.json();
+      if (d.ok) { toast('Загрузка FFmpeg запущена...'); pollFfDownload(); }
+      else toast('Не удалось запустить скачивание: ' + (d.error || ''));
+    } catch (e) { toast('Ошибка запуска скачивания: ' + e.message); }
   }
 
-  const goComfyBtn = $('#mtGoComfy', root);
-  if (goComfyBtn) goComfyBtn.onclick = () => {
-    if (+$('.mt-grain', root)?.value > 0) chain('none');
-    else joinComfy(MT.ids.slice(), durList());
-  };
+  function pollFfDownload() {
+    const iv = setInterval(async () => {
+      try {
+        const res = await fetch('/api/ffmpeg/status');
+        const st = await res.json();
+        if (st.downloading && st.download_state) {
+          updateFfProgress(st.download_state);
+        } else {
+          clearInterval(iv);
+          refreshFfStatus();
+          if (st.installed) toast('✓ FFmpeg успешно установлен!');
+        }
+      } catch { clearInterval(iv); }
+    }, 500);
+  }
 
-  /* ---------- FFMPEG STUDIO MONTAGE EXECUTION ---------- */
+  /* ---------- Execution: FFmpeg Studio Non-Linear Export ---------- */
   async function executeFfStudio() {
+    if (MT.busy) return;
+    if (MT.ids.length < 1) { toast('Добавьте хотя бы 1 клип для монтажа'); return; }
+
+    const go = $('#mtGoStudioFf', root);
     const st = $('.mt-status-ff', root);
     const progBox = $('#mtStudioProgBox', root);
     const progBar = $('#mtStudioProgBar', root);
-    const btn = $('#mtGoStudioFf', root);
-
-    if (MT.busy) return;
-    if (MT.ids.length < 2) { if (st) st.textContent = 'Добавьте хотя бы два клипа'; return; }
-
-    if (!MT.ff || !MT.ff.installed) {
-      toast('Портативный FFmpeg не установлен. Нажмите «Скачать FFmpeg» сверху.');
-      return;
-    }
 
     MT.busy = true;
-    if (btn) btn.disabled = true;
+    if (go) go.disabled = true;
     if (progBox) progBox.style.display = 'block';
-    if (progBar) progBar.style.width = '5%';
-    if (st) st.textContent = 'Подготовка рендеринга в Студии FFmpeg…';
+    if (progBar) progBar.style.width = '0%';
+    if (st) st.textContent = 'Подготовка студийного монтажа FFmpeg…';
 
     const cleanup = () => {
       MT.busy = false;
-      if (btn) btn.disabled = false;
+      if (go) go.disabled = false;
       if (progBox) progBox.style.display = 'none';
     };
-    const fail = msg => { cleanup(); if (st) st.textContent = msg; };
+
+    const fail = msg => {
+      cleanup();
+      if (st) st.textContent = msg;
+    };
 
     try {
       const fd = new FormData();
-      fd.append('ids', JSON.stringify(MT.ids));
-      fd.append('durs', JSON.stringify(durList()));
       fd.append('studio', '1');
+      fd.append('order', JSON.stringify(MT.ids.map(id => id.startsWith('up:') ? { kind: 'upload', id } : { kind: 'library', id })));
+      fd.append('cuts', JSON.stringify(MT.cuts));
 
       // Transitions & Speed
       fd.append('transition', $('#stTransition', root)?.value || 'fade');
@@ -9205,15 +9190,13 @@ function mtT(k, fb) {
         } else if (ev.type === 'done') {
           offPrompt(res.prompt_id);
           cleanup();
+          MT.resFf = ev.item.url;
           const v = $('.mt-res-ff', root);
           if (v) {
             v.src = ev.item.url;
-            v.hidden = false;
-            v.muted = false;
             v.play().catch(() => {});
           }
-          const empty = $('.mt-empty-ff', root);
-          if (empty) empty.hidden = true;
+          showMode('res');
           if (st) {
             st.innerHTML = '✓ Готово! Ролик сохранён в Библиотеке. <button class="btn pri" id="stSaveBtn" type="button" style="padding:4px 12px;font-size:12px">Сохранить</button> <button class="btn" id="stOpenFolder" type="button" style="padding:4px 12px;font-size:12px">Открыть в папке</button>';
             $('#stSaveBtn', root).onclick = () => saveItems([byId(ev.item.id) || normItem(ev.item)]);
@@ -9234,6 +9217,73 @@ function mtT(k, fb) {
 
   const goStudioBtn = $('#mtGoStudioFf', root);
   if (goStudioBtn) goStudioBtn.onclick = executeFfStudio;
+
+  /* ---------- Execution: ComfyUI Join ---------- */
+  async function joinComfy(ids, durs) {
+    const go = $('#mtGoComfy', root), st = $('.mt-status', root);
+    MT.joining = true; MT.busy = true; if (go) go.disabled = true;
+    pipePaint();
+    if (st) st.textContent = 'Отправка задачи склейки в ComfyUI…';
+
+    const cleanup = () => {
+      MT.joining = false; MT.busy = false;
+      if (go) go.disabled = false;
+      pipePaint();
+    };
+
+    try {
+      const fd = new FormData();
+      fd.append('force_comfy', '1');
+      fd.append('order', JSON.stringify(ids.map(id => id.startsWith('up:') ? { kind: 'upload', id } : { kind: 'library', id })));
+      fd.append('cuts', JSON.stringify(durs));
+      ids.filter(id => id.startsWith('up:')).forEach(id => {
+        const u = get(id), k = id.slice(3);
+        fd.append('res_' + k, u.res || '');
+        fd.append('len_' + k, String(u.len || 0));
+        fd.append('file_' + k, u.file, u.file.name);
+      });
+
+      const r = await fetch('/api/montage', { method: 'POST', body: fd });
+      const txt = await r.text();
+      let res;
+      try { res = JSON.parse(txt); } catch { res = { error: txt }; }
+      if (!r.ok) throw new Error(res.error || r.statusText);
+
+      qAdd(res.prompt_id, 'montage', `Склейка ComfyUI: ${ids.length} клипов`);
+      if (st) st.textContent = 'Склейка в очереди ComfyUI…';
+
+      onPrompt(res.prompt_id, ev => {
+        if (ev.prompt_id !== res.prompt_id) return;
+        if (ev.type === 'progress') {
+          if (st) st.textContent = `Склейка ComfyUI: шаг ${ev.value || 0} из ${ev.max || 1}`;
+        } else if (ev.type === 'done') {
+          offPrompt(res.prompt_id);
+          cleanup();
+          PIPE.joined = { id: ev.item.id, key: orderKey() };
+          pipeSave();
+          showDone(ev.item);
+        } else if (ev.type === 'error') {
+          offPrompt(res.prompt_id);
+          cleanup();
+          if (st) st.textContent = 'Ошибка склейки ComfyUI: ' + ev.message;
+        } else if (ev.type === 'interrupted') {
+          offPrompt(res.prompt_id);
+          cleanup();
+          if (st) st.textContent = 'Склейка отменена';
+        }
+      });
+    } catch (err) {
+      cleanup();
+      if (st) st.textContent = 'Ошибка: ' + err.message;
+    }
+  }
+
+  const goComfyBtn = $('#mtGoComfy', root);
+  if (goComfyBtn) goComfyBtn.onclick = () => {
+    if (MT.busy) return;
+    if (MT.ids.length < 2) { const st = $('.mt-status', root); if (st) st.textContent = 'Добавьте хотя бы два клипа'; return; }
+    joinComfy(MT.ids.slice(), durList());
+  };
 
   /* ---------- Original Per-clip Upscale / Grain (chain) for Comfy ---------- */
   const upBtn = $('.mt-upgo', root), upTxt = upBtn ? upBtn.textContent : '';
@@ -9339,25 +9389,29 @@ function mtT(k, fb) {
   IMG_PANELS.push(() => { applyPend(); pipePaint(); window.mtRestoreResult(); });
   pipePaint();
 
+  /* Height handle resizer for strips in both tabs */
   (() => {
-    const h = $('.mt-vh', root); if (!h) return; let y0 = 0, px0 = 0, on = false;
-    h.addEventListener('pointerdown', e => { e.preventDefault(); h.setPointerCapture(e.pointerId); on = true; y0 = e.clientY; px0 = MT.px; });
-    h.addEventListener('pointermove', e => {
-      if (!on) return;
-      MT.px = Math.min(90, Math.max(8, px0 + (e.clientY - y0) * 0.35));
-      $$('.mt-item', root).forEach((el, i) => { el.style.width = wOf(durOf(i)) + 'px'; });
-      updateUI();
+    $$('.mt-vh', root).forEach(h => {
+      let y0 = 0, px0 = 0, on = false;
+      h.addEventListener('pointerdown', e => { e.preventDefault(); h.setPointerCapture(e.pointerId); on = true; y0 = e.clientY; px0 = MT.px; });
+      h.addEventListener('pointermove', e => {
+        if (!on) return;
+        MT.px = Math.min(90, Math.max(8, px0 + (e.clientY - y0) * 0.35));
+        $$('.mt-item', root).forEach((el, i) => { el.style.width = wOf(durOf(i)) + 'px'; });
+        updateUI();
+      });
+      h.addEventListener('pointerup', e => { if (!on) return; on = false; try { h.releasePointerCapture(e.pointerId); } catch {} setPx(MT.px); });
+      h.addEventListener('dblclick', () => setPx(26));
     });
-    h.addEventListener('pointerup', e => { if (!on) return; on = false; try { h.releasePointerCapture(e.pointerId); } catch {} setPx(MT.px); });
-    h.addEventListener('dblclick', () => setPx(26));
   })();
 
-  if (window.gridResize) window.gridResize($('.grid', root));
+  if (window.gridResize) $$('.grid', root).forEach(g => window.gridResize(g));
 
   IMG_PANELS.push(render);
   render();
   refreshFfStatus();
 })();
+
 
 ['#vPrompt', '#lPrompt', '.kr-prompt', '.qw-prompt'].forEach(sel => $$(sel).forEach(attachRu));   // every prompt field gets «Показать по-русски»
 
