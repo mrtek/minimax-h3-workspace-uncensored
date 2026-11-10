@@ -22,6 +22,7 @@ MESSAGES = {
     "APIKEY_TASK_NOT_FOUND": "Задание не найдено на RunningHub",
     "APIKEY_UNAUTHORIZED": "Ключ не даёт доступа к API — нужна подписка с API",
     "APIKEY_LIMIT_NOT_ENOUGH": "Закончился баланс или лимит на RunningHub",
+    "NOT_ENOUGH_BALANCE": "На кошельке RunningHub (Wallet, в долларах) нет денег. Кредиты тарифа через API не списываются — пополните Wallet",
     "WORKFLOW_NOT_EXISTS": "Workflow с таким ID не найден на RunningHub",
     "TASK_QUEUE_MAXED": "Очередь RunningHub переполнена, попробуйте позже",
     "PERSONAL_QUEUE_COUNT_LIMIT": "Превышен лимит личной очереди RunningHub",

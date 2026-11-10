@@ -353,27 +353,27 @@ ROLE_TITLES = {
     "swap_lora": "LoRA «Замена персонажа» (akatz-ai)",
     "pika_lora": "LoRA Pika H3 Flex Turbo (ускорение для Референсов, хороший звук)",
     "sla_lora": "LoRA Turbo-SLA (быстрое ускорение для Image-to-Video)",
-    "seedvr_unet": "Увеличение видео и картинок — модель SeedVR2 (3B)",
-    "seedvr_vae": "Увеличение видео и картинок — VAE SeedVR2",
-    "relayvsr_unet": "Быстрое увеличение видео — модель RelayVSR x2",
-    "relayvsr_vae": "Быстрое увеличение видео — VAE RelayVSR",
-    "krea_unet": "Основная модель — Картинка по тексту (Krea 2)",
+    "seedvr_unet": "Увеличение видео и изображений — модель SeedVR2 (3B)",
+    "seedvr_vae": "Увеличение видео и изображений — VAE SeedVR2",
+    "relayvsr_unet": "Быстрое увеличение видео — модель RelayVSR ×2",
+    "relayvsr_vae": "Быстрое увеличение видео — VAE RelayVSR ×2",
+    "krea_unet": "Основная модель — Изображение по тексту (Krea 2)",
     "krea_clip": "Текстовый энкодер Krea 2 (Qwen3-VL 4B)",
     "krea_vae": "VAE для Krea 2",
-    "kreareal_unet": "Основная модель — Картинка: реализм (RedCraft, Krea 2)",
+    "kreareal_unet": "Основная модель — Изображение: реализм (RedCraft, Krea 2)",
     "kreareal_lora": "LoRA Realism Engine для Krea 2 (реализм)",
-    "qwen_unet": "Основная модель — Правка картинки (Qwen Image 2.1)",
+    "qwen_unet": "Основная модель — Правка изображения (Qwen Image 2.1)",
     "qwen_clip": "Текстовый энкодер Qwen (Qwen3-VL 8B)",
     "qwen_vae": "VAE для Qwen Image 2.1",
     "qwen_lora": "LoRA ChatR Labs Omni Uncensored (Qwen 2.1)",
-    "flux_unet": "Основная модель — Правка картинки для коммерции (FLUX.2 klein 4B)",
+    "flux_unet": "Основная модель — Правка изображения для коммерции (FLUX.2 klein 4B)",
     "flux_clip": "Текстовый энкодер FLUX.2 klein (Qwen3 4B)",
     "flux_vae": "VAE для FLUX.2",
 }
 
 MODE_TITLES = {"video": "Image-to-Video", "lipsync": "Lipsync", "refs": "Референсы", "actor": "Актёрская игра", "swap": "Замена персонажа", "action": "Экшн-сцены",
-               "krea": "Картинка по тексту", "kreareal": "Картинка: реализм", "qwen": "Правка картинки", "flux": "Правка картинки: FLUX.2 (можно в коммерцию)",
-               "upscale": "Увеличение видео и картинок", "relayvsr": "Быстрое увеличение видео (RelayVSR)", "long": "Длинное видео"}
+               "krea": "Изображение по тексту", "kreareal": "Изображение: реализм", "qwen": "Правка изображения", "flux": "Правка изображения: FLUX.2 (можно в коммерцию)",
+               "upscale": "Увеличение видео и изображений", "relayvsr": "Быстрое увеличение видео (RelayVSR)", "long": "Длинное видео"}
 
 # Which roles each mode needs.
 MODE_ROLES = {

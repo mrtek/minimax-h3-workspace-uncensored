@@ -421,7 +421,27 @@ def swap_shots_graph(m, shots, width, height, seed, images, video, extra="", pik
 
 # ---------- long video: scenes continue each other (Music-Video / Long-Shot workflow) ----------
 
-def montage_graph(names, sizes):
+def grain_graph(name, strength, seed):
+    """Film-like grain on one clip: KJNodes' per-pixel noise (it differs from frame to frame). strength 0..1; the sound stays."""
+    # Plain per-pixel colour noise looked like flicker. Film grain is a single-colour (brightness) noise with grains of 2-3 pixels:
+    # noise is made at half size on mid-grey, taken from one channel, enlarged back and laid over the picture with «soft light».
+    g = {"L": {"class_type": "LoadVideo", "inputs": {"file": name}},
+         "N": {"class_type": "GetVideoComponents", "inputs": {"video": ["L", 0]}},
+         "H": {"class_type": "ImageScaleBy", "inputs": {"image": ["N", 0], "upscale_method": "area", "scale_by": 0.5}},
+         "Z": {"class_type": "ImageBlend", "inputs": {"image1": ["H", 0], "image2": ["H", 0], "blend_factor": 1.0, "blend_mode": "difference"}},   # black, same size and frame count
+         "I": {"class_type": "ImageInvert", "inputs": {"image": ["Z", 0]}},
+         "G": {"class_type": "ImageBlend", "inputs": {"image1": ["Z", 0], "image2": ["I", 0], "blend_factor": 0.5, "blend_mode": "normal"}},     # mid-grey
+         "R": {"class_type": "ImageNoiseAugmentation", "inputs": {"image": ["G", 0], "noise_aug_strength": 0.3, "seed": seed}},
+         "M": {"class_type": "ImageToMask", "inputs": {"image": ["R", 0], "channel": "red"}},
+         "K": {"class_type": "MaskToImage", "inputs": {"mask": ["M", 0]}},
+         "B": {"class_type": "ImageScaleBy", "inputs": {"image": ["K", 0], "upscale_method": "bilinear", "scale_by": 2.0}},
+         "F": {"class_type": "ImageBlend", "inputs": {"image1": ["N", 0], "image2": ["B", 0], "blend_factor": round(min(1.0, strength * 2), 3), "blend_mode": "soft_light"}},   # measured: 30% (factor 0.3) gave only about 5 of 255 levels, too weak
+         "W": {"class_type": "CreateVideo", "inputs": {"images": ["F", 0], "fps": ["N", 2], "audio": ["N", 1]}},
+         "S": {"class_type": "SaveVideo", "inputs": {"video": ["W", 0], "filename_prefix": "H3Workspace/grain", "format": "auto", "codec": "auto"}}}
+    return g, {k: "encode" for k in "LNHZIGRMKBF"} | {"W": "decode", "S": "save"}
+
+
+def montage_graph(names, sizes, cuts=None):
     """Join clips end to end with ComfyUI's own nodes (no ffmpeg). Clips of another size than the first one are scaled to it
     first: the join node refuses clips of different sizes. `sizes`: (width, height) per clip or None when unknown."""
     g, ins, stages = {}, {}, {}
@@ -430,6 +450,10 @@ def montage_graph(names, sizes):
         g[f"L{i}"] = {"class_type": "LoadVideo", "inputs": {"file": name}}
         stages[f"L{i}"] = "encode"
         src = [f"L{i}", 0]
+        if cuts and i < len(cuts) and cuts[i]:   # the clip is trimmed: only its first seconds are used
+            g[f"T{i}"] = {"class_type": "Video Slice", "inputs": {"video": src, "start_time": 0.0, "duration": float(cuts[i]), "strict_duration": False}}
+            stages[f"T{i}"] = "encode"
+            src = [f"T{i}", 0]
         if first and sizes[i] and tuple(sizes[i]) != tuple(first):
             g[f"G{i}"] = {"class_type": "GetVideoComponents", "inputs": {"video": src}}
             g[f"Z{i}"] = {"class_type": "ImageScale", "inputs": {"image": [f"G{i}", 0], "upscale_method": "lanczos",
@@ -458,13 +482,18 @@ def _tokens(f):
     return round((f - 5) / 17 * 5 + 2)
 
 
-def long_plan(scene_seconds, overlap=LONG_OVERLAP, cont_first=False):
+def long_plan(scene_seconds, overlap=LONG_OVERLAP, cont_first=False, fresh=()):
     """Frame arithmetic of the original workflow: per scene (frames to generate, overlap frames, frames kept so far).
-    `cont_first`: the first scene continues an existing video, so it is planned like a later scene."""
+    `cont_first`: the first scene continues an existing video, so it is planned like a later scene.
+    `fresh[i]`: scene i is a NEW SHOT: it does not continue the previous scene (no overlap, no saved tail), it starts from the
+    reference pictures like scene 1, so the quality of a long video does not wear off from scene to scene."""
     plan, acc = [], 0
     for i, sec in enumerate(scene_seconds):
         seg = frames(min(LONG_MAX_SCENE, max(1, sec)))
-        if i == 0 and not cont_first:
+        if i > 0 and i < len(fresh) and fresh[i]:
+            plan.append({"total": seg, "ov": 0, "acc_before": acc, "acc": acc + seg})
+            acc += seg
+        elif i == 0 and not cont_first:
             plan.append({"total": seg, "ov": 0, "acc_before": 0, "acc": seg})
             acc = seg
         else:
@@ -486,7 +515,7 @@ def _with_preview(g, model, preview):
     return ["14", 0]
 
 
-def _long_base(m, pika, extra_loras):
+def _long_base(m, pika, extra_loras, draft=False):
     """Model chain shared by the long-video graphs: Singularity Ref2V + memory savers + Pika (or the quality route)."""
     g = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["lipsync_unet"], "weight_dtype": "default"}},
@@ -501,6 +530,9 @@ def _long_base(m, pika, extra_loras):
     if pika:
         model = _lora_chain(g, ["4", 0], list(extra_loras) + [(pika, 1.0)])
         sched, sampler_name = "simple", "euler"
+        if draft:   # a quick draft: `pika` is the DMAD 4-step LoRA here (lcm sampler, shifts as in the editor it comes from)
+            g["8"] = {"class_type": "MiniMaxH3SigmaShift", "inputs": {"model": model, "shift_video": 12.0, "shift_audio": 2.0}}
+            model, sampler_name, steps = ["8", 0], "lcm", 4
     else:  # quality route without a speed LoRA, as in the original (er_sde, beta, 12 steps)
         model = _lora_chain(g, ["4", 0], list(extra_loras)) if extra_loras else ["4", 0]
         g["8"] = {"class_type": "MiniMaxH3SigmaShift", "inputs": {"model": model, "shift_video": 12.0, "shift_audio": 4.0}}
@@ -508,14 +540,59 @@ def _long_base(m, pika, extra_loras):
     return g, model, sched, sampler_name, steps
 
 
-def long_graph(m, scenes, width, height, seed, images, audio=None, start=0.0, pika=None, extra_loras=(), ref_size="match", vocals=None, preview=None):
+def _audio_tokens(frames):
+    return round(frames * 5 / 3)   # the audio latent of H3 has 40 steps per second, a video frame is 1/24 s
+
+
+FADE_DB = (-4, -9, -18, -40)   # 4 steps of 50 ms: the sound dies away (or swells up) around a join of two scenes, no click or jump
+FADE_STEP = 0.05
+
+
+def _audio_fade(add, audio, dur, head=False, tail=False):
+    """The same sound with a short fade-in at the start and/or a fade-out at the end (core nodes only: volume steps of 50 ms)."""
+    n = len(FADE_DB)
+    edge = n * FADE_STEP
+    if dur < 2 * edge + 0.1 or not (head or tail):
+        return audio
+    t0 = edge if head else 0.0
+    t1 = dur - (edge if tail else 0.0)
+    parts = []
+    if head:
+        for j in range(n):
+            piece = add("TrimAudioDuration", audio=audio, start_index=round(j * FADE_STEP, 3), duration=FADE_STEP)
+            parts.append([add("AudioAdjustVolume", audio=[piece, 0], volume=FADE_DB[n - 1 - j]), 0])
+    parts.append([add("TrimAudioDuration", audio=audio, start_index=round(t0, 3), duration=round(t1 - t0, 3)), 0])
+    if tail:
+        for j in range(n):
+            piece = add("TrimAudioDuration", audio=audio, start_index=round(t1 + j * FADE_STEP, 3), duration=FADE_STEP)
+            parts.append([add("AudioAdjustVolume", audio=[piece, 0], volume=FADE_DB[j]), 0])
+    out = parts[0]
+    for nxt in parts[1:]:
+        out = [add("AudioConcat", audio1=out, audio2=nxt, direction="after"), 0]
+    return out
+
+
+def _audio_continue(add, old_audio, new_audio, ov, total):
+    """The audio latent of a scene starts with the end of the previous scene's audio (kept as it is) and continues with new sound:
+    the same trick as for the picture. Returns the audio latent for the sampler."""
+    a_ov, a_tot = _audio_tokens(ov), _audio_tokens(total)
+    cut = add("LatentCut", samples=old_audio, dim="y", index=-a_ov, amount=a_ov)
+    cat = add("LatentConcat", samples1=[cut, 0], samples2=new_audio, dim="y")
+    cut2 = add("LatentCut", samples=[cat, 0], dim="y", index=0, amount=a_tot)
+    keep = add("SolidMask", value=0.0, width=a_ov, height=2)
+    ones = add("SolidMask", value=1.0, width=a_tot, height=2)
+    mask = add("MaskComposite", destination=[ones, 0], source=[keep, 0], x=0, y=0, operation="multiply")
+    return [add("SetLatentNoiseMask", samples=[cut2, 0], mask=[mask, 0]), 0]
+
+
+def long_graph(m, scenes, width, height, seed, images, audio=None, start=0.0, pika=None, extra_loras=(), ref_size="match", vocals=None, preview=None, fresh=(), audio_cont=False, draft=False):
     """Scenes [(prompt, seconds), ...] rendered one after another; every next scene continues the last second of the
     previous one (latent cut + noise mask), with the same reference pictures, and optionally follows a music track.
 
     Singularity Ref2V + Pika H3 Flex Turbo (8 steps), as chosen for the app. Without `audio` the model makes its own sound
     for every scene (voices and music are written in the prompts).
     """
-    g, model, sched, sampler_name, steps = _long_base(m, pika, extra_loras)
+    g, model, sched, sampler_name, steps = _long_base(m, pika, extra_loras, draft)
     model = _with_preview(g, model, preview)
     g["9"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": sampler_name}}
     g["10"] = {"class_type": "BasicScheduler", "inputs": {"model": model, "scheduler": sched, "steps": steps, "denoise": 1.0}}
@@ -527,7 +604,7 @@ def long_graph(m, scenes, width, height, seed, images, audio=None, start=0.0, pi
             g["13"] = {"class_type": "MelBandRoFormerSampler", "inputs": {"model": ["12", 0], "audio": ["11", 0]}}
             heard = ["13", 0]
     stages = {n: "load" for n in g}
-    plan = long_plan([sc[1] for sc in scenes])
+    plan = long_plan([sc[1] for sc in scenes], fresh=fresh)
     nid = [200]
 
     def add(cls, **inputs):
@@ -539,15 +616,11 @@ def long_graph(m, scenes, width, height, seed, images, audio=None, start=0.0, pi
     scene_of = {}
     for i, (sc, p) in enumerate(zip(scenes, plan)):
         prompt = sc[0]
-        extra = sc[2] if len(sc) > 2 else None  # optional picture for this scene only (prop, new clothes, new place)
+        own = list(sc[2]) if len(sc) > 2 and sc[2] else []  # this scene's own references; none: the common ones are used
         total, ov = p["total"], p["ov"]
         ref = add("MiniMaxH3ReferenceToVideo", clip=["5", 0], vae=["6", 0], audio_vae=["7", 0], prompt=prompt,
                   width=width, height=height, length=total, ref_image_size=ref_size)
-        _refs(g, ref, images, base=100 + 0)  # same LoadImage nodes are reused below
-        if extra:
-            g[f"15{i}"] = {"class_type": "LoadImage", "inputs": {"image": extra}}
-            g[ref]["inputs"][f"ref_images.ref_image_{len(images[:9])}"] = [f"15{i}", 0]
-            stages[f"15{i}"] = "encode"
+        _refs(g, ref, own or images, base=1000 + 10 * i)
         new = add("LTXVSeparateAVLatent", av_latent=[ref, 1])
         if audio:
             ptr = start + (p["acc_before"] - ov) / FPS if i else start
@@ -557,7 +630,7 @@ def long_graph(m, scenes, width, height, seed, images, audio=None, start=0.0, pi
             a_lat = [add("SetLatentNoiseMask", samples=[enc, 0], mask=[amask, 0]), 0]
         else:
             a_lat = [new, 1]
-        if i == 0:
+        if i == 0 or ov == 0:   # the first scene, or a new shot: starts from the references only
             v_lat = [new, 0]
         else:
             old = add("LTXVSeparateAVLatent", av_latent=prev_lat)
@@ -571,6 +644,8 @@ def long_graph(m, scenes, width, height, seed, images, audio=None, start=0.0, pi
             both = add("ImageBatch", image1=[black, 0], image2=[white, 0])
             vmask = add("ImageToMask", image=[both, 0], channel="red")
             v_lat = [add("SetLatentNoiseMask", samples=[cut2, 0], mask=[vmask, 0]), 0]
+            if audio_cont and not audio:   # the sound made by the model continues the sound of the previous scene (no jump at the join)
+                a_lat = _audio_continue(add, [old, 1], [new, 1], ov, total)
         lat = add("LTXVConcatAVLatent", video_latent=v_lat, audio_latent=a_lat)
         noise = add("RandomNoise", noise_seed=seed + 100 * i)
         guider = add("BasicGuider", model=model, conditioning=[ref, 0])
@@ -587,8 +662,11 @@ def long_graph(m, scenes, width, height, seed, images, audio=None, start=0.0, pi
             if i == 0:
                 all_aud = [aud, 0]
             else:
-                kept = add("TrimAudioDuration", audio=prev_aud, start_index=0.0, duration=round((p["acc_before"] - ov) / FPS, 3))
-                all_aud = [add("AudioConcat", audio1=[kept, 0], audio2=[aud, 0], direction="after"), 0]
+                kdur = round((p["acc_before"] - ov) / FPS, 3)
+                kept = add("TrimAudioDuration", audio=prev_aud, start_index=0.0, duration=kdur)
+                a_out = _audio_fade(add, [kept, 0], kdur, tail=True)           # the old scene dies away...
+                a_in = _audio_fade(add, [aud, 0], round(total / FPS, 3), head=True)   # ...the new one swells up
+                all_aud = [add("AudioConcat", audio1=a_out, audio2=a_in, direction="after"), 0]
             prev_aud = all_aud
             stages[aud] = "decode"
         stages.update({ref: "encode", smp: "sample", img: "decode"})
@@ -614,11 +692,11 @@ LONG_STATE_TOKENS = 17   # latent tokens of the last second(s) of a scene that t
 
 
 def long_part_graph(m, scenes, k, width, height, seed, images, audio=None, start=0.0, pika=None, extra_loras=(),
-                    ref_size="match", vocals=None, state=None, preview=None, src=None, cont_plan=False):
+                    ref_size="match", vocals=None, state=None, preview=None, src=None, cont_plan=False, fresh=(), draft=False):
     """Scene number `k` (0-based) of the long video as its own job. Scene 0 starts fresh; scene k > 0 continues from the saved
     latent tail of scene k-1 (`state`, a .latent file in ComfyUI's input folder). The clip it saves has the overlap with the
     previous scene cut off, so the clips join end to end. Also saves the tail of its own latent for scene k+1."""
-    g, model, sched, sampler_name, steps = _long_base(m, pika, extra_loras)
+    g, model, sched, sampler_name, steps = _long_base(m, pika, extra_loras, draft)
     model = _with_preview(g, model, preview)
     g["9"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": sampler_name}}
     g["10"] = {"class_type": "BasicScheduler", "inputs": {"model": model, "scheduler": sched, "steps": steps, "denoise": 1.0}}
@@ -631,8 +709,9 @@ def long_part_graph(m, scenes, k, width, height, seed, images, audio=None, start
             heard = ["13", 0]
     stages = {n: "load" for n in g}
     cont = bool(src) and k == 0   # the first scene continues a video the user already has (src = (file in ComfyUI input, frames))
-    plan = long_plan([sc[1] for sc in scenes], cont_first=bool(src) or cont_plan)   # a project that continues an existing video
+    plan = long_plan([sc[1] for sc in scenes], cont_first=bool(src) or cont_plan, fresh=fresh)   # a project that continues an existing video
     p, sc = plan[k], scenes[k]
+    new_shot = k > 0 and k < len(fresh) and bool(fresh[k])   # does not continue scene k-1
     total, ov = p["total"], p["ov"]
     nid = [200]
 
@@ -643,12 +722,8 @@ def long_part_graph(m, scenes, k, width, height, seed, images, audio=None, start
 
     ref = add("MiniMaxH3ReferenceToVideo", clip=["5", 0], vae=["6", 0], audio_vae=["7", 0], prompt=sc[0],
               width=width, height=height, length=total, ref_image_size=ref_size)
-    _refs(g, ref, images, base=100)
-    extra = sc[2] if len(sc) > 2 else None
-    if extra:
-        g["150"] = {"class_type": "LoadImage", "inputs": {"image": extra}}
-        g[ref]["inputs"][f"ref_images.ref_image_{len(images[:9])}"] = ["150", 0]
-        stages["150"] = "encode"
+    own = list(sc[2]) if len(sc) > 2 and sc[2] else []   # this scene's own references; none: the common ones are used
+    _refs(g, ref, own or images, base=100)
     new = add("LTXVSeparateAVLatent", av_latent=[ref, 1])
     if audio:
         ptr = max(0.0, start - ov / FPS) if cont else start + ((p["acc_before"] - ov) / FPS if k else 0)
@@ -658,7 +733,7 @@ def long_part_graph(m, scenes, k, width, height, seed, images, audio=None, start
         a_lat = [add("SetLatentNoiseMask", samples=[enc, 0], mask=[amask, 0]), 0]
     else:
         a_lat = [new, 1]
-    if k == 0 and not cont:
+    if (k == 0 and not cont) or new_shot:
         v_lat = [new, 0]
     else:
         if cont:   # the tail of the existing video, encoded back into a latent
@@ -688,15 +763,17 @@ def long_part_graph(m, scenes, k, width, height, seed, images, audio=None, start
               latent_image=[lat, 0])
     img = add("VAEDecode", samples=[smp, 1], vae=["6", 0])
     clip_len = total - ov
-    frames_out = [img, 0] if (not k and not cont) else [add("ImageFromBatch", image=[img, 0], batch_index=ov, length=clip_len), 0]
+    frames_out = [img, 0] if ((not k and not cont) or new_shot) else [add("ImageFromBatch", image=[img, 0], batch_index=ov, length=clip_len), 0]
     if audio:
         a0 = start + (p["acc_before"] / FPS if k else 0)
         aud = [add("TrimAudioDuration", audio=["11", 0], start_index=round(a0, 3), duration=round(clip_len / FPS, 3)), 0]
     else:
         dec = add("VAEDecodeAudio", samples=[smp, 1], vae=["7", 0])
         stages[dec] = "decode"
-        aud = [dec, 0] if (not k and not cont) else [add("TrimAudioDuration", audio=[dec, 0], start_index=round(ov / FPS, 3),
+        aud = [dec, 0] if ((not k and not cont) or new_shot) else [add("TrimAudioDuration", audio=[dec, 0], start_index=round(ov / FPS, 3),
                                                           duration=round(clip_len / FPS, 3)), 0]
+        # soft edges: this clip is joined to the others later, a jump of sound at the join is hidden by a short fade
+        aud = _audio_fade(add, aud, round(clip_len / FPS, 3), head=bool(k or cont), tail=True)
     vid = add("CreateVideo", images=frames_out, audio=aud, fps=float(FPS), bit_depth="auto", color_space="sRGB", codec="none")
     save = add("SaveVideo", video=[vid, 0], filename_prefix="H3Workspace/long_part", format="auto", **{"format.codec": "auto"})
     sep2 = add("LTXVSeparateAVLatent", av_latent=[smp, 1])

@@ -315,7 +315,7 @@ class JsApi:
 
     @staticmethod
     def _last_dir():
-        '''The folder the user saved into last time (Windows Save as starts there next time).'''
+        """The folder the user saved into last time (Windows "Save as" starts there next time)."""
         try:
             d = (server.DATA_DIR / "last_save_dir.txt").read_text(encoding="utf-8").strip()
             return d if os.path.isdir(d) else ""
@@ -466,7 +466,7 @@ def main():
 
         storage_path = resolve_webview_storage_path()
         api = JsApi(port)
-        window = webview.create_window("Minimax H3 Workspace (Uncensored)", url, width=1440, height=920, min_size=(1000, 680),
+        window = webview.create_window("Minimax H3 Workspace (Uncensored)", url, width=1440, height=920, min_size=(1000, 680), maximized=True,
                                        background_color="#12070a", js_api=api,
                                        draggable=True)  # pywebview blocks dragging of every picture by default; the app drags pictures into slots
         api._window = window

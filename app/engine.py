@@ -208,9 +208,10 @@ class Installer:
             except (Cancelled, asyncio.CancelledError):
                 raise
             except Exception as e:
-                if attempt == 39:
+                if attempt == attempts - 1:
                     raise RuntimeError(f"Не удалось скачать {label}: {e}")
-                await self.step(sid, "progress", label=f"{label} — обрыв связи, пробуем снова…")
+                why = (str(e) or type(e).__name__)[:90]
+                await self.step(sid, "progress", label=f"{label} — обрыв связи ({why}), пробуем снова…")
                 await asyncio.sleep(min(30, 3 + attempt * 3))
         part.replace(dest)
 
