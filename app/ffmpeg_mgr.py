@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 import zipfile
@@ -356,6 +357,98 @@ def download_and_extract_ffmpeg_sync(target_dir, progress_cb=None, cancel_event=
         return {"ok": False, "error": f"Ошибка распаковки: {e}"}
 
 
+def run_ffmpeg_with_progress(cmd, total_duration, output_path, progress_cb=None, cancel_event=None, creationflags=0, label="Монтаж FFmpeg"):
+    """Runs FFmpeg process while draining stderr in background to completely avoid pipe buffer deadlocks,
+    and parses stdout (-progress pipe:1) to report smooth real-time percentage to the UI."""
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+        creationflags=creationflags
+    )
+
+    stderr_lines = []
+    def drain_stderr():
+        try:
+            for l in iter(proc.stderr.readline, ''):
+                if not l:
+                    break
+                stderr_lines.append(l)
+                if len(stderr_lines) > 100:
+                    stderr_lines.pop(0)
+        except Exception:
+            pass
+
+    t_err = threading.Thread(target=drain_stderr, daemon=True)
+    t_err.start()
+
+    last_pct = 5
+    if progress_cb:
+        progress_cb(5, f"{label}: запуск...")
+
+    try:
+        while True:
+            if cancel_event and cancel_event.is_set():
+                proc.kill()
+                if output_path and Path(output_path).exists():
+                    try:
+                        Path(output_path).unlink()
+                    except OSError:
+                        pass
+                return {"ok": False, "error": "Отменено пользователем", "stderr": ""}
+
+            line = proc.stdout.readline()
+            if not line and proc.poll() is not None:
+                break
+            if not line:
+                continue
+            line = line.strip()
+
+            cur_sec = None
+            if line.startswith("out_time_ms="):
+                try:
+                    ms = int(line.split("=")[1])
+                    cur_sec = ms / 1_000_000 if ms > 100_000 else ms / 1000
+                except (ValueError, IndexError):
+                    pass
+            elif line.startswith("out_time_us="):
+                try:
+                    us = int(line.split("=")[1])
+                    cur_sec = us / 1_000_000
+                except (ValueError, IndexError):
+                    pass
+            elif line.startswith("out_time="):
+                try:
+                    parts = line.split("=")[1].split(":")
+                    if len(parts) == 3:
+                        h, m, s = float(parts[0]), float(parts[1]), float(parts[2])
+                        cur_sec = h * 3600 + m * 60 + s
+                except (ValueError, IndexError):
+                    pass
+
+            if cur_sec is not None and total_duration > 0:
+                pct = min(99, max(5, int((cur_sec / total_duration) * 100)))
+                if pct > last_pct and progress_cb:
+                    last_pct = pct
+                    progress_cb(pct, f"{label}: {pct}%")
+            elif line == "progress=end":
+                if progress_cb:
+                    progress_cb(100, f"{label}: готово!")
+    finally:
+        pass
+
+    proc.wait()
+    t_err.join(timeout=1.0)
+    full_err = "".join(stderr_lines).strip()
+
+    if proc.returncode != 0:
+        return {"ok": False, "error": f"FFmpeg code {proc.returncode}: {full_err[-600:]}", "stderr": full_err}
+
+    return {"ok": True, "stderr": full_err}
+
+
 def run_concat(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, audio_path=None, audio_opts=None, progress_cb=None, cancel_event=None):
     """Performs video montage / concatenation using portable FFmpeg.
     - If codecs and resolutions match and no audio track added: ultra-fast stream copy (-c copy).
@@ -501,7 +594,10 @@ def run_concat(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, audio_path=None
     filter_complex = ";".join(filter_parts)
 
     use_nvenc = has_nvenc(ffmpeg_exe)
-    vcodec_args = ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "19", "-b:v", "0"] if use_nvenc else ["-c:v", "libx264", "-preset", "fast", "-crf", "19"]
+    if use_nvenc:
+        vcodec_args = ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "20", "-b:v", "0", "-pix_fmt", "yuv420p"]
+    else:
+        vcodec_args = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"]
 
     cmd = [str(ffmpeg_exe), "-y"] + inputs + [
         "-filter_complex", filter_complex,
@@ -520,38 +616,17 @@ def run_concat(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, audio_path=None
         str(output_path)
     ])
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, creationflags=creationflags)
-
-    last_pct = 0
-    while True:
-        if cancel_event and cancel_event.is_set():
-            proc.kill()
-            if output_path.exists():
-                output_path.unlink()
-            return {"ok": False, "error": "Отменено пользователем"}
-
-        line = proc.stdout.readline()
-        if not line and proc.poll() is not None:
-            break
-        line = line.strip()
-        if line.startswith("out_time_ms="):
-            try:
-                ms = int(line.split("=")[1])
-                cur_sec = ms / 1_000_000
-                pct = min(99, int((cur_sec / total_duration) * 100))
-                if pct > last_pct and progress_cb:
-                    last_pct = pct
-                    progress_cb(pct, f"Монтаж FFmpeg: {pct}%")
-            except Exception:
-                pass
-        elif line == "progress=end":
-            if progress_cb:
-                progress_cb(100, "Готово!")
-
-    proc.wait()
-    if proc.returncode != 0:
-        err = proc.stderr.read()[:500] if proc.stderr else "Unknown error"
-        raise RuntimeError(f"FFmpeg execution failed (code {proc.returncode}): {err}")
+    res_run = run_ffmpeg_with_progress(
+        cmd,
+        total_duration,
+        output_path,
+        progress_cb=progress_cb,
+        cancel_event=cancel_event,
+        creationflags=creationflags,
+        label="Монтаж FFmpeg"
+    )
+    if not res_run["ok"]:
+        raise RuntimeError(res_run.get("error", "Ошибка выполнения FFmpeg"))
 
     return {
         "ok": True,
@@ -652,8 +727,11 @@ def run_studio_montage(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, options
         return run_concat(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, progress_cb=progress_cb, cancel_event=cancel_event)
 
     # Studio filter graph construction
+    use_nvenc = has_nvenc(ffmpeg_exe)
     inputs = []
     for cp in clip_paths:
+        if use_nvenc:
+            inputs.extend(["-hwaccel", "auto"])
         inputs.extend(["-i", str(Path(cp).resolve())])
 
     has_bg_audio = bool(audio_path and Path(audio_path).is_file())
@@ -678,20 +756,32 @@ def run_studio_montage(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, options
         v_pre_str = (",".join(v_pre) + ",") if v_pre else ""
 
         # Framing / Scaling
-        if fit_mode == "blur" and (aspect != "original" or (first_v and (first_v["width"] != tw or first_v["height"] != th))):
+        clip_v = probes[i].get("video")
+        cw = clip_v["width"] if clip_v else tw
+        ch = clip_v["height"] if clip_v else th
+        same_aspect = abs((cw / ch) - (tw / th)) < 0.02
+
+        if fit_mode == "blur" and not same_aspect:
+            bw, bh = 160, max(90, int(160 * (th / tw)))
+            bw = (bw // 2) * 2
+            bh = (bh // 2) * 2
             filter_parts.append(
                 f"[{i}:v]{v_pre_str}split[bg_in{i}][fg_in{i}];"
-                f"[bg_in{i}]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur=25:5[bg{i}];"
+                f"[bg_in{i}]scale={bw}:{bh}:force_original_aspect_ratio=increase,crop={bw}:{bh},boxblur=2:1,scale={tw}:{th}:flags=fast_bilinear[bg{i}];"
                 f"[fg_in{i}]scale={tw}:{th}:force_original_aspect_ratio=decrease,setsar=1[fg{i}];"
                 f"[bg{i}][fg{i}]overlay=(W-w)/2:(H-h)/2,fps={fps},format=yuv420p,settb=AVTB[v_prep{i}]"
             )
-        elif fit_mode == "crop":
+        elif fit_mode == "crop" and not same_aspect:
             filter_parts.append(
                 f"[{i}:v]{v_pre_str}scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},setsar=1,fps={fps},format=yuv420p,settb=AVTB[v_prep{i}]"
             )
-        else:
+        elif not same_aspect:
             filter_parts.append(
                 f"[{i}:v]{v_pre_str}scale={tw}:{th}:force_original_aspect_ratio=decrease,pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps={fps},format=yuv420p,settb=AVTB[v_prep{i}]"
+            )
+        else:
+            filter_parts.append(
+                f"[{i}:v]{v_pre_str}scale={tw}:{th},setsar=1,fps={fps},format=yuv420p,settb=AVTB[v_prep{i}]"
             )
 
         # Audio prep
@@ -706,7 +796,7 @@ def run_studio_montage(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, options
             a_filters.append("asetpts=PTS-STARTPTS")
             filter_parts.append(f"[{i}:a]{','.join(a_filters)}[a_prep{i}]")
         else:
-            filter_parts.append(f"anullsrc=r=44100:cl=stereo,atrim=0:{d_i:0.3f}[a_prep{i}]")
+            filter_parts.append(f"anullsrc=r=44100:cl=stereo,atrim=0:{d_i:0.3f},asetpts=PTS-STARTPTS[a_prep{i}]")
 
     # Transitions
     min_eff_dur = min(eff_durs) if eff_durs else 1.0
@@ -806,8 +896,10 @@ def run_studio_montage(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, options
 
     filter_complex = ";".join(filter_parts)
 
-    use_nvenc = has_nvenc(ffmpeg_exe)
-    vcodec_args = ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "19", "-b:v", "0"] if use_nvenc else ["-c:v", "libx264", "-preset", "fast", "-crf", "19"]
+    if use_nvenc:
+        vcodec_args = ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "20", "-b:v", "0", "-pix_fmt", "yuv420p"]
+    else:
+        vcodec_args = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"]
 
     cmd = [str(ffmpeg_exe), "-y"] + inputs + [
         "-filter_complex", filter_complex,
@@ -823,44 +915,17 @@ def run_studio_montage(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, options
         str(output_path)
     ])
 
-    if progress_cb:
-        progress_cb(5, "Запуск монтажа в Студии FFmpeg...")
-
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, creationflags=creationflags)
-
-    last_pct = 5
-    while True:
-        if cancel_event and cancel_event.is_set():
-            proc.kill()
-            if output_path.exists():
-                try:
-                    output_path.unlink()
-                except OSError:
-                    pass
-            return {"ok": False, "error": "Отменено пользователем"}
-
-        line = proc.stdout.readline()
-        if not line and proc.poll() is not None:
-            break
-        line = line.strip()
-        if line.startswith("out_time_ms="):
-            try:
-                ms = int(line.split("=")[1])
-                cur_sec = ms / 1_000_000
-                pct = min(99, max(5, int((cur_sec / total_duration) * 100)))
-                if pct > last_pct and progress_cb:
-                    last_pct = pct
-                    progress_cb(pct, f"Рендеринг FFmpeg: {pct}%")
-            except Exception:
-                pass
-        elif line == "progress=end":
-            if progress_cb:
-                progress_cb(100, "Монтаж завершён!")
-
-    proc.wait()
-    if proc.returncode != 0:
-        err = proc.stderr.read()[:600] if proc.stderr else "Unknown error"
-        raise RuntimeError(f"FFmpeg Studio failed (code {proc.returncode}): {err}")
+    res_run = run_ffmpeg_with_progress(
+        cmd,
+        total_duration,
+        output_path,
+        progress_cb=progress_cb,
+        cancel_event=cancel_event,
+        creationflags=creationflags,
+        label="Студия FFmpeg"
+    )
+    if not res_run["ok"]:
+        raise RuntimeError(res_run.get("error", "Ошибка монтажа в Студии FFmpeg"))
 
     return {
         "ok": True,
