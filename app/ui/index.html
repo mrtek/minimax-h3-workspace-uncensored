@@ -8084,191 +8084,573 @@ window.addEventListener('wheel', e => {
 }, { passive: false });
 applyZoom();
 
-/* ---------- MONTAGE: join library clips with portable FFmpeg (instant stream copy / NVENC / audio) or ComfyUI ---------- */
+/* ---------- MONTAGE: Dual Engine (ComfyUI & FFmpeg Studio) with i18n support ---------- */
+const I18N_MT = {
+  lang: 'ru',
+  ru: {
+    'mt.title': 'Монтаж',
+    'mt.tab_comfy': '🎬 Монтаж ComfyUI',
+    'mt.tab_ffmpeg': '⚡ Студия FFmpeg',
+    'mt.desc_comfy': 'Склейка клипов с помощью нод ComfyUI, поклиповое увеличение разрешения (RelayVSR / SeedVR2) и плёночное зерно.',
+    'mt.desc_ffmpeg': 'Быстрый нелинейный монтаж на локальном FFmpeg: видеопереходы, фоновая музыка, форматы 9:16/16:9, цветокоррекция и титры.',
+    'mt.clips_head': 'Клипы из Библиотеки',
+    'mt.clips_hint': 'нажмите на клип, чтобы добавить',
+    'mt.from_pc': '+ С компьютера',
+    'mt.order_head': 'Порядок склейки',
+    'mt.order_hint': 'Нажмите на клип в ленте, чтобы посмотреть с этого места (справа). Порядок меняется перетаскиванием или стрелками. Потяните правый край блока, чтобы сделать клип короче (или вернуть длину).',
+    'mt.join_comfy': 'Склеить через ComfyUI',
+    'mt.comfy_hint': 'Склейка стандартными нодами ComfyUI (без пережатия в сторонних утилитах)',
+    'mt.up_clips': 'Увеличить каждый клип и склеить',
+    'mt.export_ff': '⚡ Экспорт через FFmpeg',
+    'mt.trans_head': 'Переходы и скорость',
+    'mt.trans_label': 'Видеопереход:',
+    'mt.dur_label': 'Длительность перехода:',
+    'mt.speed_label': 'Скорость ролика:',
+    'mt.format_head': 'Формат и кадрирование',
+    'mt.aspect_label': 'Соотношение сторон:',
+    'mt.fit_label': 'Заполнение полей:',
+    'mt.color_head': 'Цвет и фильтры',
+    'mt.filter_label': 'Быстрый фильтр:',
+    'mt.brightness_label': 'Яркость:',
+    'mt.contrast_label': 'Контраст:',
+    'mt.saturation_label': 'Насыщенность:',
+    'mt.reset_color': 'Сбросить цвет',
+    'mt.audio_head': 'Фоновая музыка и звук',
+    'mt.audio_pick': '🎵 Выбрать аудиофайл…',
+    'mt.audio_no': 'Аудио не выбрано',
+    'mt.audio_mode': 'Режим звука:',
+    'mt.music_vol': 'Громкость музыки:',
+    'mt.video_vol': 'Звук клипов:',
+    'mt.audio_fade': 'Плавное нарастание и затухание музыки (Fade In / Out)',
+    'mt.audio_loop': 'Зациклить музыку по длине видео',
+    'mt.title_head': 'Титры и текст',
+    'mt.title_text': 'Текст надписи:',
+    'mt.title_pos': 'Положение:',
+    'mt.title_size': 'Размер:',
+    'mt.title_color': 'Цвет текста:'
+  },
+  en: {
+    'mt.title': 'Montage',
+    'mt.tab_comfy': '🎬 ComfyUI Montage',
+    'mt.tab_ffmpeg': '⚡ FFmpeg Studio',
+    'mt.desc_comfy': 'Join clips with ComfyUI nodes, per-clip upscale (RelayVSR / SeedVR2) and film grain.',
+    'mt.desc_ffmpeg': 'Fast non-linear montage with local FFmpeg: transitions, music, 9:16/16:9, color grading and titles.',
+    'mt.clips_head': 'Library Clips',
+    'mt.clips_hint': 'click a clip to add it',
+    'mt.from_pc': '+ From PC',
+    'mt.order_head': 'Clip Order',
+    'mt.order_hint': 'Click a clip to preview. Drag or use arrows to change order. Pull the right edge to trim.',
+    'mt.join_comfy': 'Join via ComfyUI',
+    'mt.comfy_hint': 'Join using native ComfyUI workflow',
+    'mt.up_clips': 'Upscale each clip and join',
+    'mt.export_ff': '⚡ Export via FFmpeg',
+    'mt.trans_head': 'Transitions & Speed',
+    'mt.trans_label': 'Transition:',
+    'mt.dur_label': 'Transition duration:',
+    'mt.speed_label': 'Video speed:',
+    'mt.format_head': 'Format & Framing',
+    'mt.aspect_label': 'Aspect ratio:',
+    'mt.fit_label': 'Fill mode:',
+    'mt.color_head': 'Color & Filters',
+    'mt.filter_label': 'Preset filter:',
+    'mt.brightness_label': 'Brightness:',
+    'mt.contrast_label': 'Contrast:',
+    'mt.saturation_label': 'Saturation:',
+    'mt.reset_color': 'Reset Color',
+    'mt.audio_head': 'Music & Audio',
+    'mt.audio_pick': '🎵 Pick audio file…',
+    'mt.audio_no': 'No audio selected',
+    'mt.audio_mode': 'Audio mode:',
+    'mt.music_vol': 'Music volume:',
+    'mt.video_vol': 'Clips audio:',
+    'mt.audio_fade': 'Fade In / Fade Out music',
+    'mt.audio_loop': 'Loop music for full video length',
+    'mt.title_head': 'Titles & Overlay',
+    'mt.title_text': 'Title text:',
+    'mt.title_pos': 'Position:',
+    'mt.title_size': 'Size:',
+    'mt.title_color': 'Color:'
+  }
+};
+function mtT(k, fb) {
+  const lang = I18N_MT.lang || 'ru';
+  return (I18N_MT[lang] && I18N_MT[lang][k]) || fb || k;
+}
+
 (function mountMontage() {
-  const root = $('#view-montage'), MT = { ids: [], cuts: [], drag: null, busy: false, up: {}, n: 0, px: 26, res: false, audioFile: null, ff: null };
+  const root = $('#view-montage');
+  const MT = {
+    subTab: 'comfy', // 'comfy' | 'ffmpeg'
+    ids: [],
+    cuts: [],
+    drag: null,
+    busy: false,
+    up: {},
+    n: 0,
+    px: 26,
+    res: false,
+    audioFile: null,
+    ff: null,
+    // Studio options
+    stOpts: {
+      transition: 'fade',
+      transition_dur: 0.5,
+      speed: 1.0,
+      aspect: 'original',
+      fit_mode: 'blur',
+      filter: 'none',
+      brightness: 0,
+      contrast: 0,
+      saturation: 0,
+      title_text: '',
+      title_pos: 'bottom',
+      title_size: 'medium',
+      title_color: 'white',
+      audio_mode: 'mix',
+      music_vol: 80,
+      video_vol: 100,
+      audio_fade: true,
+      audio_loop: true
+    }
+  };
+
   try { MT.px = +localStorage.getItem('h3-mt-px') || 26; } catch {}
-  const wOf = d => Math.max(Math.round(MT.px * 2.85), Math.round(d * MT.px));   // block width: the clip length at the chosen scale (short clips keep room for buttons)
-   // cuts[i]: seconds the clip is trimmed to (null: whole clip)
-  const get = id => id.startsWith('up:') ? MT.up[id.slice(3)] : byId(id);   // a clip of the Library or a file from the computer
+  try { MT.subTab = localStorage.getItem('h3-mt-subtab') || 'comfy'; } catch {}
+
+  const wOf = d => Math.max(Math.round(MT.px * 2.85), Math.round(d * MT.px));
+  const get = id => id.startsWith('up:') ? MT.up[id.slice(3)] : byId(id);
+
   root.innerHTML = `
-    <div class="head"><div><h1>Монтаж</h1><p>Склейте клипы из Библиотеки в один ролик: добавьте их по порядку, при необходимости наложите музыку и нажмите «Склеить»</p></div></div>
-    <div class="grid"><div class="col">
-      <div class="card"><div class="card-h"><h3><span class="n">1</span>Клипы из Библиотеки</h3><span class="hint">нажмите на клип, чтобы добавить</span><button type="button" class="btn mini mt-pc" title="Добавить видео со своего компьютера">+ С компьютера</button><input type="file" class="mt-file" accept="video/*" multiple hidden></div><div class="mt-lib"></div><div class="hint mt-hid" style="margin-top:8px"></div></div>
-      <div class="card"><div class="card-h"><h3><span class="n">2</span>Порядок склейки</h3><span class="counter mt-total"></span><span class="mt-zoom"><button type="button" class="btn mini" data-z="-1" title="Мельче">−</button><button type="button" class="btn mini" data-z="0" title="Уместить всю ленту по ширине">По ширине</button><button type="button" class="btn mini" data-z="1" title="Крупнее">+</button></span></div>
-        <div class="mt-strip"></div>
-        <div class="mt-vh" title="Потяните вниз или вверх, чтобы клипы стали крупнее или мельче. Двойной щелчок: как было"><i></i></div>
-        <div class="hint mt-hint" style="margin-top:8px">Нажмите на клип в ленте, чтобы посмотреть с этого места (справа). Ширина блока равна длине клипа. Порядок меняется перетаскиванием или стрелками. Потяните правый край блока, чтобы сделать клип короче (или вернуть длину). Клипы разного размера приводятся к размеру первого. Одинаковые клипы склеиваются мгновенно без потери качества.</div>
-      </div>
-
-      <!-- Card 3: Audio / Music -->
-      <div class="card" id="mtAudioCard">
-        <div class="card-h">
-          <h3><span class="n">3</span>Фоновая музыка / Аудио</h3>
-          <span class="hint">необязательно</span>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <input type="file" id="mtAudioInput" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg" style="display:none">
-            <button type="button" class="btn" id="mtAudioPickBtn">🎵 Выбрать аудиофайл…</button>
-            <span id="mtAudioName" class="hint" style="word-break:break-all">Аудио не выбрано</span>
-            <button type="button" class="btn" id="mtAudioClearBtn" style="display:none;padding:2px 8px;font-size:11px" title="Убрать аудио">✕</button>
-          </div>
-          <div id="mtAudioOptions" style="display:none;flex-direction:column;gap:8px;padding:10px 12px;background:var(--surface-2);border-radius:8px;border:1px solid var(--border)">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-              <label style="font-size:12px;cursor:pointer"><input type="checkbox" id="mtAudioLoop" checked style="vertical-align:middle;margin-right:6px">Зациклить музыку, если видео длиннее</label>
-              <div style="display:flex;align-items:center;gap:6px">
-                <label style="font-size:12px">Режим звука:</label>
-                <select id="mtAudioMode" style="padding:2px 8px;font-size:12px;border-radius:4px;background:var(--surface-3);color:inherit;border:1px solid var(--border)">
-                  <option value="mix" selected>Смешать с клипами</option>
-                  <option value="replace">Заменить звук видео</option>
-                </select>
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-              <label style="font-size:12px;display:flex;align-items:center;gap:6px">
-                Громкость музыки:
-                <input type="range" id="mtMusicVol" min="10" max="100" value="80" style="width:90px">
-                <span id="mtMusicVolVal" style="font-size:11px;min-width:30px">80%</span>
-              </label>
-              <label style="font-size:12px;display:flex;align-items:center;gap:6px" id="mtVideoVolWrap">
-                Звук клипов:
-                <input type="range" id="mtVideoVol" min="0" max="100" value="100" style="width:90px">
-                <span id="mtVideoVolVal" style="font-size:11px;min-width:30px">100%</span>
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Card 4: FFmpeg Manager -->
-      <div class="card" id="mtFfCard">
-        <div class="card-h">
-          <h3><span class="n">4</span>FFmpeg для быстрого монтажа</h3>
-          <span class="badge" id="mtFfBadge">Проверка...</span>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div style="font-size:12.5px;color:var(--dim)">
-            <div id="mtFfStatusText">Проверка наличия портативного FFmpeg...</div>
-            <div style="margin-top:4px;font-size:11.5px;word-break:break-all">
-              <b>Папка:</b> <code id="mtFfPath" style="color:var(--pri)"></code>
-              <span id="mtFfPathBadge" style="font-size:11px;color:var(--muted);margin-left:4px"></span>
-            </div>
-          </div>
-
-          <div id="mtFfActions" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-            <button type="button" class="btn pri" id="mtFfDownloadBtn" style="display:none">⚡ Скачать FFmpeg (~100 МБ)</button>
-            <button type="button" class="btn" id="mtFfCheckUpdBtn" style="display:none">🔄 Проверить обновления / Обновить</button>
-            <button type="button" class="btn" id="mtFfOpenFolderBtn">📁 Папка FFmpeg</button>
-            <button type="button" class="btn" id="mtFfSetFolderBtn">⚙ Указать папку</button>
-            <button type="button" class="btn" id="mtFfResetFolderBtn" style="display:none" title="Вернуть стандартную папку g:\MinimaxH3Workspace\ffmpeg\">Сбросить по умолчанию</button>
-          </div>
-
-          <!-- Download / Update Progress Box -->
-          <div id="mtFfProgressBox" style="display:none;padding:10px 12px;background:var(--surface-2);border-radius:8px;border:1px solid var(--border)">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px">
-              <span id="mtFfProgLabel" style="font-weight:600">Скачивание FFmpeg...</span>
-              <span id="mtFfProgStats" style="font-size:11px;color:var(--dim)">0 МБ / 0 МБ (0%)</span>
-            </div>
-            <div style="width:100%;height:8px;background:var(--surface-3);border-radius:4px;overflow:hidden">
-              <div id="mtFfProgBar" style="width:0%;height:100%;background:var(--pri);transition:width 0.2s"></div>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
-              <span id="mtFfProgSpeed" style="font-size:11px;color:var(--dim)">0 МБ/с</span>
-              <button type="button" class="btn" id="mtFfCancelBtn" style="padding:2px 10px;font-size:11px">Отмена</button>
-            </div>
-          </div>
-        </div>
+    <div class="head" style="margin-bottom:12px">
+      <div>
+        <h1 id="mtTitle">${mtT('mt.title')}</h1>
+        <p id="mtDesc">${MT.subTab === 'ffmpeg' ? mtT('mt.desc_ffmpeg') : mtT('mt.desc_comfy')}</p>
       </div>
     </div>
 
-    <!-- Preview & Controls -->
-    <div class="preview">
-      <div class="screen"><div class="frame" style="aspect-ratio:16/9;width:100%"><div class="res mt-empty"><b>Монтаж</b>добавьте клипы: здесь можно будет посмотреть, как они идут подряд, а потом появится готовый ролик</div><video class="result mt-pv" playsinline hidden></video><video class="result mt-res" controls loop playsinline hidden></video></div></div>
-      <div class="mt-bar" hidden><button type="button" class="btn mt-play" title="Играть / пауза (пробел)">▶</button><input type="range" class="mt-seek" min="0" max="0" value="0" title="Перемотка"><span class="mt-time">0:00 / 0:00</span></div>
-      <div class="mt-tabs" hidden><button type="button" class="btn mini on" data-pv="seq">Предпросмотр</button><button type="button" class="btn mini" data-pv="res">Готовый ролик</button></div>
-
-      <div id="mtEnginePill" style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);margin:4px 0 8px 0">
-        <span id="mtEngineDot" style="width:8px;height:8px;border-radius:50%;background:#4ade80"></span>
-        <span id="mtEngineText">Быстрый FFmpeg</span>
+    <!-- Sub-Tabs Switcher -->
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:12px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn mt-subtab-btn ${MT.subTab === 'comfy' ? 'pri' : ''}" data-mttab="comfy" style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;font-weight:600">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+          <span>${mtT('mt.tab_comfy')}</span>
+        </button>
+        <button type="button" class="btn mt-subtab-btn ${MT.subTab === 'ffmpeg' ? 'pri' : ''}" data-mttab="ffmpeg" style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;font-weight:600">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>
+          <span>${mtT('mt.tab_ffmpeg')}</span>
+        </button>
       </div>
 
-      <button class="go mt-go" id="mtGoFf" type="button" style="width:100%">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>
-        <span id="mtGoFfText">⚡ Склеить (FFmpeg)</span>
-      </button>
-
-      <button type="button" class="btn" id="mtGoComfy" style="width:100%;margin-top:8px;padding:10px 14px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="opacity:0.85"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
-        <span id="mtGoComfyText">Склеить через ComfyUI</span>
-      </button>
-      <div id="mtComfyHint" class="hint" style="text-align:center;font-size:11px;margin-top:4px;color:var(--muted)">Склейка стандартными нодами ComfyUI (медленнее, без звуковой дорожки)</div>
-
-      <div class="mt-upbox" style="margin-top:10px"><select class="mt-upeng" title="Чем увеличивать каждый клип"><option value="relay">Быстро (RelayVSR, в 2 раза)</option><option value="seed">Качественно (SeedVR2, в 2 раза, долго)</option></select><button type="button" class="btn mt-upgo" title="Каждый клип увеличивается отдельно (быстро, память не переполняется), потом увеличенные склеиваются. Исходные клипы остаются.">Увеличить каждый клип и склеить</button></div>
-      <div class="mt-sets">
-        <label class="mt-s-detail"><span><b>Детали: <i class="mt-dv">70</i>%</b> меньше — мягче, без пересвета лиц; больше — чётче</span><input type="range" class="mt-detail" min="0" max="100" step="5" value="70"></label>
-        <label class="mt-s-sharp" hidden><span><b>Чёткость: <i class="mt-sv">100</i>%</b> меньше — мягче; 100 — как есть</span><input type="range" class="mt-sharp" min="0" max="100" step="5" value="100"></label>
-        <label><span><b>Зерно плёнки: <i class="mt-gv">0</i>%</b> 0 — выключено. Накладывается на каждый клип отдельно, потом клипы склеиваются</span><input type="range" class="mt-grain" min="0" max="100" step="5" value="0"></label>
+      <!-- FFmpeg Fast Status Pill -->
+      <div id="mtFfStatusPill" style="display:inline-flex;align-items:center;gap:8px;font-size:12px;background:var(--surface-2);padding:4px 10px;border-radius:99px;border:1px solid var(--border)">
+        <span id="mtFfPillDot" style="width:8px;height:8px;border-radius:50%;background:#4ade80"></span>
+        <span id="mtFfPillText">FFmpeg 9.0.2</span>
+        <button type="button" id="mtFfQuickFolder" class="btn mini" style="padding:2px 8px;font-size:11px" title="Папка FFmpeg">📁 Папка</button>
       </div>
-      <div class="mt-pipe" hidden></div>
+    </div>
 
-      <!-- Montage progress bar -->
-      <div id="mtJoinProgressBox" style="display:none;width:100%;margin-top:10px">
-        <div style="width:100%;height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden">
-          <div id="mtJoinProgressBar" style="width:0%;height:100%;background:var(--pri);transition:width 0.2s"></div>
+    <!-- ==================== TAB 1: COMFYUI MONTAGE (ORIGINAL) ==================== -->
+    <div id="mtPaneComfy" ${MT.subTab !== 'comfy' ? 'style="display:none"' : ''}>
+      <div class="grid"><div class="col">
+        <div class="card"><div class="card-h"><h3><span class="n">1</span>${mtT('mt.clips_head')}</h3><span class="hint">${mtT('mt.clips_hint')}</span><button type="button" class="btn mini mt-pc" title="Добавить видео со своего компьютера">${mtT('mt.from_pc')}</button><input type="file" class="mt-file" accept="video/*" multiple hidden></div><div class="mt-lib"></div><div class="hint mt-hid" style="margin-top:8px"></div></div>
+        <div class="card"><div class="card-h"><h3><span class="n">2</span>${mtT('mt.order_head')}</h3><span class="counter mt-total"></span><span class="mt-zoom"><button type="button" class="btn mini" data-z="-1" title="Мельче">−</button><button type="button" class="btn mini" data-z="0" title="Уместить всю ленту по ширине">По ширине</button><button type="button" class="btn mini" data-z="1" title="Крупнее">+</button></span></div>
+          <div class="mt-strip"></div>
+          <div class="mt-vh" title="Потяните вниз или вверх, чтобы клипы стали крупнее или мельче. Двойной щелчок: как было"><i></i></div>
+          <div class="hint mt-hint" style="margin-top:8px">${mtT('mt.order_hint')}</div>
         </div>
       </div>
 
-      <div class="status mt-status"></div>
-    </div></div>`;
+      <!-- Preview & Comfy Controls -->
+      <div class="preview">
+        <div class="screen"><div class="frame" style="aspect-ratio:16/9;width:100%"><div class="res mt-empty"><b>Монтаж</b>добавьте клипы: здесь можно будет посмотреть, как они идут подряд, а потом появится готовый ролик</div><video class="result mt-pv" playsinline hidden></video><video class="result mt-res" controls loop playsinline hidden></video></div></div>
+        <div class="mt-bar" hidden><button type="button" class="btn mt-play" title="Играть / пауза (пробел)">▶</button><input type="range" class="mt-seek" min="0" max="0" value="0" title="Перемотка"><span class="mt-time">0:00 / 0:00</span></div>
+        <div class="mt-tabs" hidden><button type="button" class="btn mini on" data-pv="seq">Предпросмотр</button><button type="button" class="btn mini" data-pv="res">Готовый ролик</button></div>
+
+        <button class="go mt-go" id="mtGoComfy" type="button" style="width:100%;margin-top:8px">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+          <span>${mtT('mt.join_comfy')}</span>
+        </button>
+        <div class="hint" style="text-align:center;font-size:11px;margin-top:4px;color:var(--muted)">${mtT('mt.comfy_hint')}</div>
+
+        <div class="mt-upbox" style="margin-top:10px"><select class="mt-upeng" title="Чем увеличивать каждый клип"><option value="relay">Быстро (RelayVSR, в 2 раза)</option><option value="seed">Качественно (SeedVR2, в 2 раза, долго)</option></select><button type="button" class="btn mt-upgo" title="Каждый клип увеличивается отдельно (быстро, память не переполняется), потом увеличенные склеиваются. Исходные клипы остаются.">${mtT('mt.up_clips')}</button></div>
+        <div class="mt-sets">
+          <label class="mt-s-detail"><span><b>Детали: <i class="mt-dv">70</i>%</b> меньше — мягче, без пересвета лиц; больше — чётче</span><input type="range" class="mt-detail" min="0" max="100" step="5" value="70"></label>
+          <label class="mt-s-sharp" hidden><span><b>Чёткость: <i class="mt-sv">100</i>%</b> меньше — мягче; 100 — как есть</span><input type="range" class="mt-sharp" min="0" max="100" step="5" value="100"></label>
+          <label><span><b>Зерно плёнки: <i class="mt-gv">0</i>%</b> 0 — выключено. Накладывается на каждый клип отдельно, потом клипы склеиваются</span><input type="range" class="mt-grain" min="0" max="100" step="5" value="0"></label>
+        </div>
+        <div class="mt-pipe" hidden></div>
+
+        <div class="status mt-status" style="margin-top:8px"></div>
+      </div></div>
+    </div>
+
+    <!-- ==================== TAB 2: FFMPEG STUDIO ==================== -->
+    <div id="mtPaneFfmpeg" ${MT.subTab !== 'ffmpeg' ? 'style="display:none"' : ''}>
+      <!-- FFmpeg Management Header Card -->
+      <div class="card" style="margin-bottom:14px;padding:12px 16px;background:var(--surface-2)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-weight:600;font-size:14px">Портативный движок FFmpeg</span>
+              <span class="badge" id="mtFfBadge">Проверка...</span>
+            </div>
+            <div style="font-size:12px;color:var(--dim);margin-top:4px">
+              <span id="mtFfStatusText">Проверка наличия...</span> · <b>Папка:</b> <code id="mtFfPath" style="color:var(--pri)"></code> <span id="mtFfPathBadge" style="color:var(--muted)"></span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button type="button" class="btn pri mini" id="mtFfDownloadBtn" style="display:none">⚡ Скачать FFmpeg (~100 МБ)</button>
+            <button type="button" class="btn mini" id="mtFfCheckUpdBtn">🔄 Проверить обновления</button>
+            <button type="button" class="btn mini" id="mtFfOpenFolderBtn">📁 Папка FFmpeg</button>
+            <button type="button" class="btn mini" id="mtFfSetFolderBtn">⚙ Сменить папку</button>
+            <button type="button" class="btn mini" id="mtFfResetFolderBtn" style="display:none">Сбросить</button>
+          </div>
+        </div>
+
+        <div id="mtFfProgressBox" style="display:none;margin-top:10px;padding:8px 12px;background:var(--surface-3);border-radius:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:12px">
+            <span id="mtFfProgLabel" style="font-weight:600">Скачивание FFmpeg...</span>
+            <span id="mtFfProgStats" style="font-size:11px;color:var(--dim)">0 МБ / 0 МБ (0%)</span>
+          </div>
+          <div style="width:100%;height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden">
+            <div id="mtFfProgBar" style="width:0%;height:100%;background:var(--pri);transition:width 0.2s"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+            <span id="mtFfProgSpeed" style="font-size:11px;color:var(--dim)">0 МБ/с</span>
+            <button type="button" class="btn mini" id="mtFfCancelBtn" style="padding:2px 8px;font-size:11px">Отмена</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid"><div class="col">
+        <!-- Studio Card 1: Clip Strip -->
+        <div class="card">
+          <div class="card-h">
+            <h3><span class="n">1</span>${mtT('mt.order_head')}</h3>
+            <span class="counter mt-total-ff"></span>
+            <span class="mt-zoom"><button type="button" class="btn mini" data-z="-1">−</button><button type="button" class="btn mini" data-z="0">По ширине</button><button type="button" class="btn mini" data-z="1">+</button></span>
+          </div>
+          <div class="mt-strip mt-strip-ff"></div>
+          <div class="hint" style="margin-top:8px">Синхронизировано с Библиотекой. Перетаскивайте клипы, обрезайте край или меняйте порядок.</div>
+        </div>
+
+        <!-- Studio Card 2: Transitions & Speed -->
+        <div class="card">
+          <div class="card-h"><h3><span class="n">2</span>${mtT('mt.trans_head')}</h3><span class="badge" style="background:#1e293b;color:#38bdf8">xfade</span></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px">
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.trans_label')}</label>
+              <select id="stTransition" style="width:100%;padding:6px 10px;font-size:12px;border-radius:6px;background:var(--surface-2);color:inherit;border:1px solid var(--border)">
+                <option value="none">Без перехода (прямая склейка)</option>
+                <option value="fade" selected>Плавное растворение (Crossfade)</option>
+                <option value="fadeblack">Затемнение в чёрный (Fade Black)</option>
+                <option value="fadewhite">Засветка в белый (Fade White)</option>
+                <option value="wipeleft">Шторка влево (Wipe Left)</option>
+                <option value="wiperight">Шторка вправо (Wipe Right)</option>
+                <option value="slideleft">Скольжение влево (Slide Left)</option>
+                <option value="slideright">Скольжение вправо (Slide Right)</option>
+                <option value="circleopen">Радиальный круг (Circle Open)</option>
+                <option value="circleclose">Сужающийся круг (Circle Close)</option>
+                <option value="dissolve">Пиксельное растворение (Dissolve)</option>
+                <option value="zoomin">Плавный наезд (Zoom In)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.dur_label')}</label>
+              <select id="stTransDur" style="width:100%;padding:6px 10px;font-size:12px;border-radius:6px;background:var(--surface-2);color:inherit;border:1px solid var(--border)">
+                <option value="0.3">0.3 сек (быстрый)</option>
+                <option value="0.5" selected>0.5 сек (стандарт)</option>
+                <option value="0.8">0.8 сек (мягкий)</option>
+                <option value="1.0">1.0 сек (длинный)</option>
+                <option value="1.5">1.5 сек (кинематографичный)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.speed_label')}</label>
+              <select id="stSpeed" style="width:100%;padding:6px 10px;font-size:12px;border-radius:6px;background:var(--surface-2);color:inherit;border:1px solid var(--border)">
+                <option value="0.5">0.5x (Замедление в 2 раза)</option>
+                <option value="0.75">0.75x (Легкое замедление)</option>
+                <option value="1.0" selected>1.0x (Обычная скорость)</option>
+                <option value="1.25">1.25x (Легкое ускорение)</option>
+                <option value="1.5">1.5x (Ускорение в 1.5 раза)</option>
+                <option value="2.0">2.0x (Ускорение в 2 раза)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Studio Card 3: Format & Framing -->
+        <div class="card">
+          <div class="card-h"><h3><span class="n">3</span>${mtT('mt.format_head')}</h3><span class="hint">TikTok / Shorts / Кино</span></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:12px">
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.aspect_label')}</label>
+              <select id="stAspect" style="width:100%;padding:6px 10px;font-size:12px;border-radius:6px;background:var(--surface-2);color:inherit;border:1px solid var(--border)">
+                <option value="original" selected>Исходное (как у исходных клипов)</option>
+                <option value="16:9">16:9 — Горизонтально (YouTube, ТВ)</option>
+                <option value="9:16">9:16 — Вертикально (Shorts / Reels / TikTok)</option>
+                <option value="1:1">1:1 — Квадрат (Лента соцсетей)</option>
+                <option value="21:9">21:9 — Ультра-широкое (Кинематограф)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.fit_label')}</label>
+              <select id="stFitMode" style="width:100%;padding:6px 10px;font-size:12px;border-radius:6px;background:var(--surface-2);color:inherit;border:1px solid var(--border)">
+                <option value="blur" selected>✨ Размытый фон (видео по центру, размытие по бокам)</option>
+                <option value="pad">Чёрные полосы (Letterbox / Pillarbox)</option>
+                <option value="crop">Заполнение экрана с обрезкой краев</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Studio Card 4: Color & Filters -->
+        <div class="card">
+          <div class="card-h">
+            <h3><span class="n">4</span>${mtT('mt.color_head')}</h3>
+            <button type="button" class="btn mini" id="stResetColor" style="padding:2px 8px;font-size:11px">${mtT('mt.reset_color')}</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;align-items:end">
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.filter_label')}</label>
+              <select id="stFilter" style="width:100%;padding:6px 10px;font-size:12px;border-radius:6px;background:var(--surface-2);color:inherit;border:1px solid var(--border)">
+                <option value="none" selected>Без фильтра (оригинал)</option>
+                <option value="bw">Кино-Ч/Б (Black & White)</option>
+                <option value="vignette">Виньетка (затемнение по краям)</option>
+                <option value="warm">Тёплый кинотон</option>
+                <option value="cold">Холодный тон</option>
+                <option value="vintage">Винтаж / Ретро-сепия</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;display:flex;justify-content:space-between;margin-bottom:4px">
+                <span>${mtT('mt.brightness_label')}</span>
+                <span id="stBrightVal" style="font-weight:600">0%</span>
+              </label>
+              <input type="range" id="stBrightness" min="-50" max="50" step="5" value="0" style="width:100%">
+            </div>
+            <div>
+              <label style="font-size:12px;display:flex;justify-content:space-between;margin-bottom:4px">
+                <span>${mtT('mt.contrast_label')}</span>
+                <span id="stContrastVal" style="font-weight:600">0%</span>
+              </label>
+              <input type="range" id="stContrast" min="-50" max="50" step="5" value="0" style="width:100%">
+            </div>
+            <div>
+              <label style="font-size:12px;display:flex;justify-content:space-between;margin-bottom:4px">
+                <span>${mtT('mt.saturation_label')}</span>
+                <span id="stSatVal" style="font-weight:600">100%</span>
+              </label>
+              <input type="range" id="stSaturation" min="0" max="200" step="5" value="100" style="width:100%">
+            </div>
+          </div>
+        </div>
+
+        <!-- Studio Card 5: Audio & Music -->
+        <div class="card">
+          <div class="card-h"><h3><span class="n">5</span>${mtT('mt.audio_head')}</h3><span class="hint">саундтрек и сведение</span></div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <input type="file" id="stAudioInput" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg" style="display:none">
+              <button type="button" class="btn" id="stAudioPickBtn">${mtT('mt.audio_pick')}</button>
+              <span id="stAudioName" class="hint" style="word-break:break-all">${mtT('mt.audio_no')}</span>
+              <button type="button" class="btn mini" id="stAudioClearBtn" style="display:none;padding:2px 8px;font-size:11px" title="Убрать аудио">✕</button>
+            </div>
+            <div id="stAudioOptsBox" style="display:none;flex-direction:column;gap:8px;padding:10px 12px;background:var(--surface-2);border-radius:8px;border:1px solid var(--border)">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <label style="font-size:12px">${mtT('mt.audio_mode')}</label>
+                  <select id="stAudioMode" style="padding:2px 8px;font-size:12px;border-radius:4px;background:var(--surface-3);color:inherit;border:1px solid var(--border)">
+                    <option value="mix" selected>Смешать музыку со звуком клипов</option>
+                    <option value="replace">Заменить звук клипов музыкой</option>
+                  </select>
+                </div>
+                <div style="display:flex;gap:14px;flex-wrap:wrap">
+                  <label style="font-size:12px;cursor:pointer"><input type="checkbox" id="stAudioFade" checked style="vertical-align:middle;margin-right:6px">${mtT('mt.audio_fade')}</label>
+                  <label style="font-size:12px;cursor:pointer"><input type="checkbox" id="stAudioLoop" checked style="vertical-align:middle;margin-right:6px">${mtT('mt.audio_loop')}</label>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+                <label style="font-size:12px;display:flex;align-items:center;gap:6px">
+                  ${mtT('mt.music_vol')}
+                  <input type="range" id="stMusicVol" min="10" max="200" value="80" style="width:90px">
+                  <span id="stMusicVolVal" style="font-size:11px;min-width:30px">80%</span>
+                </label>
+                <label style="font-size:12px;display:flex;align-items:center;gap:6px" id="stVideoVolWrap">
+                  ${mtT('mt.video_vol')}
+                  <input type="range" id="stVideoVol" min="0" max="200" value="100" style="width:90px">
+                  <span id="stVideoVolVal" style="font-size:11px;min-width:30px">100%</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Studio Card 6: Titles & Text -->
+        <div class="card">
+          <div class="card-h"><h3><span class="n">6</span>${mtT('mt.title_head')}</h3><span class="hint">водяной знак или заголовок</span></div>
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;align-items:end">
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.title_text')}</label>
+              <input type="text" id="stTitleText" placeholder="Например: Снято в Minimax H3 Studio" style="width:100%;padding:6px 10px;font-size:12px;border-radius:6px;background:var(--surface-2);color:inherit;border:1px solid var(--border)">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.title_pos')}</label>
+              <select id="stTitlePos" style="width:100%;padding:6px 10px;font-size:12px;border-radius:6px;background:var(--surface-2);color:inherit;border:1px solid var(--border)">
+                <option value="bottom" selected>Снизу</option>
+                <option value="center">По центру</option>
+                <option value="top">Сверху</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.title_size')}</label>
+              <select id="stTitleSize" style="width:100%;padding:6px 10px;font-size:12px;border-radius:6px;background:var(--surface-2);color:inherit;border:1px solid var(--border)">
+                <option value="small">Мелкий</option>
+                <option value="medium" selected>Средний</option>
+                <option value="large">Крупный</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">${mtT('mt.title_color')}</label>
+              <select id="stTitleColor" style="width:100%;padding:6px 10px;font-size:12px;border-radius:6px;background:var(--surface-2);color:inherit;border:1px solid var(--border)">
+                <option value="white" selected>Белый</option>
+                <option value="yellow">Жёлтый</option>
+                <option value="cyan">Голубой</option>
+                <option value="red">Красный</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Studio Right Column: Preview & Export -->
+      <div class="preview">
+        <div class="screen"><div class="frame" style="aspect-ratio:16/9;width:100%"><div class="res mt-empty-ff"><b>Студия FFmpeg</b>добавьте клипы и настройте монтаж: готовый ролик появится здесь</div><video class="result mt-res-ff" controls loop playsinline hidden></video></div></div>
+
+        <div id="mtStudioNvencPill" style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim);margin:6px 0">
+          <span style="width:8px;height:8px;border-radius:50%;background:#4ade80"></span>
+          <span>⚡ Аппаратное ускорение NVIDIA NVENC</span>
+        </div>
+
+        <button class="go" id="mtGoStudioFf" type="button" style="width:100%">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>
+          <span id="mtGoStudioFfText">${mtT('mt.export_ff')}</span>
+        </button>
+
+        <div id="mtStudioProgBox" style="display:none;width:100%;margin-top:10px">
+          <div style="width:100%;height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden">
+            <div id="mtStudioProgBar" style="width:0%;height:100%;background:var(--pri);transition:width 0.2s"></div>
+          </div>
+        </div>
+
+        <div class="status mt-status-ff" style="margin-top:8px"></div>
+      </div></div>
+    </div>
+  `;
+
+  // Sub-tab switching logic
+  $$('.mt-subtab-btn', root).forEach(btn => {
+    btn.onclick = () => {
+      const tab = btn.dataset.mttab;
+      MT.subTab = tab;
+      try { localStorage.setItem('h3-mt-subtab', tab); } catch {}
+      $$('.mt-subtab-btn', root).forEach(b => b.classList.toggle('pri', b.dataset.mttab === tab));
+      $('#mtPaneComfy').style.display = tab === 'comfy' ? 'block' : 'none';
+      $('#mtPaneFfmpeg').style.display = tab === 'ffmpeg' ? 'block' : 'none';
+      $('#mtDesc').textContent = tab === 'ffmpeg' ? mtT('mt.desc_ffmpeg') : mtT('mt.desc_comfy');
+      render();
+    };
+  });
+
   const hidden = () => { try { return JSON.parse(localStorage.getItem('h3-mt-hide') || '[]'); } catch { return []; } };
   const hideSet = a => { try { localStorage.setItem('h3-mt-hide', JSON.stringify(a)); } catch {} };
-  const fullOf = i => get(MT.ids[i]).len || 5, durOf = i => MT.cuts[i] != null ? MT.cuts[i] : fullOf(i);
+  const fullOf = i => get(MT.ids[i])?.len || 5, durOf = i => MT.cuts[i] != null ? MT.cuts[i] : fullOf(i);
   const lenTxt = it => it.len ? it.len.toFixed(1).replace('.0', '') + ' с' : '';
 
   function render() {
-    const keep = MT.ids.map(id => !!get(id) && !get(id).missing); MT.cuts = MT.cuts.filter((_, i) => keep[i]); MT.ids = MT.ids.filter((_, i) => keep[i]);
+    const keep = MT.ids.map(id => !!get(id) && !get(id).missing);
+    MT.cuts = MT.cuts.filter((_, i) => keep[i]);
+    MT.ids = MT.ids.filter((_, i) => keep[i]);
     const hid = hidden(), all = LIB.filter(it => it.kind !== 'image' && !it.missing && it.url), vids = all.filter(it => !hid.includes(it.id)), nh = all.length - vids.length;
-    $('.mt-hid', root).innerHTML = nh ? `Убрано из списка: ${nh} · <button type="button" class="a-change" data-showall>Вернуть все</button>` : '';
-    $('.mt-lib', root).innerHTML = vids.length ? vids.map(it => `<button type="button" class="mt-card" data-id="${it.id}" title="${esc(it.prompt || '')}"><video src="${it.url}#t=0.5" preload="metadata" muted playsinline></video><span class="mt-plus">+</span><span class="mt-x" data-hide="${it.id}" role="button" title="Убрать из этого списка (в Библиотеке клип останется)">✕</span><span class="mt-len">${lenTxt(it)}</span><small>${esc(it.prompt || MODE_NAME[it.mode] || '')}</small></button>`).join('')
-      : '<div class="hint">В Библиотеке пока нет видео. Сначала сгенерируйте клипы.</div>';
-    $('.mt-strip', root).innerHTML = MT.ids.length ? MT.ids.map((id, i) => { const it = get(id), d = durOf(i); return `<div class="mt-item" draggable="true" data-i="${i}" style="width:${wOf(d)}px"><video src="${it.url}#t=0.5" preload="metadata" muted playsinline></video><span class="mt-n">${i + 1}</span>${window.mtPipeDone && window.mtPipeDone(id) ? '<span class="mt-ok" title="Клип обработан">✓</span>' : ''}<span class="mt-len">${d.toFixed(1).replace('.0', '')} с${MT.cuts[i] != null ? ' ✂' : ''}</span><div class="mt-b"><button type="button" data-mv="-1" title="Влево">◀</button><button type="button" data-rm title="Убрать">✕</button><button type="button" data-mv="1" title="Вправо">▶</button></div><i class="mt-rh" title="Потяните, чтобы сделать клип короче или длиннее (длиннее оригинала нельзя)"></i></div>`; }).join('')
-      : '<div class="hint">Пока пусто: нажмите на клипы сверху.</div>';
+
+    // 1. Library cards
+    const libEl = $('.mt-lib', root);
+    if (libEl) {
+      libEl.innerHTML = vids.length ? vids.map(it => `<button type="button" class="mt-card" data-id="${it.id}" title="${esc(it.prompt || '')}"><video src="${it.url}#t=0.5" preload="metadata" muted playsinline></video><span class="mt-plus">+</span><span class="mt-x" data-hide="${it.id}" role="button" title="Убрать из этого списка (в Библиотеке клип останется)">✕</span><span class="mt-len">${lenTxt(it)}</span><small>${esc(it.prompt || MODE_NAME[it.mode] || '')}</small></button>`).join('')
+        : '<div class="hint">В Библиотеке пока нет видео. Сначала сгенерируйте клипы.</div>';
+    }
+    const hidEl = $('.mt-hid', root);
+    if (hidEl) {
+      hidEl.innerHTML = nh ? `Убрано из списка: ${nh} · <button type="button" class="a-change" data-showall>Вернуть все</button>` : '';
+    }
+
+    // 2. Strips
+    const stripComfy = $('.mt-strip', $('#mtPaneComfy'));
+    const stripFf = $('.mt-strip-ff', root);
+    const stripHtml = MT.ids.length ? MT.ids.map((id, i) => {
+      const it = get(id), d = durOf(i);
+      return `<div class="mt-item" draggable="true" data-i="${i}" style="width:${wOf(d)}px"><video src="${it.url}#t=0.5" preload="metadata" muted playsinline></video><span class="mt-n">${i + 1}</span>${window.mtPipeDone && window.mtPipeDone(id) ? '<span class="mt-ok" title="Клип обработан">✓</span>' : ''}<span class="mt-len">${d.toFixed(1).replace('.0', '')} с${MT.cuts[i] != null ? ' ✂' : ''}</span><div class="mt-b"><button type="button" data-mv="-1" title="Влево">◀</button><button type="button" data-rm title="Убрать">✕</button><button type="button" data-mv="1" title="Вправо">▶</button></div><i class="mt-rh" title="Потяните, чтобы сделать клип короче или длиннее"></i></div>`;
+    }).join('') : '<div class="hint">Пока пусто: нажмите на клипы сверху или добавьте видео.</div>';
+
+    if (stripComfy) {
+      stripComfy.innerHTML = stripHtml;
+      if (MT.ids.length) stripComfy.insertAdjacentHTML('beforeend', '<i class="mt-ph"></i>');
+    }
+    if (stripFf) {
+      stripFf.innerHTML = stripHtml;
+    }
+
     const total = MT.ids.reduce((a, id, i) => a + durOf(i), 0);
-    $('.mt-total', root).textContent = MT.ids.length ? `${MT.ids.length} клипов · ≈ ${Math.round(total)} с` : '';
-    if (MT.ids.length) $('.mt-strip', root).insertAdjacentHTML('beforeend', '<i class="mt-ph"></i>');
+    const totTxt = MT.ids.length ? `${MT.ids.length} клипов · ≈ ${Math.round(total)} с` : '';
+    const totEl = $('.mt-total', root);
+    if (totEl) totEl.textContent = totTxt;
+    const totFf = $('.mt-total-ff', root);
+    if (totFf) totFf.textContent = totTxt;
+
     syncPlayer();
     if (window.mtSaveState) { window.mtSaveState(); window.mtPipePaint(); }
   }
 
-  /* preview player: the clips in the chosen order play one after another; the slider, a click on a clip and the playhead seek in the whole montage */
+  /* Preview Player logic (for Comfy pane) */
   const P = { g: 0, i: 0, playing: false, raf: 0, drag: false, mode: 'seq', loading: false, tok: 0 };
   const pv = $('.mt-pv', root), bar = $('.mt-bar', root), seek = $('.mt-seek', root), playBtn = $('.mt-play', root), timeEl = $('.mt-time', root);
   const mmss = s => { s = Math.max(0, s); return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); };
   const totalLen = () => MT.ids.reduce((a, _, i) => a + durOf(i), 0);
   const startOf = i => { let a = 0; for (let j = 0; j < i; j++) a += durOf(j); return a; };
-  function locate(g) { let a = 0; const n = MT.ids.length; for (let i = 0; i < n; i++) { const d = durOf(i); if (g < a + d - 1e-6 || i === n - 1) return { i, off: Math.min(d, Math.max(0, g - a)) }; a += d; } return { i: 0, off: 0 }; }
+
+  function locate(g) {
+    let a = 0; const n = MT.ids.length;
+    for (let i = 0; i < n; i++) {
+      const d = durOf(i);
+      if (g < a + d - 1e-6 || i === n - 1) return { i, off: Math.min(d, Math.max(0, g - a)) };
+      a += d;
+    }
+    return { i: 0, off: 0 };
+  }
   function loadAt(i, off, play) {
     const id = MT.ids[i], it = get(id); if (!it) return;
-    const tok = ++P.tok, go = () => { if (tok !== P.tok) return; P.loading = false; try { pv.currentTime = off; } catch {} if (play) pv.play().catch(() => {}); };
-    if (pv.dataset.id !== id) { P.loading = true; pv.dataset.id = id; pv.src = it.url; pv.addEventListener('loadedmetadata', go, { once: true }); pv.load(); } else go();
+    const tok = ++P.tok, go = () => { if (tok !== P.tok) return; P.loading = false; try { if (pv) pv.currentTime = off; } catch {} if (play && pv) pv.play().catch(() => {}); };
+    if (pv && pv.dataset.id !== id) { P.loading = true; pv.dataset.id = id; pv.src = it.url; pv.addEventListener('loadedmetadata', go, { once: true }); pv.load(); } else go();
   }
   function seekTo(g, play) {
     if (!MT.ids.length) return;
     g = Math.min(Math.max(0, g), totalLen()); const L = locate(g); P.g = g; P.i = L.i; loadAt(L.i, L.off, play); updateUI();
   }
   function updateUI() {
-    const tot = totalLen(); if (!P.drag) seek.value = Math.round(P.g * 10);
-    timeEl.textContent = mmss(P.g) + ' / ' + mmss(tot);
-    const strip = $('.mt-strip', root), ph = $('.mt-ph', strip), items = $$('.mt-item', strip); if (!ph || !items.length) return;
+    const tot = totalLen();
+    if (seek && !P.drag) seek.value = Math.round(P.g * 10);
+    if (timeEl) timeEl.textContent = mmss(P.g) + ' / ' + mmss(tot);
+    const strip = $('.mt-strip', $('#mtPaneComfy')), ph = $('.mt-ph', strip), items = $$('.mt-item', strip);
+    if (!ph || !items.length) return;
     items.forEach((x, k) => x.classList.toggle('cur', k === P.i));
     const el = items[P.i]; if (!el) return;
-    const x = el.offsetLeft + Math.min(1, Math.max(0, (P.g - startOf(P.i)) / durOf(P.i))) * el.offsetWidth; ph.style.left = x + 'px';
+    const x = el.offsetLeft + Math.min(1, Math.max(0, (P.g - startOf(P.i)) / durOf(P.i))) * el.offsetWidth;
+    ph.style.left = x + 'px';
     if (P.playing && (x < strip.scrollLeft + 20 || x > strip.scrollLeft + strip.clientWidth - 20)) strip.scrollLeft = Math.max(0, x - 60);
   }
-  function setPlaying(on) { P.playing = on; playBtn.textContent = on ? '⏸' : '▶'; clearInterval(P.raf); if (on) P.raf = setInterval(tick, 40); else pv.pause(); }
+  function setPlaying(on) { P.playing = on; if (playBtn) playBtn.textContent = on ? '⏸' : '▶'; clearInterval(P.raf); if (on) P.raf = setInterval(tick, 40); else if (pv) pv.pause(); }
   function tick() {
-    if (!P.playing) return;
+    if (!P.playing || !pv) return;
     if (!P.loading) {
       const d = durOf(P.i), t = pv.currentTime;
       if (!pv.seeking && (t >= d - 0.04 || pv.ended)) {
@@ -8286,86 +8668,163 @@ applyZoom();
   function showMode(m) {
     P.mode = m; const n = MT.ids.length, seq = m === 'seq' && n > 0, res = m === 'res' && MT.res;
     if (!seq) setPlaying(false);
-    pv.hidden = !seq; bar.hidden = !seq; $('.mt-res', root).hidden = !res; $('.mt-empty', root).hidden = seq || res;
-    const tabs = $('.mt-tabs', root); tabs.hidden = !MT.res; $$('[data-pv]', tabs).forEach(b => b.classList.toggle('on', b.dataset.pv === m));
-    if (m === 'seq' && !$('.mt-res', root).paused) $('.mt-res', root).pause();
+    if (pv) pv.hidden = !seq;
+    if (bar) bar.hidden = !seq;
+    const resEl = $('.mt-res', root);
+    if (resEl) resEl.hidden = !res;
+    const emptyEl = $('.mt-empty', root);
+    if (emptyEl) emptyEl.hidden = seq || res;
+    const tabs = $('.mt-tabs', root);
+    if (tabs) {
+      tabs.hidden = !MT.res;
+      $$('[data-pv]', tabs).forEach(b => b.classList.toggle('on', b.dataset.pv === m));
+    }
+    if (m === 'seq' && resEl && !resEl.paused) resEl.pause();
   }
   function syncPlayer() {
-    const n = MT.ids.length, tot = totalLen(); seek.max = Math.round(tot * 10);
-    if (!n) { setPlaying(false); pv.removeAttribute('src'); delete pv.dataset.id; P.g = 0; P.i = 0; if (P.mode === 'seq') P.mode = MT.res ? 'res' : 'seq'; }
-    else { setPlaying(false); seekTo(Math.min(P.g, tot), false); }
-    showMode(P.mode); updateUI();
+    const n = MT.ids.length, tot = totalLen();
+    if (seek) seek.max = Math.round(tot * 10);
+    if (!n) {
+      setPlaying(false);
+      if (pv) { pv.removeAttribute('src'); delete pv.dataset.id; }
+      P.g = 0; P.i = 0;
+      if (P.mode === 'seq') P.mode = MT.res ? 'res' : 'seq';
+    } else {
+      setPlaying(false);
+      seekTo(Math.min(P.g, tot), false);
+    }
+    showMode(P.mode);
+    updateUI();
   }
-  playBtn.onclick = togglePlay;
-  seek.oninput = () => { P.drag = true; seekTo(seek.value / 10, P.playing); };
-  seek.onchange = () => { P.drag = false; };
-  addEventListener('keydown', e => {
-    if (e.code !== 'Space' || root.offsetParent === null || e.target.closest('input,textarea,select,button,[contenteditable]')) return;
-    e.preventDefault(); togglePlay();
-  });
+
+  if (playBtn) playBtn.onclick = togglePlay;
+  if (seek) {
+    seek.oninput = () => { P.drag = true; seekTo(seek.value / 10, P.playing); };
+    seek.onchange = () => { P.drag = false; };
+  }
+
   function fitPx() {
-    const W = $('.mt-strip', root).clientWidth - 8, n = MT.ids.length; if (!n) return 26;
-    for (let px = 90; px > 8; px--) { const w = MT.ids.reduce((a, _, i) => a + Math.max(Math.round(px * 2.85), Math.round(durOf(i) * px)), 0) + 8 * (n - 1); if (w <= W) return px; }
+    const strip = $('.mt-strip', root);
+    const W = (strip ? strip.clientWidth : 800) - 8, n = MT.ids.length; if (!n) return 26;
+    for (let px = 90; px > 8; px--) {
+      const w = MT.ids.reduce((a, _, i) => a + Math.max(Math.round(px * 2.85), Math.round(durOf(i) * px)), 0) + 8 * (n - 1);
+      if (w <= W) return px;
+    }
     return 8;
   }
   const setPx = v => { MT.px = Math.min(90, Math.max(8, Math.round(v))); try { localStorage.setItem('h3-mt-px', MT.px); } catch {} render(); };
-  window.montageLoad = ids => { MT.ids = ids.slice(); MT.cuts = ids.map(() => null); render(); const st = $('.mt-status', root); st.textContent = 'Сцены из Видеостудии уже стоят по порядку. Нажмите «Склеить»: готовый ролик появится справа и в Библиотеке.'; };
-  $('.mt-pc', root).onclick = () => $('.mt-file', root).click();
-  $('.mt-file', root).onchange = async e => {
+  window.montageLoad = ids => {
+    MT.ids = ids.slice();
+    MT.cuts = ids.map(() => null);
+    render();
+    const st = $('.mt-status', root);
+    if (st) st.textContent = 'Сцены из Видеостудии уже стоят по порядку. Нажмите «Склеить» в нужной вкладке.';
+  };
+
+  const pcBtn = $('.mt-pc', root);
+  if (pcBtn) pcBtn.onclick = () => $('.mt-file', root)?.click();
+  const fileIn = $('.mt-file', root);
+  if (fileIn) fileIn.onchange = async e => {
     const files = [...e.target.files]; e.target.value = '';
     for (const f of files) {
       const url = URL.createObjectURL(f);
-      const meta = await new Promise(res => { const v = document.createElement('video'); v.preload = 'metadata'; v.muted = true; v.onloadedmetadata = () => res({ len: v.duration || 0, res: v.videoWidth ? `${v.videoWidth}×${v.videoHeight}` : '' }); v.onerror = () => res(null); v.src = url; });
+      const meta = await new Promise(res => {
+        const v = document.createElement('video');
+        v.preload = 'metadata'; v.muted = true;
+        v.onloadedmetadata = () => res({ len: v.duration || 0, res: v.videoWidth ? `${v.videoWidth}×${v.videoHeight}` : '' });
+        v.onerror = () => res(null);
+        v.src = url;
+      });
       if (!meta) { toast('Не удалось открыть файл «' + f.name + '». Нужно видео (mp4, mov, webm).'); URL.revokeObjectURL(url); continue; }
-      const k = 'k' + (++MT.n); MT.up[k] = { id: 'up:' + k, file: f, url, len: meta.len, res: meta.res, prompt: f.name };
-      MT.ids.push('up:' + k); MT.cuts.push(null);
+      const k = 'k' + (++MT.n);
+      MT.up[k] = { id: 'up:' + k, file: f, url, len: meta.len, res: meta.res, prompt: f.name };
+      MT.ids.push('up:' + k);
+      MT.cuts.push(null);
     }
     render();
   };
-  const move = (i, j) => { if (j < 0 || j >= MT.ids.length) return; const [x] = MT.ids.splice(i, 1), [c] = MT.cuts.splice(i, 1); MT.ids.splice(j, 0, x); MT.cuts.splice(j, 0, c); render(); };
+
+  const move = (i, j) => {
+    if (j < 0 || j >= MT.ids.length) return;
+    const [x] = MT.ids.splice(i, 1), [c] = MT.cuts.splice(i, 1);
+    MT.ids.splice(j, 0, x);
+    MT.cuts.splice(j, 0, c);
+    render();
+  };
+
   root.addEventListener('click', e => {
     if (e.target.closest('[data-showall]')) { hideSet([]); render(); return; }
     const zb = e.target.closest('[data-z]'); if (zb) { const k = +zb.dataset.z; setPx(k > 0 ? MT.px * 1.25 : k < 0 ? MT.px * 0.8 : fitPx()); return; }
     const tb = e.target.closest('[data-pv]'); if (tb) { showMode(tb.dataset.pv); return; }
-    const x = e.target.closest('[data-hide]'); if (x) { e.stopPropagation(); const id = x.dataset.hide; hideSet([...hidden(), id]); const k2 = MT.ids.map(v => v !== id); MT.cuts = MT.cuts.filter((_, i) => k2[i]); MT.ids = MT.ids.filter((_, i) => k2[i]); render(); return; }
+    const x = e.target.closest('[data-hide]');
+    if (x) {
+      e.stopPropagation();
+      const id = x.dataset.hide;
+      hideSet([...hidden(), id]);
+      const k2 = MT.ids.map(v => v !== id);
+      MT.cuts = MT.cuts.filter((_, i) => k2[i]);
+      MT.ids = MT.ids.filter((_, i) => k2[i]);
+      render();
+      return;
+    }
     const c = e.target.closest('.mt-card'); if (c) { MT.ids.push(c.dataset.id); MT.cuts.push(null); render(); return; }
     const it = e.target.closest('.mt-item'); if (!it) return; const i = +it.dataset.i;
     if (e.target.closest('[data-rm]')) { MT.ids.splice(i, 1); MT.cuts.splice(i, 1); render(); return; }
     const mv = e.target.closest('[data-mv]'); if (mv) { move(i, i + +mv.dataset.mv); return; }
     if (e.target.closest('.mt-rh') || P.mode !== 'seq') { if (P.mode !== 'seq') showMode('seq'); else return; }
-    const r = it.getBoundingClientRect(); seekTo(startOf(i) + Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * durOf(i), P.playing);   // a click on a clip: watch from that place
+    const r = it.getBoundingClientRect(); seekTo(startOf(i) + Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * durOf(i), P.playing);
   });
+
   root.addEventListener('pointerdown', e => {
     const h = e.target.closest('.mt-rh'); if (!h) return;
     e.preventDefault(); e.stopPropagation();
     const el = h.closest('.mt-item'), i = +el.dataset.i, x0 = e.clientX, d0 = durOf(i), full = fullOf(i);
     el.draggable = false; try { h.setPointerCapture(e.pointerId); } catch {}
-    const move2 = ev => { const d = Math.min(full, Math.max(0.5, Math.round((d0 + (ev.clientX - x0) / MT.px) * 10) / 10)); MT.cuts[i] = d; el.style.width = wOf(d) + 'px'; $('.mt-len', el).textContent = d.toFixed(1).replace('.0', '') + ' с ✂'; };
-    const up = () => { h.removeEventListener('pointermove', move2); h.removeEventListener('pointerup', up); if (MT.cuts[i] != null && MT.cuts[i] >= full - 0.05) MT.cuts[i] = null; render(); };
-    h.addEventListener('pointermove', move2); h.addEventListener('pointerup', up);
+    const move2 = ev => {
+      const d = Math.min(full, Math.max(0.5, Math.round((d0 + (ev.clientX - x0) / MT.px) * 10) / 10));
+      MT.cuts[i] = d;
+      el.style.width = wOf(d) + 'px';
+      const lenEl = $('.mt-len', el);
+      if (lenEl) lenEl.textContent = d.toFixed(1).replace('.0', '') + ' с ✂';
+    };
+    const up = () => {
+      h.removeEventListener('pointermove', move2);
+      h.removeEventListener('pointerup', up);
+      if (MT.cuts[i] != null && MT.cuts[i] >= full - 0.05) MT.cuts[i] = null;
+      render();
+    };
+    h.addEventListener('pointermove', move2);
+    h.addEventListener('pointerup', up);
   });
+
   root.addEventListener('dragstart', e => { const it = e.target.closest('.mt-item'); if (!it) return; MT.drag = +it.dataset.i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'mt'); });
   root.addEventListener('dragover', e => { const it = e.target.closest('.mt-item'); if (it && MT.drag != null) { e.preventDefault(); $$('.mt-item', root).forEach(x => x.classList.toggle('over', x === it)); } });
   root.addEventListener('drop', e => { const it = e.target.closest('.mt-item'); if (!it || MT.drag == null) return; e.preventDefault(); const from = MT.drag; MT.drag = null; move(from, +it.dataset.i); });
   root.addEventListener('dragend', () => { MT.drag = null; $$('.mt-item', root).forEach(x => x.classList.remove('over')); });
 
+  /* ---------- Original Pipeline state (PIPE) for Comfy ---------- */
   let PEND = null; try { PEND = JSON.parse(localStorage.getItem('h3-mt-state') || 'null'); } catch {}
-  function applyPend() {   // the order of clips from the last time, as soon as the Library is loaded
+  function applyPend() {
     if (!PEND || !LIB.length) return; const p = PEND; PEND = null;
     if (MT.ids.length || !Array.isArray(p.ids)) return;
-    const ok = p.ids.map(id => !!byId(id)); MT.ids = p.ids.filter((_, i) => ok[i]); MT.cuts = (p.cuts || []).filter((_, i) => ok[i]); render();
+    const ok = p.ids.map(id => !!byId(id));
+    MT.ids = p.ids.filter((_, i) => ok[i]);
+    MT.cuts = (p.cuts || []).filter((_, i) => ok[i]);
+    render();
   }
   const durList = () => MT.ids.map((_, i) => MT.cuts[i] != null && MT.cuts[i] < fullOf(i) - 0.05 ? MT.cuts[i] : null);
-  const orderKey = () => JSON.stringify([MT.ids, durList()]);   // what the joined video was made from: another order or trim makes it out of date
+  const orderKey = () => JSON.stringify([MT.ids, durList()]);
 
-  /* the state of the work (which clips are enlarged, grained, joined) is kept, so it survives closing the program: the finished parts lie in the Library */
   let PIPE = { sig: '', doUp: false, grain: 0, steps: {}, joined: null };
   try { const s = JSON.parse(localStorage.getItem('h3-mt-pipe') || 'null'); if (s && s.steps) PIPE = s; } catch {}
   const pipeSave = () => { try { localStorage.setItem('h3-mt-pipe', JSON.stringify(PIPE)); } catch {} pipePaint(); };
   window.mtSaveState = () => { if (PEND) return; try { const k = MT.ids.map(id => !id.startsWith('up:')); localStorage.setItem('h3-mt-state', JSON.stringify({ ids: MT.ids.filter((_, i) => k[i]), cuts: MT.cuts.filter((_, i) => k[i]) })); } catch {} };
   window.mtPipeDone = id => { const s = PIPE.steps[id]; return !!(s && (PIPE.grain > 0 ? s.gr : PIPE.doUp ? s.up : false)); };
+
   function pipePaint() {
-    const box = $('.mt-pipe', root), n = MT.ids.length, line = (t, ok) => `<div class="${ok ? 'ok' : ''}">${ok ? '✓ ' : '• '}${t}</div>`;
+    const box = $('.mt-pipe', root);
+    if (!box) return;
+    const n = MT.ids.length, line = (t, ok) => `<div class="${ok ? 'ok' : ''}">${ok ? '✓ ' : '• '}${t}</div>`;
     let h = '';
     const have = id => PIPE.steps[id] || {};
     if (PIPE.doUp && n) { const c = MT.ids.filter(id => have(id).up).length; h += line(`Увеличение: ${c} из ${n} клипов${c === n ? ' — завершено' : ''}`, c === n); }
@@ -8378,88 +8837,113 @@ applyZoom();
     box.innerHTML = h; box.hidden = !h;
   }
   window.mtPipePaint = pipePaint;
+
   function showDone(item) {
     const st = $('.mt-status', root), v = $('.mt-res', root);
-    v.src = item.url; v.hidden = false; v.muted = false; MT.res = true; showMode('res');
-    st.innerHTML = 'Склейка завершена: ролик лежит в Библиотеке. <button class="btn pri" id="mtSave" type="button" style="padding:4px 12px;font-size:12px" title="Сохранить готовый ролик целиком на компьютер">Сохранить на компьютер</button> <button class="btn" id="mtUp" type="button" style="padding:4px 12px;font-size:12px" title="Увеличить разрешение (долго)">Увеличить</button>';
-    $('#mtSave', root).onclick = () => saveItems([byId(item.id) || normItem(item)]);
-    $('#mtUp', root).onclick = () => openUpscale(byId(item.id) || normItem(item));
+    if (v) { v.src = item.url; v.hidden = false; v.muted = false; MT.res = true; showMode('res'); }
+    if (st) {
+      st.innerHTML = 'Склейка завершена: ролик лежит в Библиотеке. <button class="btn pri" id="mtSave" type="button" style="padding:4px 12px;font-size:12px">Сохранить на компьютер</button> <button class="btn" id="mtUp" type="button" style="padding:4px 12px;font-size:12px">Увеличить</button>';
+      $('#mtSave', root).onclick = () => saveItems([byId(item.id) || normItem(item)]);
+      $('#mtUp', root).onclick = () => openUpscale(byId(item.id) || normItem(item));
+    }
   }
-  window.mtRestoreResult = () => {   // after a restart: show the joined video again if it is still in the Library
+  window.mtRestoreResult = () => {
     const j = PIPE.joined, it = j && byId(j.id); if (!it || MT.res || it.missing) return;
     showDone(it);
   };
 
-  /* ---------- Audio picker handling ---------- */
-  const audioIn = $('#mtAudioInput', root);
-  $('#mtAudioPickBtn', root).onclick = () => audioIn.click();
-  audioIn.onchange = e => {
+  /* ---------- Audio picker handling for FFmpeg Studio ---------- */
+  const stAudioIn = $('#stAudioInput', root);
+  const stPickBtn = $('#stAudioPickBtn', root);
+  if (stPickBtn && stAudioIn) stPickBtn.onclick = () => stAudioIn.click();
+  if (stAudioIn) stAudioIn.onchange = e => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     MT.audioFile = file;
     const mb = (file.size / (1024 * 1024)).toFixed(1);
-    $('#mtAudioName', root).textContent = `${file.name} (${mb} МБ)`;
-    $('#mtAudioOptions', root).style.display = 'flex';
-    $('#mtAudioClearBtn', root).style.display = 'inline-block';
+    $('#stAudioName', root).textContent = `${file.name} (${mb} МБ)`;
+    $('#stAudioOptsBox', root).style.display = 'flex';
+    $('#stAudioClearBtn', root).style.display = 'inline-block';
   };
-  $('#mtAudioClearBtn', root).onclick = () => {
+  const stClearBtn = $('#stAudioClearBtn', root);
+  if (stClearBtn) stClearBtn.onclick = () => {
     MT.audioFile = null;
-    audioIn.value = '';
-    $('#mtAudioName', root).textContent = 'Аудио не выбрано';
-    $('#mtAudioOptions', root).style.display = 'none';
-    $('#mtAudioClearBtn', root).style.display = 'none';
-  };
-  $('#mtMusicVol', root).oninput = e => { $('#mtMusicVolVal', root).textContent = e.target.value + '%'; };
-  $('#mtVideoVol', root).oninput = e => { $('#mtVideoVolVal', root).textContent = e.target.value + '%'; };
-  $('#mtAudioMode', root).onchange = e => {
-    $('#mtVideoVolWrap', root).style.display = e.target.value === 'replace' ? 'none' : 'flex';
+    if (stAudioIn) stAudioIn.value = '';
+    $('#stAudioName', root).textContent = mtT('mt.audio_no');
+    $('#stAudioOptsBox', root).style.display = 'none';
+    stClearBtn.style.display = 'none';
   };
 
-  /* ---------- FFmpeg Management ---------- */
+  const stMusicVol = $('#stMusicVol', root);
+  if (stMusicVol) stMusicVol.oninput = e => { $('#stMusicVolVal', root).textContent = e.target.value + '%'; };
+  const stVideoVol = $('#stVideoVol', root);
+  if (stVideoVol) stVideoVol.oninput = e => { $('#stVideoVolVal', root).textContent = e.target.value + '%'; };
+  const stAudioMode = $('#stAudioMode', root);
+  if (stAudioMode) stAudioMode.onchange = e => {
+    $('#stVideoVolWrap', root).style.display = e.target.value === 'replace' ? 'none' : 'flex';
+  };
+
+  // Color sliders
+  const stBright = $('#stBrightness', root);
+  if (stBright) stBright.oninput = e => { $('#stBrightVal', root).textContent = (e.target.value > 0 ? '+' : '') + e.target.value + '%'; };
+  const stContrast = $('#stContrast', root);
+  if (stContrast) stContrast.oninput = e => { $('#stContrastVal', root).textContent = (e.target.value > 0 ? '+' : '') + e.target.value + '%'; };
+  const stSat = $('#stSaturation', root);
+  if (stSat) stSat.oninput = e => { $('#stSatVal', root).textContent = e.target.value + '%'; };
+  const stResetColBtn = $('#stResetColor', root);
+  if (stResetColBtn) stResetColBtn.onclick = () => {
+    if (stBright) { stBright.value = 0; $('#stBrightVal', root).textContent = '0%'; }
+    if (stContrast) { stContrast.value = 0; $('#stContrastVal', root).textContent = '0%'; }
+    if (stSat) { stSat.value = 100; $('#stSatVal', root).textContent = '100%'; }
+    if ($('#stFilter', root)) $('#stFilter', root).value = 'none';
+  };
+
+  /* ---------- FFmpeg Management (Status & Updates) ---------- */
   async function refreshFfStatus() {
     try {
       const res = await fetch('/api/ffmpeg/status');
       const st = await res.json();
       MT.ff = st;
-      $('#mtFfPath', root).textContent = st.dir || '—';
-      $('#mtFfPathBadge', root).textContent = st.is_default ? '(по умолчанию)' : '(своя папка)';
-      $('#mtFfResetFolderBtn', root).style.display = st.is_default ? 'none' : 'inline-block';
+      const pathEl = $('#mtFfPath', root); if (pathEl) pathEl.textContent = st.dir || '—';
+      const pathBadge = $('#mtFfPathBadge', root); if (pathBadge) pathBadge.textContent = st.is_default ? '(по умолчанию)' : '(своя папка)';
+      const resetBtn = $('#mtFfResetFolderBtn', root); if (resetBtn) resetBtn.style.display = st.is_default ? 'none' : 'inline-block';
+
+      const badge = $('#mtFfBadge', root);
+      const stText = $('#mtFfStatusText', root);
+      const dlBtn = $('#mtFfDownloadBtn', root);
+      const checkBtn = $('#mtFfCheckUpdBtn', root);
+      const pillDot = $('#mtFfPillDot', root);
+      const pillText = $('#mtFfPillText', root);
 
       if (st.installed) {
-        $('#mtFfBadge', root).innerHTML = `<span style="background:#166534;color:#4ade80;padding:2px 7px;border-radius:99px">✓ Готов (${esc(st.version || 'v9')})</span>`;
-        $('#mtFfStatusText', root).textContent = `Установлен портативный FFmpeg (${st.version || ''}). Быстрая склейка без потери качества и наложение музыки активны.`;
-        $('#mtFfDownloadBtn', root).style.display = 'none';
-        $('#mtFfCheckUpdBtn', root).style.display = 'inline-block';
-        $('#mtEngineDot', root).style.background = '#4ade80';
-        $('#mtEngineText', root).textContent = 'Быстрый FFmpeg (без потерь качества)';
-        $('#mtGoFf', root).style.display = 'flex';
-        $('#mtGoFfText', root).textContent = '⚡ Склеить (FFmpeg)';
-        $('#mtGoComfy', root).classList.remove('go');
-        $('#mtGoComfyText', root).textContent = 'Склеить через ComfyUI';
+        if (badge) badge.innerHTML = `<span style="background:#166534;color:#4ade80;padding:2px 7px;border-radius:99px">✓ Готов (${esc(st.version || 'v9')})</span>`;
+        if (stText) stText.textContent = `Установлен портативный FFmpeg (${st.version || ''}). Быстрая склейка без потерь, видеопереходы, эффекты и звук активны.`;
+        if (dlBtn) dlBtn.style.display = 'none';
+        if (checkBtn) checkBtn.style.display = 'inline-block';
+        if (pillDot) pillDot.style.background = '#4ade80';
+        if (pillText) pillText.textContent = `FFmpeg ${st.version || 'готов'}`;
       } else {
-        $('#mtFfBadge', root).innerHTML = `<span style="background:#7c2d12;color:#fb923c;padding:2px 7px;border-radius:99px">⚠ Не установлен</span>`;
-        $('#mtFfStatusText', root).textContent = 'Портативный FFmpeg не установлен в папке проекта. Скачайте его в один клик (~100 МБ) для мгновенной склейки и поддержки аудио, либо используйте склейку через ComfyUI.';
-        $('#mtFfDownloadBtn', root).style.display = 'inline-block';
-        $('#mtFfCheckUpdBtn', root).style.display = 'none';
-        $('#mtEngineDot', root).style.background = '#f59e0b';
-        $('#mtEngineText', root).textContent = 'ComfyUI (медленнее, без аудиодорожки)';
-        $('#mtGoFf', root).style.display = 'none';
-        $('#mtGoComfy', root).classList.add('go');
-        $('#mtGoComfyText', root).textContent = 'Склеить через ComfyUI';
+        if (badge) badge.innerHTML = `<span style="background:#7c2d12;color:#fb923c;padding:2px 7px;border-radius:99px">⚠ Не установлен</span>`;
+        if (stText) stText.textContent = 'Портативный FFmpeg не установлен. Скачайте его в один клик (~100 МБ) для мгновенной склейки, переходов и музыки.';
+        if (dlBtn) dlBtn.style.display = 'inline-block';
+        if (checkBtn) checkBtn.style.display = 'none';
+        if (pillDot) pillDot.style.background = '#f59e0b';
+        if (pillText) pillText.textContent = 'FFmpeg не установлен';
       }
 
       if (st.downloading && st.download_state) {
         updateFfProgress(st.download_state);
       } else if (!st.downloading) {
-        $('#mtFfProgressBox', root).style.display = 'none';
+        const box = $('#mtFfProgressBox', root); if (box) box.style.display = 'none';
       }
     } catch (e) {
-      $('#mtFfStatusText', root).textContent = 'Ошибка проверки FFmpeg: ' + e.message;
+      const stText = $('#mtFfStatusText', root); if (stText) stText.textContent = 'Ошибка проверки FFmpeg: ' + e.message;
     }
   }
 
   function updateFfProgress(ev) {
     const box = $('#mtFfProgressBox', root);
+    if (!box) return;
     box.style.display = 'block';
     if (ev.status === 'downloading') {
       $('#mtFfProgLabel', root).textContent = 'Скачивание FFmpeg...';
@@ -8488,11 +8972,10 @@ applyZoom();
     }
   }
 
-  window.onFfmpegDownload = ev => {
-    updateFfProgress(ev);
-  };
+  window.onFfmpegDownload = ev => updateFfProgress(ev);
 
-  $('#mtFfDownloadBtn', root).onclick = async () => {
+  const dlBtn = $('#mtFfDownloadBtn', root);
+  if (dlBtn) dlBtn.onclick = async () => {
     $('#mtFfProgressBox', root).style.display = 'block';
     $('#mtFfProgLabel', root).textContent = 'Запуск загрузки...';
     $('#mtFfProgBar', root).style.width = '5%';
@@ -8506,20 +8989,20 @@ applyZoom();
     }
   };
 
-  $('#mtFfCancelBtn', root).onclick = async () => {
-    try {
-      await fetch('/api/ffmpeg/cancel', { method: 'POST' });
-    } catch {}
+  const cancelFfBtn = $('#mtFfCancelBtn', root);
+  if (cancelFfBtn) cancelFfBtn.onclick = async () => {
+    try { await fetch('/api/ffmpeg/cancel', { method: 'POST' }); } catch {}
   };
 
-  $('#mtFfCheckUpdBtn', root).onclick = async () => {
+  const checkUpdBtn = $('#mtFfCheckUpdBtn', root);
+  if (checkUpdBtn) checkUpdBtn.onclick = async () => {
     toast('Проверяем обновления FFmpeg...');
     try {
       const r = await fetch('/api/ffmpeg/check-update', { method: 'POST' });
       const j = await r.json();
       if (j.has_update) {
         confirmBox('Доступно обновление FFmpeg', `Найдена новая версия FFmpeg (${j.latest_version}). Текущая: ${j.current_version}. Обновить сейчас?`, 'Обновить', () => {
-          $('#mtFfDownloadBtn', root).click();
+          $('#mtFfDownloadBtn', root)?.click();
         });
       } else {
         toast(`У вас установлена актуальная версия FFmpeg (${j.current_version || ''})`);
@@ -8529,15 +9012,15 @@ applyZoom();
     }
   };
 
-  $('#mtFfOpenFolderBtn', root).onclick = async () => {
-    try {
-      await fetch('/api/ffmpeg/open-folder', { method: 'POST' });
-    } catch (e) {
-      toast('Ошибка: ' + e.message);
-    }
+  const openFolderBtn = $('#mtFfOpenFolderBtn', root);
+  if (openFolderBtn) openFolderBtn.onclick = async () => {
+    try { await fetch('/api/ffmpeg/open-folder', { method: 'POST' }); } catch (e) { toast('Ошибка: ' + e.message); }
   };
+  const quickFolderBtn = $('#mtFfQuickFolder', root);
+  if (quickFolderBtn) quickFolderBtn.onclick = openFolderBtn.onclick;
 
-  $('#mtFfSetFolderBtn', root).onclick = async () => {
+  const setFolderBtn = $('#mtFfSetFolderBtn', root);
+  if (setFolderBtn) setFolderBtn.onclick = async () => {
     const cur = MT.ff?.dir || '';
     const folder = prompt('Укажите папку для портативного FFmpeg:', cur);
     if (folder && folder.trim() && folder.trim() !== cur) {
@@ -8547,16 +9030,14 @@ applyZoom();
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ folder: folder.trim() })
         });
-        const st = await r.json();
         toast('Папка FFmpeg обновлена');
         refreshFfStatus();
-      } catch (e) {
-        toast('Ошибка: ' + e.message);
-      }
+      } catch (e) { toast('Ошибка: ' + e.message); }
     }
   };
 
-  $('#mtFfResetFolderBtn', root).onclick = async () => {
+  const resetFolderBtn = $('#mtFfResetFolderBtn', root);
+  if (resetFolderBtn) resetFolderBtn.onclick = async () => {
     try {
       await fetch('/api/ffmpeg/set-folder', {
         method: 'POST',
@@ -8565,66 +9046,38 @@ applyZoom();
       });
       toast('Сброшено на папку по умолчанию');
       refreshFfStatus();
-    } catch (e) {
-      toast('Ошибка: ' + e.message);
-    }
+    } catch (e) { toast('Ошибка: ' + e.message); }
   };
 
-  /* ---------- MONTAGE EXECUTION ---------- */
-  async function joinNow(ids, durs, forceComfy = false) {
+  /* ---------- COMFYUI MONTAGE EXECUTION ---------- */
+  async function joinComfy(ids, durs) {
     const st = $('.mt-status', root);
-    const progBox = $('#mtJoinProgressBox', root);
-    const progBar = $('#mtJoinProgressBar', root);
-    const btnFf = $('#mtGoFf', root);
-    const btnComfy = $('#mtGoComfy', root);
-
     if (MT.busy && !MT.chaining) return;
-    if (ids.length < 2) { st.textContent = 'Добавьте хотя бы два клипа'; return; }
-
-    const isFf = !forceComfy && MT.ff && MT.ff.installed;
-    if (!forceComfy && (!MT.ff || !MT.ff.installed)) {
-      toast('FFmpeg не установлен. Используйте склейку через ComfyUI или скачайте FFmpeg.');
-      return;
-    }
-
+    if (ids.length < 2) { if (st) st.textContent = 'Добавьте хотя бы два клипа'; return; }
     const key = orderKey();
     MT.busy = true; MT.joining = true;
-    if (btnFf) btnFf.disabled = true;
-    if (btnComfy) btnComfy.disabled = true;
-    if (progBox) progBox.style.display = 'block';
-    if (progBar) progBar.style.width = '5%';
-    st.textContent = isFf ? 'Подготовка FFmpeg монтажа…' : 'Отправляем клипы в ComfyUI…';
+    const btn = $('#mtGoComfy', root); if (btn) btn.disabled = true;
+    if (st) st.textContent = 'Отправляем клипы в ComfyUI…';
     pipePaint();
 
     const cleanup = () => {
       MT.busy = false; MT.joining = false; MT.chaining = false;
-      if (btnFf) btnFf.disabled = false;
-      if (btnComfy) btnComfy.disabled = false;
-      if (progBox) progBox.style.display = 'none';
+      if (btn) btn.disabled = false;
       pipePaint();
     };
-    const fail = msg => { cleanup(); st.textContent = msg; };
+    const fail = msg => { cleanup(); if (st) st.textContent = msg; };
 
     try {
       const fd = new FormData();
       fd.append('ids', JSON.stringify(ids));
       fd.append('durs', JSON.stringify(durs));
+      fd.append('force_comfy', '1');
       ids.filter(id => id.startsWith('up:')).forEach(id => {
         const u = get(id), k = id.slice(3);
         fd.append('res_' + k, u.res || '');
         fd.append('len_' + k, String(u.len || 0));
         fd.append('file_' + k, u.file, u.file.name);
       });
-      if (MT.audioFile && isFf) {
-        fd.append('audio', MT.audioFile);
-        fd.append('audio_loop', $('#mtAudioLoop', root)?.checked ? 'true' : 'false');
-        fd.append('audio_mode', $('#mtAudioMode', root)?.value || 'mix');
-        fd.append('music_vol', (($('#mtMusicVol', root)?.value || 80) / 100).toFixed(2));
-        fd.append('video_vol', (($('#mtVideoVol', root)?.value || 100) / 100).toFixed(2));
-      }
-      if (forceComfy || !isFf) {
-        fd.append('force_comfy', '1');
-      }
 
       const r = await fetch('/api/montage', { method: 'POST', body: fd });
       const txt = await r.text();
@@ -8632,17 +9085,12 @@ applyZoom();
       try { res = JSON.parse(txt); } catch { res = { error: txt }; }
       if (!r.ok) throw new Error(res.error || r.statusText);
 
-      const qTitle = isFf ? `Монтаж FFmpeg: ${ids.length} клипов` : `Монтаж ComfyUI: ${ids.length} клипов`;
-      qAdd(res.prompt_id, 'montage', qTitle);
-      st.textContent = isFf ? 'Склеиваем через FFmpeg…' : 'Склеиваем в ComfyUI…';
+      qAdd(res.prompt_id, 'montage', `ComfyUI: ${ids.length} клипов`);
+      if (st) st.textContent = 'Склеиваем в ComfyUI…';
 
       onPrompt(res.prompt_id, ev => {
         if (ev.prompt_id !== res.prompt_id) return;
-        if (ev.type === 'progress') {
-          const val = ev.value || 0;
-          if (progBar) progBar.style.width = val + '%';
-          st.textContent = ev.text || `Монтаж: ${val}%`;
-        } else if (ev.type === 'done') {
+        if (ev.type === 'done') {
           offPrompt(res.prompt_id);
           cleanup();
           PIPE.joined = { id: ev.item.id, key };
@@ -8650,107 +9098,247 @@ applyZoom();
           showDone(byId(ev.item.id) || normItem(ev.item));
         } else if (ev.type === 'error') {
           offPrompt(res.prompt_id);
-          fail((isFf ? 'FFmpeg склейка не удалась: ' : 'Склейка не удалась: ') + ev.message);
+          fail('Склейка ComfyUI не удалась: ' + ev.message);
         } else if (ev.type === 'interrupted') {
           offPrompt(res.prompt_id);
           fail('Склейка остановлена');
         }
       });
-    } catch (err) {
-      fail('Склейка не удалась: ' + err.message);
-    }
+    } catch (err) { fail('Склейка не удалась: ' + err.message); }
   }
 
-  $('#mtGoFf', root).onclick = () => {
-    if (+$('.mt-grain', root)?.value > 0) chain('none', false);
-    else joinNow(MT.ids.slice(), durList(), false);
-  };
-  $('#mtGoComfy', root).onclick = () => {
-    if (+$('.mt-grain', root)?.value > 0) chain('none', true);
-    else joinNow(MT.ids.slice(), durList(), true);
+  const goComfyBtn = $('#mtGoComfy', root);
+  if (goComfyBtn) goComfyBtn.onclick = () => {
+    if (+$('.mt-grain', root)?.value > 0) chain('none');
+    else joinComfy(MT.ids.slice(), durList());
   };
 
-  /* «Увеличить каждый клип и склеить» / зерно: the clips are done one by one (each is short, so memory is enough), then the finished ones are joined.
-     What is finished is remembered, so after an error or a restart the work goes on from the first clip that is not done. */
+  /* ---------- FFMPEG STUDIO MONTAGE EXECUTION ---------- */
+  async function executeFfStudio() {
+    const st = $('.mt-status-ff', root);
+    const progBox = $('#mtStudioProgBox', root);
+    const progBar = $('#mtStudioProgBar', root);
+    const btn = $('#mtGoStudioFf', root);
+
+    if (MT.busy) return;
+    if (MT.ids.length < 2) { if (st) st.textContent = 'Добавьте хотя бы два клипа'; return; }
+
+    if (!MT.ff || !MT.ff.installed) {
+      toast('Портативный FFmpeg не установлен. Нажмите «Скачать FFmpeg» сверху.');
+      return;
+    }
+
+    MT.busy = true;
+    if (btn) btn.disabled = true;
+    if (progBox) progBox.style.display = 'block';
+    if (progBar) progBar.style.width = '5%';
+    if (st) st.textContent = 'Подготовка рендеринга в Студии FFmpeg…';
+
+    const cleanup = () => {
+      MT.busy = false;
+      if (btn) btn.disabled = false;
+      if (progBox) progBox.style.display = 'none';
+    };
+    const fail = msg => { cleanup(); if (st) st.textContent = msg; };
+
+    try {
+      const fd = new FormData();
+      fd.append('ids', JSON.stringify(MT.ids));
+      fd.append('durs', JSON.stringify(durList()));
+      fd.append('studio', '1');
+
+      // Transitions & Speed
+      fd.append('transition', $('#stTransition', root)?.value || 'fade');
+      fd.append('transition_dur', $('#stTransDur', root)?.value || '0.5');
+      fd.append('speed', $('#stSpeed', root)?.value || '1.0');
+
+      // Aspect & Framing
+      fd.append('aspect', $('#stAspect', root)?.value || 'original');
+      fd.append('fit_mode', $('#stFitMode', root)?.value || 'blur');
+
+      // Color & Filters
+      const bVal = +($('#stBrightness', root)?.value || 0) / 100.0;
+      const cVal = 1.0 + (+($('#stContrast', root)?.value || 0) / 100.0);
+      const sVal = +($('#stSaturation', root)?.value || 100) / 100.0;
+      const flt = $('#stFilter', root)?.value || 'none';
+      fd.append('color', JSON.stringify({ brightness: bVal, contrast: cVal, saturation: sVal, filter: flt }));
+
+      // Titles / Text overlay
+      const tText = $('#stTitleText', root)?.value?.trim() || '';
+      const tPos = $('#stTitlePos', root)?.value || 'bottom';
+      const tSz = $('#stTitleSize', root)?.value || 'medium';
+      const tCol = $('#stTitleColor', root)?.value || 'white';
+      fd.append('title', JSON.stringify({ text: tText, position: tPos, size: tSz, color: tCol }));
+
+      // Audio & Music
+      if (MT.audioFile) {
+        fd.append('audio', MT.audioFile);
+        fd.append('audio_mode', $('#stAudioMode', root)?.value || 'mix');
+        fd.append('music_vol', (($('#stMusicVol', root)?.value || 80) / 100.0).toFixed(2));
+        fd.append('video_vol', (($('#stVideoVol', root)?.value || 100) / 100.0).toFixed(2));
+        fd.append('audio_fade', $('#stAudioFade', root)?.checked ? 'true' : 'false');
+        fd.append('audio_loop', $('#stAudioLoop', root)?.checked ? 'true' : 'false');
+      }
+
+      MT.ids.filter(id => id.startsWith('up:')).forEach(id => {
+        const u = get(id), k = id.slice(3);
+        fd.append('res_' + k, u.res || '');
+        fd.append('len_' + k, String(u.len || 0));
+        fd.append('file_' + k, u.file, u.file.name);
+      });
+
+      const r = await fetch('/api/montage', { method: 'POST', body: fd });
+      const txt = await r.text();
+      let res;
+      try { res = JSON.parse(txt); } catch { res = { error: txt }; }
+      if (!r.ok) throw new Error(res.error || r.statusText);
+
+      qAdd(res.prompt_id, 'montage', `Студия FFmpeg: ${MT.ids.length} клипов`);
+      if (st) st.textContent = 'Рендеринг видео через FFmpeg…';
+
+      onPrompt(res.prompt_id, ev => {
+        if (ev.prompt_id !== res.prompt_id) return;
+        if (ev.type === 'progress') {
+          const val = ev.value || 0;
+          if (progBar) progBar.style.width = val + '%';
+          if (st) st.textContent = ev.text || `Рендеринг FFmpeg: ${val}%`;
+        } else if (ev.type === 'done') {
+          offPrompt(res.prompt_id);
+          cleanup();
+          const v = $('.mt-res-ff', root);
+          if (v) {
+            v.src = ev.item.url;
+            v.hidden = false;
+            v.muted = false;
+            v.play().catch(() => {});
+          }
+          const empty = $('.mt-empty-ff', root);
+          if (empty) empty.hidden = true;
+          if (st) {
+            st.innerHTML = '✓ Готово! Ролик сохранён в Библиотеке. <button class="btn pri" id="stSaveBtn" type="button" style="padding:4px 12px;font-size:12px">Сохранить</button> <button class="btn" id="stOpenFolder" type="button" style="padding:4px 12px;font-size:12px">Открыть в папке</button>';
+            $('#stSaveBtn', root).onclick = () => saveItems([byId(ev.item.id) || normItem(ev.item)]);
+            $('#stOpenFolder', root).onclick = async () => {
+              try { await fetch('/api/results/open-folder', { method: 'POST' }); } catch {}
+            };
+          }
+        } else if (ev.type === 'error') {
+          offPrompt(res.prompt_id);
+          fail('Ошибка рендеринга FFmpeg: ' + ev.message);
+        } else if (ev.type === 'interrupted') {
+          offPrompt(res.prompt_id);
+          fail('Рендеринг остановлен');
+        }
+      });
+    } catch (err) { fail('Ошибка Студии: ' + err.message); }
+  }
+
+  const goStudioBtn = $('#mtGoStudioFf', root);
+  if (goStudioBtn) goStudioBtn.onclick = executeFfStudio;
+
+  /* ---------- Original Per-clip Upscale / Grain (chain) for Comfy ---------- */
   const upBtn = $('.mt-upgo', root), upTxt = upBtn ? upBtn.textContent : '';
-  const setsPaint = () => { const relay = $('.mt-upeng', root)?.value === 'relay'; if ($('.mt-s-detail', root)) $('.mt-s-detail', root).hidden = !relay; if ($('.mt-s-sharp', root)) $('.mt-s-sharp', root).hidden = relay; };   // the detail slider belongs to RelayVSR, the sharpness one to SeedVR2
+  const setsPaint = () => {
+    const relay = $('.mt-upeng', root)?.value === 'relay';
+    if ($('.mt-s-detail', root)) $('.mt-s-detail', root).hidden = !relay;
+    if ($('.mt-s-sharp', root)) $('.mt-s-sharp', root).hidden = relay;
+  };
   if ($('.mt-upeng', root)) $('.mt-upeng', root).onchange = setsPaint;
   setsPaint();
-  [['.mt-detail', '.mt-dv'], ['.mt-sharp', '.mt-sv'], ['.mt-grain', '.mt-gv']].forEach(([a, b]) => { const elA = $(a, root); if (elA) elA.oninput = () => { const elB = $(b, root); if (elB) elB.textContent = elA.value; }; });
+
+  [['.mt-detail', '.mt-dv'], ['.mt-sharp', '.mt-sv'], ['.mt-grain', '.mt-gv']].forEach(([a, b]) => {
+    const elA = $(a, root);
+    if (elA) elA.oninput = () => { const elB = $(b, root); if (elB) elB.textContent = elA.value; };
+  });
+
   if (upBtn) upBtn.onclick = () => chain($('.mt-upeng', root).value);
+
   const waitItem = r => new Promise((res, rej) => onPrompt(r.prompt_id, ev => {
     if (ev.prompt_id !== r.prompt_id) return;
     if (ev.type === 'done') { offPrompt(r.prompt_id); res(ev.item); }
     else if (ev.type === 'error') { offPrompt(r.prompt_id); rej(new Error('ошибка ComfyUI: ' + ev.message)); }
     else if (ev.type === 'interrupted') { offPrompt(r.prompt_id); rej(new Error('остановлено')); }
   }));
-  async function chain(eng, forceComfy = false) {   // eng: 'relay' | 'seed' (enlarge each clip) | 'none' (only the grain)
+
+  async function chain(eng) {
     const st = $('.mt-status', root);
-    if (MT.upBusy) { MT.cancel = true; st.textContent = 'Останавливаем…'; if (MT.curPrompt) fetch('/api/interrupt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt_id: MT.curPrompt }) }); return; }
+    if (MT.upBusy) {
+      MT.cancel = true;
+      if (st) st.textContent = 'Останавливаем…';
+      if (MT.curPrompt) fetch('/api/interrupt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt_id: MT.curPrompt }) });
+      return;
+    }
     if (MT.busy) return;
-    if (MT.ids.length < 2) { st.textContent = 'Добавьте хотя бы два клипа'; return; }
+    if (MT.ids.length < 2) { if (st) st.textContent = 'Добавьте хотя бы два клипа'; return; }
     const doUp = eng !== 'none', grain = +($('.mt-grain', root)?.value || 0);
     if (doUp) {
       let stt = {}; try { stt = await (await fetch('/api/status')).json(); } catch {}
       const haveRelay = (stt.modes || []).includes('relayvsr') && !(stt.models || []).some(m => m.role.startsWith('relayvsr') && !m.have);
       const haveSeed = (stt.modes || []).includes('upscale') && !(stt.models || []).some(m => m.role.startsWith('seedvr') && !m.have);
-      if (eng === 'relay' ? !haveRelay : !haveSeed) { st.textContent = `Нужна модель ${eng === 'relay' ? 'RelayVSR' : 'SeedVR2'}: её можно скачать кнопкой «Увеличить» у любого видео в Библиотеке.`; return; }
+      if (eng === 'relay' ? !haveRelay : !haveSeed) {
+        if (st) st.textContent = `Нужна модель ${eng === 'relay' ? 'RelayVSR' : 'SeedVR2'}: её можно скачать кнопкой «Увеличить» у любого видео в Библиотеке.`;
+        return;
+      }
     }
     const opt = { scale: '2', method: '', engine: eng === 'relay' ? 'relay' : '', detail: +($('.mt-detail', root)?.value || 50) / 100, sharp: +($('.mt-sharp', root)?.value || 50) / 100 };
     const sig = [doUp ? eng : '-', doUp ? (eng === 'relay' ? opt.detail : opt.sharp) : '-', grain].join('|');
-    if (PIPE.sig !== sig) PIPE = { sig, doUp, grain, steps: {}, joined: null };   // other settings: the clips are done again
+    if (PIPE.sig !== sig) PIPE = { sig, doUp, grain, steps: {}, joined: null };
     const ids = MT.ids.slice(), durs = durList(), out = [], todo = ids.filter(id => !(PIPE.steps[id] && (!doUp || PIPE.steps[id].up) && (!grain || PIPE.steps[id].gr))).length;
     MT.upBusy = true; MT.busy = true; MT.chaining = true; MT.cancel = false;
-    if ($('#mtGoFf', root)) $('#mtGoFf', root).disabled = true;
     if ($('#mtGoComfy', root)) $('#mtGoComfy', root).disabled = true;
     if (upBtn) upBtn.textContent = 'Остановить';
     pipeSave();
-    const job = async (url, id, srcFile, extra, label, k) => {   // one job on ComfyUI; returns the finished Library item
+
+    const job = async (url, id, srcFile, extra, label, k) => {
       let r;
       if (srcFile) {
-        const fd = new FormData(); Object.entries(extra).forEach(([a, b]) => fd.append(a, b)); fd.append('res', srcFile.res || ''); fd.append('len', srcFile.len || 0); fd.append('file', srcFile.file, srcFile.file.name);
-        const resp = await fetch(url + (url === '/api/upscale' ? '_file' : ''), { method: 'POST', body: fd }), txt = await resp.text(); let j; try { j = JSON.parse(txt); } catch { j = { error: txt }; }
+        const fd = new FormData(); Object.entries(extra).forEach(([a, b]) => fd.append(a, b));
+        fd.append('res', srcFile.res || ''); fd.append('len', srcFile.len || 0); fd.append('file', srcFile.file, srcFile.file.name);
+        const resp = await fetch(url + (url === '/api/upscale' ? '_file' : ''), { method: 'POST', body: fd }), txt = await resp.text();
+        let j; try { j = JSON.parse(txt); } catch { j = { error: txt }; }
         if (!resp.ok) throw new Error(j.error || txt || resp.statusText); r = j;
       } else if (url === '/api/grain') {
         const fd = new FormData(); fd.append('id', id); fd.append('strength', extra.strength);
-        const resp = await fetch(url, { method: 'POST', body: fd }), txt = await resp.text(); let j; try { j = JSON.parse(txt); } catch { j = { error: txt }; }
+        const resp = await fetch(url, { method: 'POST', body: fd }), txt = await resp.text();
+        let j; try { j = JSON.parse(txt); } catch { j = { error: txt }; }
         if (!resp.ok) throw new Error(j.error || txt || resp.statusText); r = j;
       } else r = await postJSON(url, { id, ...extra });
-      qAdd(r.prompt_id, label === 'grain' ? 'montage' : 'upscale', (get(ids[k]).prompt || '') || (label === 'grain' ? 'Зерно плёнки' : 'Увеличение')); MT.curPrompt = r.prompt_id;
+      qAdd(r.prompt_id, label === 'grain' ? 'montage' : 'upscale', (get(ids[k]).prompt || '') || (label === 'grain' ? 'Зерно плёнки' : 'Увеличение'));
+      MT.curPrompt = r.prompt_id;
       return waitItem(r);
     };
+
     try {
       for (let k = 0; k < ids.length; k++) {
         if (MT.cancel) throw new Error('остановлено');
         const src = ids[k], step = PIPE.steps[src] || (PIPE.steps[src] = { up: null, gr: null }), u = src.startsWith('up:') ? get(src) : null;
         let cur = src;
         if (doUp) {
-          if (!step.up) { st.textContent = `Клип ${k + 1} из ${ids.length}: увеличиваем…`; step.up = (await job('/api/upscale', src, u, opt, 'up', k)).id; pipeSave(); }
+          if (!step.up) { if (st) st.textContent = `Клип ${k + 1} из ${ids.length}: увеличиваем…`; step.up = (await job('/api/upscale', src, u, opt, 'up', k)).id; pipeSave(); }
           cur = step.up;
         }
         if (grain > 0) {
-          if (!step.gr) { st.textContent = `Клип ${k + 1} из ${ids.length}: накладываем зерно…`; step.gr = (await job('/api/grain', cur, doUp ? null : u, { strength: grain }, 'grain', k)).id; pipeSave(); }
+          if (!step.gr) { if (st) st.textContent = `Клип ${k + 1} из ${ids.length}: накладываем зерно…`; step.gr = (await job('/api/grain', cur, doUp ? null : u, { strength: grain }, 'grain', k)).id; pipeSave(); }
           cur = step.gr;
         }
         out.push(cur);
       }
     } catch (err) {
       MT.upBusy = false; MT.busy = false; MT.chaining = false; MT.curPrompt = null;
-      if ($('#mtGoFf', root)) $('#mtGoFf', root).disabled = false;
       if ($('#mtGoComfy', root)) $('#mtGoComfy', root).disabled = false;
       if (upBtn) upBtn.textContent = upTxt;
       pipePaint();
       const left = ids.filter(id => !(PIPE.steps[id] && (!doUp || PIPE.steps[id].up) && (!grain || PIPE.steps[id].gr))).length;
-      st.textContent = `Обработка прервана: ${err.message}. Готово ${ids.length - left} из ${ids.length} клипов, они сохранены. Нажмите кнопку ещё раз: работа продолжится с первого неготового клипа.`;
+      if (st) st.textContent = `Обработка прервана: ${err.message}. Готово ${ids.length - left} из ${ids.length} клипов, они сохранены. Нажмите кнопку ещё раз: работа продолжится.`;
       return;
     }
     MT.upBusy = false; MT.curPrompt = null; if (upBtn) upBtn.textContent = upTxt;
-    st.textContent = `${doUp ? 'Увеличение' : 'Зерно'} завершено для всех ${ids.length} клипов. Склеиваем…`;
-    await joinNow(out, durs, forceComfy);
+    if (st) st.textContent = `${doUp ? 'Увеличение' : 'Зерно'} завершено для всех ${ids.length} клипов. Склеиваем в ComfyUI…`;
+    await joinComfy(out, durs);
   }
+
   IMG_PANELS.push(() => { applyPend(); pipePaint(); window.mtRestoreResult(); });
   pipePaint();
-  /* a handle under the strip: drag down or up and the clips grow or shrink (the same scale as «−» «+»); the divider before the preview moves left and right */
+
   (() => {
     const h = $('.mt-vh', root); if (!h) return; let y0 = 0, px0 = 0, on = false;
     h.addEventListener('pointerdown', e => { e.preventDefault(); h.setPointerCapture(e.pointerId); on = true; y0 = e.clientY; px0 = MT.px; });
@@ -8763,12 +9351,14 @@ applyZoom();
     h.addEventListener('pointerup', e => { if (!on) return; on = false; try { h.releasePointerCapture(e.pointerId); } catch {} setPx(MT.px); });
     h.addEventListener('dblclick', () => setPx(26));
   })();
+
   if (window.gridResize) window.gridResize($('.grid', root));
-  
+
   IMG_PANELS.push(render);
   render();
   refreshFfStatus();
 })();
+
 ['#vPrompt', '#lPrompt', '.kr-prompt', '.qw-prompt'].forEach(sel => $$(sel).forEach(attachRu));   // every prompt field gets «Показать по-русски»
 
   $('#btnComfyUpdOpen')?.addEventListener('click', openComfyUpdateModal);

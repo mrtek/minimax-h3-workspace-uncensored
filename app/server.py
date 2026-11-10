@@ -2551,8 +2551,34 @@ class App:
                 "loop": form.get("audio_loop") != "false",
                 "music_vol": float(form.get("music_vol") or 0.8),
                 "video_vol": float(form.get("video_vol") or 1.0),
-                "mode": form.get("audio_mode") or "mix"
+                "mode": form.get("audio_mode") or "mix",
+                "fade": form.get("audio_fade") != "false"
             }
+
+            is_studio = form.get("studio") == "1"
+            studio_opts = {}
+            if is_studio:
+                try:
+                    color_data = json.loads(form.get("color") or "{}")
+                except (ValueError, TypeError):
+                    color_data = {}
+                try:
+                    title_data = json.loads(form.get("title") or "{}")
+                except (ValueError, TypeError):
+                    title_data = {}
+
+                studio_opts = {
+                    "cuts": durs,
+                    "speed": float(form.get("speed") or 1.0),
+                    "transition": form.get("transition", "none"),
+                    "transition_dur": float(form.get("transition_dur") or 0.5),
+                    "aspect": form.get("aspect", "original"),
+                    "fit_mode": form.get("fit_mode", "blur"),
+                    "color": color_data,
+                    "title": title_data,
+                    "audio_path": temp_audio_path,
+                    "audio_opts": audio_opts
+                }
 
             out_filename = f"montage_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:4]}.mp4"
             dest_dir = self.results_dir()
@@ -2571,23 +2597,40 @@ class App:
             async def run_montage_bg():
                 try:
                     await self.broadcast({"type": "progress", "prompt_id": pid, "value": 10, "max": 100, "text": "Подготовка FFmpeg..."})
-                    res = await asyncio.to_thread(
-                        ffmpeg_mgr.run_concat,
-                        ff_status["ffmpeg_path"],
-                        ff_status["ffprobe_path"],
-                        clip_paths,
-                        dest_path,
-                        temp_audio_path,
-                        audio_opts,
-                        prog_cb,
-                        cancel_ev
-                    )
+                    if is_studio:
+                        res = await asyncio.to_thread(
+                            ffmpeg_mgr.run_studio_montage,
+                            ff_status["ffmpeg_path"],
+                            ff_status["ffprobe_path"],
+                            clip_paths,
+                            dest_path,
+                            studio_opts,
+                            prog_cb,
+                            cancel_ev
+                        )
+                    else:
+                        res = await asyncio.to_thread(
+                            ffmpeg_mgr.run_concat,
+                            ff_status["ffmpeg_path"],
+                            ff_status["ffprobe_path"],
+                            clip_paths,
+                            dest_path,
+                            temp_audio_path,
+                            audio_opts,
+                            prog_cb,
+                            cancel_ev
+                        )
                     if not res.get("ok"):
                         raise RuntimeError(res.get("error", "Ошибка монтажа"))
 
                     total = sum(float(it.get("len") or 0) for it in items)
                     first_it = items[0]
-                    mode_sub = f"{len(items)} клипов (FFmpeg copy)" if res.get("fast_copy") else f"{len(items)} клипов (FFmpeg)"
+                    if is_studio:
+                        tr_label = f" · {studio_opts['transition']}" if studio_opts.get('transition') != 'none' else ""
+                        asp_label = f" · {studio_opts.get('aspect')}" if studio_opts.get('aspect') != 'original' else ""
+                        mode_sub = f"Студия FFmpeg: {len(items)} клипов{tr_label}{asp_label}"
+                    else:
+                        mode_sub = f"{len(items)} клипов (FFmpeg copy)" if res.get("fast_copy") else f"{len(items)} клипов (FFmpeg)"
                     new_item = {
                         "id": uuid.uuid4().hex[:12],
                         "prompt_id": pid,

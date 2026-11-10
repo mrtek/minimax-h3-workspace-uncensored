@@ -559,3 +559,308 @@ def run_concat(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, audio_path=None
         "duration": round(total_duration, 1),
         "res": f"{target_w}×{target_h}"
     }
+
+
+def run_studio_montage(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, options=None, progress_cb=None, cancel_event=None):
+    """Full-featured FFmpeg video studio montage engine:
+    - Transitions via xfade & acrossfade (fade, wipe, slide, circle, zoom, dissolve);
+    - Aspect ratio conversion (16:9, 9:16, 1:1, 21:9) with smart blurred background, crop or pad;
+    - Speed control (0.5x, 0.75x, 1.0x, 1.25x, 1.5x, 2.0x);
+    - Color grading (brightness, contrast, saturation) and filters (B&W, vignette, warm, cold, vintage);
+    - Text title / subtitle overlay with customizable position, size, and styling;
+    - Advanced audio mixing: background music, separate volumes, fade in/out, looping;
+    - NVIDIA NVENC hardware acceleration with fallback to libx264.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    options = options or {}
+
+    cuts = options.get("cuts") or []
+    speed = float(options.get("speed") or 1.0)
+    if speed <= 0.1 or speed > 5.0:
+        speed = 1.0
+
+    transition = str(options.get("transition") or "none").strip().lower()
+    transition_dur = float(options.get("transition_dur") or 0.5)
+    aspect = str(options.get("aspect") or "original").strip().lower()
+    fit_mode = str(options.get("fit_mode") or "blur").strip().lower()
+    color = options.get("color") or {}
+    title = options.get("title") or {}
+    audio_path = options.get("audio_path")
+    audio_opts = options.get("audio_opts") or {}
+
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
+    # 1. Probe all input clips
+    probes = [probe_media(ffprobe_exe, p) for p in clip_paths]
+    first_v = probes[0].get("video") if probes else None
+
+    # Calculate raw & effective durations
+    raw_durs = []
+    eff_durs = []
+    for i, pr in enumerate(probes):
+        d = float(pr.get("duration") or 5.0)
+        raw_durs.append(d)
+        c = float(cuts[i]) if (i < len(cuts) and cuts[i] is not None) else None
+        if c is not None and 0.2 < c < d:
+            eff_d = c
+        else:
+            eff_d = d
+        eff_d = eff_d / speed
+        eff_durs.append(eff_d)
+
+    n = len(clip_paths)
+    if n == 0:
+        raise ValueError("Нет клипов для монтажа")
+
+    # Target resolution
+    if aspect == "16:9":
+        tw, th = 1920, 1080
+    elif aspect == "9:16":
+        tw, th = 1080, 1920
+    elif aspect == "1:1":
+        tw, th = 1080, 1080
+    elif aspect == "21:9":
+        tw, th = 2560, 1080
+    else:
+        tw = first_v["width"] if first_v else 1280
+        th = first_v["height"] if first_v else 720
+    tw = (tw // 2) * 2
+    th = (th // 2) * 2
+
+    # Fast stream copy check
+    can_stream_copy = (
+        transition == "none"
+        and speed == 1.0
+        and aspect == "original"
+        and not audio_path
+        and color.get("filter") in (None, "none")
+        and float(color.get("brightness", 0)) == 0.0
+        and float(color.get("contrast", 1.0)) == 1.0
+        and float(color.get("saturation", 1.0)) == 1.0
+        and not (title.get("text") or "").strip()
+        and not any(cuts[i] is not None and 0.2 < cuts[i] < raw_durs[i] for i in range(len(cuts)))
+    )
+    if can_stream_copy:
+        for pr in probes:
+            v = pr.get("video")
+            if not v or v["width"] != tw or v["height"] != th or v["codec"] != first_v["codec"]:
+                can_stream_copy = False
+                break
+
+    if can_stream_copy:
+        return run_concat(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, progress_cb=progress_cb, cancel_event=cancel_event)
+
+    # Studio filter graph construction
+    inputs = []
+    for cp in clip_paths:
+        inputs.extend(["-i", str(Path(cp).resolve())])
+
+    has_bg_audio = bool(audio_path and Path(audio_path).is_file())
+    music_idx = len(clip_paths)
+    if has_bg_audio:
+        loop_music = audio_opts.get("loop", True)
+        if loop_music:
+            inputs.extend(["-stream_loop", "-1", "-i", str(Path(audio_path).resolve())])
+        else:
+            inputs.extend(["-i", str(Path(audio_path).resolve())])
+
+    filter_parts = []
+    fps = 24
+
+    for i in range(n):
+        v_pre = []
+        c = float(cuts[i]) if (i < len(cuts) and cuts[i] is not None) else None
+        if c is not None and 0.2 < c < raw_durs[i]:
+            v_pre.append(f"trim=0:{c:0.3f},setpts=PTS-STARTPTS")
+        if speed != 1.0:
+            v_pre.append(f"setpts=(1.0/{speed:0.3f})*PTS")
+        v_pre_str = (",".join(v_pre) + ",") if v_pre else ""
+
+        # Framing / Scaling
+        if fit_mode == "blur" and (aspect != "original" or (first_v and (first_v["width"] != tw or first_v["height"] != th))):
+            filter_parts.append(
+                f"[{i}:v]{v_pre_str}split[bg_in{i}][fg_in{i}];"
+                f"[bg_in{i}]scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},boxblur=25:5[bg{i}];"
+                f"[fg_in{i}]scale={tw}:{th}:force_original_aspect_ratio=decrease,setsar=1[fg{i}];"
+                f"[bg{i}][fg{i}]overlay=(W-w)/2:(H-h)/2,fps={fps},format=yuv420p,settb=AVTB[v_prep{i}]"
+            )
+        elif fit_mode == "crop":
+            filter_parts.append(
+                f"[{i}:v]{v_pre_str}scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th},setsar=1,fps={fps},format=yuv420p,settb=AVTB[v_prep{i}]"
+            )
+        else:
+            filter_parts.append(
+                f"[{i}:v]{v_pre_str}scale={tw}:{th}:force_original_aspect_ratio=decrease,pad={tw}:{th}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps={fps},format=yuv420p,settb=AVTB[v_prep{i}]"
+            )
+
+        # Audio prep
+        d_i = eff_durs[i]
+        if probes[i].get("audio"):
+            a_filters = ["aformat=sample_rates=44100:channel_layouts=stereo"]
+            if c is not None and 0.2 < c < raw_durs[i]:
+                a_filters.append(f"atrim=0:{c:0.3f}")
+            if speed != 1.0:
+                at = max(0.5, min(2.0, speed))
+                a_filters.append(f"atempo={at:0.3f}")
+            a_filters.append("asetpts=PTS-STARTPTS")
+            filter_parts.append(f"[{i}:a]{','.join(a_filters)}[a_prep{i}]")
+        else:
+            filter_parts.append(f"anullsrc=r=44100:cl=stereo,atrim=0:{d_i:0.3f}[a_prep{i}]")
+
+    # Transitions
+    min_eff_dur = min(eff_durs) if eff_durs else 1.0
+    actual_tdur = min(transition_dur, max(0.2, min_eff_dur / 2.1))
+
+    if transition != "none" and n >= 2:
+        cur_v = "v_prep0"
+        cur_a = "a_prep0"
+        accum_dur = eff_durs[0]
+
+        for k in range(1, n):
+            off = accum_dur - actual_tdur
+            next_v = f"v_x{k}"
+            next_a = f"a_x{k}"
+            filter_parts.append(f"[{cur_v}][v_prep{k}]xfade=transition={transition}:duration={actual_tdur:0.3f}:offset={off:0.3f}[{next_v}]")
+            filter_parts.append(f"[{cur_a}][a_prep{k}]acrossfade=d={actual_tdur:0.3f}:c1=tri:c2=tri[{next_a}]")
+            cur_v = next_v
+            cur_a = next_a
+            accum_dur += eff_durs[k] - actual_tdur
+        total_duration = accum_dur
+    else:
+        v_cat_in = "".join(f"[v_prep{i}][a_prep{i}]" for i in range(n))
+        filter_parts.append(f"{v_cat_in}concat=n={n}:v=1:a=1[v_cat][a_cat]")
+        cur_v = "v_cat"
+        cur_a = "a_cat"
+        total_duration = sum(eff_durs)
+
+    # Color grading
+    v_effects = []
+    b = float(color.get("brightness", 0.0))
+    c = float(color.get("contrast", 1.0))
+    s = float(color.get("saturation", 1.0))
+    if b != 0.0 or c != 1.0 or s != 1.0:
+        v_effects.append(f"eq=brightness={b:0.3f}:contrast={c:0.3f}:saturation={s:0.3f}")
+
+    flt = str(color.get("filter") or "none").lower()
+    if flt == "bw":
+        v_effects.append("hue=s=0")
+    elif flt == "vignette":
+        v_effects.append("vignette=PI/4")
+    elif flt == "warm":
+        v_effects.append("colorbalance=rs=0.12:gs=0.04:bs=-0.08")
+    elif flt == "cold":
+        v_effects.append("colorbalance=rs=-0.08:gs=0.0:bs=0.15")
+    elif flt == "vintage":
+        v_effects.append("colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131")
+
+    if v_effects:
+        filter_parts.append(f"[{cur_v}]{','.join(v_effects)}[v_col]")
+        cur_v = "v_col"
+
+    # Text overlay
+    text = (title.get("text") or "").strip()
+    if text:
+        clean_text = text.replace("'", "\\'").replace(":", "\\:").replace("%", "\\%")
+        pos = title.get("position", "bottom")
+        if pos == "top":
+            xy = "x=(w-text_w)/2:y=60"
+        elif pos == "center":
+            xy = "x=(w-text_w)/2:y=(h-text_h)/2"
+        else:
+            xy = "x=(w-text_w)/2:y=h-text_h-60"
+
+        sz_map = {"small": 30, "medium": 44, "large": 64}
+        fontsize = sz_map.get(title.get("size", "medium"), 44)
+        col = title.get("color", "white").lower()
+        font_arg = "fontfile='C\\:/Windows/Fonts/arial.ttf':" if sys.platform == "win32" and Path("C:/Windows/Fonts/arial.ttf").exists() else ""
+        filter_parts.append(
+            f"[{cur_v}]drawtext={font_arg}text='{clean_text}':fontsize={fontsize}:fontcolor={col}:box=1:boxcolor=black@0.6:boxborderw=10:{xy}[v_txt]"
+        )
+        cur_v = "v_txt"
+
+    # Audio Mixing
+    map_a = cur_a
+    if has_bg_audio:
+        music_vol = float(audio_opts.get("music_vol", 0.8))
+        video_vol = float(audio_opts.get("video_vol", 1.0))
+        audio_mode = audio_opts.get("mode", "mix")
+        fade = audio_opts.get("fade", True)
+
+        m_filters = [f"volume={music_vol:0.3f}"]
+        if fade and total_duration > 3.0:
+            m_filters.append(f"afade=t=in:ss=0:d=1.5,afade=t=out:st={total_duration-1.5:0.3f}:d=1.5")
+        filter_parts.append(f"[{music_idx}:a]{','.join(m_filters)}[mus]")
+
+        if audio_mode == "mix":
+            filter_parts.append(f"[{cur_a}]volume={video_vol:0.3f}[vid_a];[vid_a][mus]amix=inputs=2:duration=first:dropout_transition=2[aout]")
+            map_a = "aout"
+        elif audio_mode == "replace":
+            map_a = "mus"
+        else:
+            map_a = cur_a
+
+    filter_complex = ";".join(filter_parts)
+
+    use_nvenc = has_nvenc(ffmpeg_exe)
+    vcodec_args = ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "19", "-b:v", "0"] if use_nvenc else ["-c:v", "libx264", "-preset", "fast", "-crf", "19"]
+
+    cmd = [str(ffmpeg_exe), "-y"] + inputs + [
+        "-filter_complex", filter_complex,
+        "-map", f"[{cur_v}]",
+        "-map", f"[{map_a}]",
+        "-c:a", "aac", "-b:a", "192k"
+    ]
+    cmd.extend(vcodec_args)
+    cmd.extend([
+        "-t", str(round(total_duration, 2)),
+        "-movflags", "+faststart",
+        "-progress", "pipe:1",
+        str(output_path)
+    ])
+
+    if progress_cb:
+        progress_cb(5, "Запуск монтажа в Студии FFmpeg...")
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, creationflags=creationflags)
+
+    last_pct = 5
+    while True:
+        if cancel_event and cancel_event.is_set():
+            proc.kill()
+            if output_path.exists():
+                try:
+                    output_path.unlink()
+                except OSError:
+                    pass
+            return {"ok": False, "error": "Отменено пользователем"}
+
+        line = proc.stdout.readline()
+        if not line and proc.poll() is not None:
+            break
+        line = line.strip()
+        if line.startswith("out_time_ms="):
+            try:
+                ms = int(line.split("=")[1])
+                cur_sec = ms / 1_000_000
+                pct = min(99, max(5, int((cur_sec / total_duration) * 100)))
+                if pct > last_pct and progress_cb:
+                    last_pct = pct
+                    progress_cb(pct, f"Рендеринг FFmpeg: {pct}%")
+            except Exception:
+                pass
+        elif line == "progress=end":
+            if progress_cb:
+                progress_cb(100, "Монтаж завершён!")
+
+    proc.wait()
+    if proc.returncode != 0:
+        err = proc.stderr.read()[:600] if proc.stderr else "Unknown error"
+        raise RuntimeError(f"FFmpeg Studio failed (code {proc.returncode}): {err}")
+
+    return {
+        "ok": True,
+        "fast_copy": False,
+        "duration": round(total_duration, 1),
+        "res": f"{tw}×{th}"
+    }
