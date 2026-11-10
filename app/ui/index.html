@@ -229,7 +229,12 @@ body.nosb-on #modeBar{left:112px}
 .app.nosb ~ #sbToggle,body.nosb-on #sbToggle{left:12px}
 
 /* sidebar */
-.side{background:rgba(var(--bg2-rgb),.7);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:20px 14px;gap:6px;backdrop-filter:blur(12px);overflow-y:auto;min-height:0}
+.side{background:rgba(var(--bg2-rgb),.7);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 14px 12px;gap:8px;backdrop-filter:blur(12px);overflow:hidden;min-height:0;height:100%}
+.side-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:6px;padding-right:4px;margin-right:-4px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+.side-body::-webkit-scrollbar{width:5px}
+.side-body::-webkit-scrollbar-track{background:transparent}
+.side-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:10px}
+.side-body::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.28)}
 .brand{display:flex;align-items:center;gap:12px;padding:4px 8px 22px}
 .brand-mark{width:38px;height:38px;border-radius:12px;background:var(--grad);display:grid;place-items:center;box-shadow:0 8px 24px rgba(var(--accent-rgb),.35)}
 .brand-name{font-weight:800;font-size:17px;letter-spacing:-.01em}
@@ -252,7 +257,7 @@ body.nosb-on #modeBar{left:112px}
 .nav .badge{margin-left:auto;font-size:10.5px;padding:2px 7px;border-radius:99px;background:var(--surface-2);color:var(--dim);font-weight:700}
 .nav[disabled]{opacity:.55;cursor:default}
 .nav[disabled]:hover{background:none;color:var(--muted)}
-.side-foot{margin-top:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 14px;display:grid;gap:8px}
+.side-foot{flex:0 0 auto;margin-top:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:8px}
 .stat{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted)}
 .stat b{color:var(--text);font-weight:700}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(63,209,139,.18);margin-right:7px;vertical-align:1px}
@@ -887,7 +892,8 @@ img.pr-media{object-position:center 38%}
 <div class="app">
 
   <aside class="side">
-    <div class="brand">
+    <div class="side-body">
+      <div class="brand">
       <div class="brand-mark">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M3 12h2M7 7v10M11 4v16M15 8v8M19 10v4M21 12h0"/></svg>
       </div>
@@ -984,6 +990,7 @@ img.pr-media{object-position:center 38%}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7"/></svg>
       Увеличение видео и фото
     </button>
+    </div>
 
     <div class="side-foot" id="sysBox" title="Нагрузка компьютера, обновляется каждые 2 секунды">
       <div class="stat"><span><span class="dot" id="engDot"></span>Движок</span><b id="engTxt">запущен</b></div>
