@@ -175,6 +175,7 @@ class App:
         self.ffmpeg_download_task = None
         self.ffmpeg_download_cancel = None
         self.ffmpeg_download_state = None
+        self.ffmpeg_cancels = {}
 
     def workspace_root(self):
         if self.config.get("install_dir"):
@@ -2477,7 +2478,10 @@ class App:
             folder = str(Path(body["folder"].strip()))
             Path(folder).mkdir(parents=True, exist_ok=True)
             self.config.update(ffmpeg_dir=folder)
-        return web.json_response(self.ffmpeg_status())
+        st = self.ffmpeg_status()
+        st["ok"] = True
+        st["folder"] = str(self.ffmpeg_dir())
+        return web.json_response(st)
 
     async def h_ffmpeg_open_folder(self, _req):
         folder = self.ffmpeg_dir()
@@ -2597,6 +2601,7 @@ class App:
             dest_path = dest_dir / out_filename
 
             cancel_ev = threading.Event()
+            self.ffmpeg_cancels[pid] = cancel_ev
 
             def prog_cb(pct, text=""):
                 if self.loop and self.loop.is_running():
@@ -2666,6 +2671,7 @@ class App:
                 except Exception as e:
                     await self.broadcast({"type": "error", "prompt_id": pid, "message": f"Ошибка FFmpeg: {e}"})
                 finally:
+                    self.ffmpeg_cancels.pop(pid, None)
                     if temp_audio_path and temp_audio_path.exists():
                         try:
                             temp_audio_path.unlink()
@@ -2960,6 +2966,12 @@ class App:
 
     async def h_interrupt(self, req):
         pid = (await req.json()).get("prompt_id")
+        if pid in getattr(self, "ffmpeg_cancels", {}) or (isinstance(pid, str) and pid.startswith("ffm_")):
+            ev = getattr(self, "ffmpeg_cancels", {}).pop(pid, None)
+            if ev:
+                ev.set()
+            await self.broadcast({"type": "interrupted", "prompt_id": pid})
+            return web.json_response({"ok": True})
         job = self.jobs.get(pid)
         if job and job.get("task"):  # cloud task
             self.jobs.pop(pid, None)
@@ -3792,10 +3804,15 @@ def build_app(comfy_override=None):
         web.post("/api/generate/swap", state.h_generate_swap),
         web.post("/api/generate/long", state.h_generate_long),
         web.get("/api/ffmpeg/status", state.h_ffmpeg_status),
+        web.post("/api/ffmpeg/status", state.h_ffmpeg_status),
         web.post("/api/ffmpeg/download", state.h_ffmpeg_download),
         web.post("/api/ffmpeg/cancel", state.h_ffmpeg_cancel),
+        web.post("/api/ffmpeg/download-cancel", state.h_ffmpeg_cancel),
+        web.get("/api/ffmpeg/check-update", state.h_ffmpeg_check_update),
         web.post("/api/ffmpeg/check-update", state.h_ffmpeg_check_update),
         web.post("/api/ffmpeg/set-folder", state.h_ffmpeg_set_folder),
+        web.post("/api/ffmpeg/choose-folder", state.h_ffmpeg_set_folder),
+        web.post("/api/ffmpeg/reset-folder", state.h_ffmpeg_set_folder),
         web.post("/api/ffmpeg/open-folder", state.h_ffmpeg_open_folder),
         web.post("/api/montage", state.h_montage),
         web.get("/api/long/state", state.h_long_state),

@@ -4630,10 +4630,11 @@ const fileName = it => `h3_${it.mode}_${it.date.toISOString().slice(0, 16).repla
 
 /* ---------- общая очередь заданий ---------- */
 const QUEUE = [];
-const QSTAGE = { queued: 'ждёт своей очереди', load: 'загрузка моделей', encode: 'кодирование', sample: 'генерация', sample2: 'проход 2', upscale: 'апскейл',
+const QSTAGE = { queued: 'ждёт своей очереди', ffmpeg: 'монтаж FFmpeg', load: 'загрузка моделей', encode: 'кодирование', sample: 'генерация', sample2: 'проход 2', upscale: 'апскейл',
   decode: 'сборка видео', save: 'сохранение', cloud_queued: 'в очереди RunningHub', cloud_run: 'считается в облаке' };
 function qAdd(id, mode, prompt) {
-  const j = { id, mode, prompt: prompt || '', state: 'queued', stage: 'queued', t0: null, detached: false, lastEv: performance.now() };
+  const isFf = String(id).startsWith('ffm_') || mode === 'montage';
+  const j = { id, mode, prompt: prompt || '', state: 'queued', stage: isFf ? 'ffmpeg' : 'queued', isFf, t0: null, detached: false, lastEv: performance.now() };
   QUEUE.push(j);
   (earlyEvents.get(id) || []).forEach(qHandle);
   qRender();
@@ -4641,7 +4642,15 @@ function qAdd(id, mode, prompt) {
 function qHandle(m) {
   const j = QUEUE.find(x => x.id === m.prompt_id); if (!j) return;
   j.lastEv = performance.now();
-  if (m.type === 'stage') {
+  if (m.type === 'progress') {
+    j.state = 'running';
+    j.t0 = j.t0 || performance.now();
+    if (m.value != null) j.pct = Math.max(0.01, Math.min(1.0, (m.value || 0) / (m.max || 100)));
+    if (m.text) j.progressText = m.text;
+    if (m.step != null) j.step = m.step;
+    if (m.max != null) j.max = m.max;
+    if (j.isFf || String(j.id).startsWith('ffm_') || j.mode === 'montage') j.stage = 'ffmpeg';
+  } else if (m.type === 'stage') {
     const samp = String(m.stage).startsWith('sample');
     if (samp && (j.stage !== m.stage || (m.scene && j.scene !== m.scene))) j.step1T = null;
     if (samp && m.step) { j.stepT = performance.now(); if (m.step === 1) j.step1T = j.stepT; }
@@ -4656,10 +4665,27 @@ function qHandle(m) {
   else if (m.type === 'interrupted') j.state = 'stopped';
   qRender();
 }
-const QBASE = { queued: .02, load: .05, encode: .12, sample: .15, upscale: .67, sample2: .7, decode: .92, save: .98, cloud_queued: .05, cloud_run: .4 };
+const QBASE = { queued: .02, ffmpeg: .2, load: .05, encode: .12, sample: .15, upscale: .67, sample2: .7, decode: .92, save: .98, cloud_queued: .05, cloud_run: .4 };
 /* what the user should see about a job: how far it is, and whether it is alive (green), quiet (yellow) or probably stuck (red) */
 function jobView(j) {
   const now = performance.now();
+  const isFf = j.isFf || String(j.id).startsWith('ffm_') || j.stage === 'ffmpeg';
+  if (isFf) {
+    if (j.state === 'queued') {
+      return { p: 0.05, lvl: 'ok', label: 'В очереди', txt: 'Подготовка к монтажу FFmpeg…' };
+    }
+    const p = Math.max(0.02, Math.min(0.99, j.pct != null ? j.pct : (j.state === 'running' ? 0.2 : 0)));
+    const idle = (now - (j.lastEv || now)) / 1000;
+    let lvl = 'ok';
+    let txt = j.progressText || 'Выполняется обработка видео через FFmpeg…';
+    if (idle > 300) {
+      lvl = 'bad'; txt = `FFmpeg не отвечает уже ${fmtTime(idle)}. Нажмите «Остановить», если процесс завис`;
+    } else if (idle > 90) {
+      lvl = 'warn'; txt = `Идёт рендеринг ${fmtTime(idle)}. Сведение эффектов и видеофайлов требует времени`;
+    }
+    return { p, lvl, label: 'Монтаж FFmpeg', txt };
+  }
+
   if (j.state === 'queued') {
     const n = QUEUE.filter(x => x.state === 'queued' || x.state === 'running').indexOf(j);
     return { p: 0, lvl: 'ok', label: 'В очереди', txt: n > 0 ? `Ждёт своей очереди: впереди ${n} ${n === 1 ? 'задание' : 'задания(й)'}` : 'Ждёт, пока освободится ComfyUI' };
@@ -4703,13 +4729,15 @@ function qRender() {
   const fin = QUEUE.filter(j => !act.includes(j)).slice(-30).reverse();
   $('#qClear').hidden = !fin.length;
   const row = (j, n) => {
+    const isFf = j.isFf || String(j.id).startsWith('ffm_') || j.stage === 'ffmpeg';
     const run = j.state === 'running', samp = run && String(j.stage).startsWith('sample') && j.max;
-    let st = run ? (QSTAGE[j.stage] || 'идёт') : j.state === 'queued' ? 'ждёт своей очереди' : j.state === 'done' ? `готово за ${fmtTime(j.took)} · результат в Библиотеке`
+    let st = run ? (QSTAGE[j.stage] || (isFf ? 'монтаж FFmpeg' : 'идёт')) : j.state === 'queued' ? 'ждёт своей очереди' : j.state === 'done' ? `готово за ${fmtTime(j.took)} · результат в Библиотеке`
       : j.state === 'stopped' ? 'остановлено' : 'ошибка: ' + (j.msg || '');
     if (samp) st += ` · шаг ${j.step || 0} из ${j.max}`;
+    else if (run && isFf && j.progressText) st += ` · ${j.progressText}`;
     if (run && j.t0) st += ` · прошло ${fmtTime((performance.now() - j.t0) / 1000)}`;
     const cls = j.state === 'done' ? ' ok' : j.state === 'error' ? ' err' : run ? ' run' : '';
-    if (j.stopping && act.includes(j)) st = 'останавливаем… ComfyUI заканчивает текущий шаг, это может занять несколько секунд';
+    if (j.stopping && act.includes(j)) st = isFf ? 'останавливаем монтаж FFmpeg…' : 'останавливаем… ComfyUI заканчивает текущий шаг, это может занять несколько секунд';
     const btn = act.includes(j) ? (j.stopping ? `<button class="btn" disabled>Останавливаем…</button>` : `<button class="btn" data-q="stop" data-id="${j.id}">${run ? 'Остановить' : 'Убрать'}</button>`)
       : j.state === 'done' ? '<button class="btn" data-q="lib">В Библиотеку</button>' : '';
     const live = act.includes(j), v = live ? jobView(j) : null;
@@ -9041,37 +9069,53 @@ function mtT(k, fb) {
     try { await fetch('/api/ffmpeg/open-folder', { method: 'POST' }); } catch (e) { toast('Не удалось открыть папку: ' + e.message); }
   });
   $('#mtFfSetFolderBtn', root)?.addEventListener('click', async () => {
+    const cur = $('#mtFfPath', root)?.textContent || '';
+    const folder = prompt('Укажите путь к папке для портативного FFmpeg:', cur);
+    if (!folder || folder.trim() === cur) return;
     try {
-      const res = await fetch('/api/ffmpeg/choose-folder', { method: 'POST' });
+      const res = await fetch('/api/ffmpeg/set-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: folder.trim() })
+      });
       const d = await res.json();
-      if (d.ok) { toast('Папка FFmpeg обновлена: ' + d.folder); refreshFfStatus(); }
-      else if (d.error && d.error !== 'cancelled') toast('Ошибка выбора папки: ' + d.error);
+      if (d.ok) { toast('Папка FFmpeg обновлена: ' + (d.folder || d.dir)); refreshFfStatus(); }
+      else toast('Ошибка: ' + (d.error || 'не удалось обновить папку'));
     } catch (e) { toast('Ошибка: ' + e.message); }
   });
   $('#mtFfResetFolderBtn', root)?.addEventListener('click', async () => {
     try {
-      const res = await fetch('/api/ffmpeg/reset-folder', { method: 'POST' });
+      const res = await fetch('/api/ffmpeg/set-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true })
+      });
       const d = await res.json();
-      if (d.ok) { toast('Папка сброшена на стандартную: ' + d.folder); refreshFfStatus(); }
+      if (d.ok) { toast('Папка сброшена на стандартную: ' + (d.folder || d.dir)); refreshFfStatus(); }
     } catch (e) { toast('Ошибка сброса: ' + e.message); }
   });
   $('#mtFfCheckUpdBtn', root)?.addEventListener('click', async () => {
     toast('Проверка обновлений FFmpeg...');
     try {
-      const res = await fetch('/api/ffmpeg/check-update');
+      const res = await fetch('/api/ffmpeg/check-update', { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
       const d = await res.json();
+      if (!d.ok && d.error) {
+        toast('Ошибка проверки: ' + d.error);
+        return;
+      }
       if (d.has_update) {
         if (confirm(`Найдена новая версия FFmpeg (${d.latest_version}). Текущая: ${d.current_version || 'нет'}. Обновить сейчас?`)) {
           startFfDownload();
         }
       } else {
-        toast('Установлена актуальная версия FFmpeg.');
+        toast(`Установлена актуальная версия FFmpeg (${d.current_version || 'актуальная'}).`);
       }
     } catch (e) { toast('Ошибка проверки обновлений: ' + e.message); }
   });
   $('#mtFfDownloadBtn', root)?.addEventListener('click', () => startFfDownload());
   $('#mtFfCancelBtn', root)?.addEventListener('click', async () => {
-    try { await fetch('/api/ffmpeg/download-cancel', { method: 'POST' }); toast('Загрузка отменена'); } catch {}
+    try { await fetch('/api/ffmpeg/cancel', { method: 'POST' }); toast('Загрузка отменена'); } catch {}
   });
 
   async function startFfDownload() {
