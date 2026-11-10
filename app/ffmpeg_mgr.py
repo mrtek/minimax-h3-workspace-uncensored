@@ -727,6 +727,10 @@ def run_studio_montage(ffmpeg_exe, ffprobe_exe, clip_paths, output_path, options
             cur_a = next_a
             accum_dur += eff_durs[k] - actual_tdur
         total_duration = accum_dur
+    elif n == 1:
+        cur_v = "v_prep0"
+        cur_a = "a_prep0"
+        total_duration = eff_durs[0]
     else:
         v_cat_in = "".join(f"[v_prep{i}][a_prep{i}]" for i in range(n))
         filter_parts.append(f"{v_cat_in}concat=n={n}:v=1:a=1[v_cat][a_cat]")

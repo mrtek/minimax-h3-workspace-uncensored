@@ -2499,12 +2499,19 @@ class App:
                 files[field.name[5:]] = (field.filename or "clip.mp4", bytes(await field.read()))
             else:
                 form[field.name] = await field.text()
+        is_studio = form.get("studio") == "1"
         try:
             ids = [i for i in json.loads(form.get("ids") or "[]") if isinstance(i, str)][:30]
         except ValueError:
             ids = []
+        if not ids and form.get("order"):
+            try:
+                order_raw = json.loads(form.get("order") or "[]")
+                ids = [x["id"] if isinstance(x, dict) and "id" in x else x for x in order_raw if isinstance(x, (dict, str))][:30]
+            except ValueError:
+                ids = []
         try:
-            durs = json.loads(form.get("durs") or "[]")
+            durs = json.loads(form.get("durs") or form.get("cuts") or "[]")
         except ValueError:
             durs = []
         items = []
@@ -2520,9 +2527,13 @@ class App:
                 items.append({"kind": "video", "_up": files[k], "res": form.get("res_" + k, ""), "len": ln,
                               "ext": (Path(files[k][0]).suffix.lstrip(".").lower() or "mp4")[:5]})
             else:
-                items.append(self.library.get(i))
-        if len(items) < 2 or any(not it or it.get("kind") == "image" for it in items):
-            raise web.HTTPBadRequest(text="Добавьте хотя бы два видео")
+                it = self.library.get(i)
+                if it:
+                    items.append(it)
+        min_items = 1 if is_studio else 2
+        if len(items) < min_items or any(not it or it.get("kind") == "image" for it in items):
+            msg = "Добавьте хотя бы одно видео" if is_studio else "Добавьте хотя бы два видео"
+            raise web.HTTPBadRequest(text=msg)
 
         ff_status = self.ffmpeg_status()
         use_ffmpeg = ff_status.get("installed") and not form.get("force_comfy")

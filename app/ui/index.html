@@ -9129,6 +9129,8 @@ function mtT(k, fb) {
     try {
       const fd = new FormData();
       fd.append('studio', '1');
+      fd.append('ids', JSON.stringify(MT.ids));
+      fd.append('durs', JSON.stringify(MT.cuts));
       fd.append('order', JSON.stringify(MT.ids.map(id => id.startsWith('up:') ? { kind: 'upload', id } : { kind: 'library', id })));
       fd.append('cuts', JSON.stringify(MT.cuts));
 
@@ -9234,6 +9236,8 @@ function mtT(k, fb) {
     try {
       const fd = new FormData();
       fd.append('force_comfy', '1');
+      fd.append('ids', JSON.stringify(ids));
+      fd.append('durs', JSON.stringify(durs));
       fd.append('order', JSON.stringify(ids.map(id => id.startsWith('up:') ? { kind: 'upload', id } : { kind: 'library', id })));
       fd.append('cuts', JSON.stringify(durs));
       ids.filter(id => id.startsWith('up:')).forEach(id => {
