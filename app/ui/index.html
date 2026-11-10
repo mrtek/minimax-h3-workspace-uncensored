@@ -7995,7 +7995,6 @@ async function startComfyUpdate() {
   }, 1000);
 }
 
-const saveCL = () => postJSON('/api/loras/custom', { items: CL.items }).catch(e => toast(e.message));
 $('#clAdd').onclick = () => {
   if (!CL.files.length) { toast('ComfyUI не видит файлов в папке loras'); return; }
   CL.items.push({ file: CL.files[0], strength: 0.8, on: true }); renderCL(); saveCL();
