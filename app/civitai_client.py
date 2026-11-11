@@ -244,6 +244,7 @@ async def download_file_stream(session, url, dest_path, token=None):
 
     start_time = time.time()
     downloaded_this_session = 0
+    total = 0
 
     try:
         async with session.get(download_url, headers=headers, timeout=aiohttp.ClientTimeout(total=None, sock_read=120), allow_redirects=True) as resp:
@@ -252,44 +253,54 @@ async def download_file_stream(session, url, dest_path, token=None):
                 raise RuntimeError("Civitai требует авторизацию (API-токен) для скачивания этой модели. Введите API-токен Civitai в настройках каталога.")
             if "auth.civitai.com" in str(resp.url) or "login" in str(resp.url):
                 raise RuntimeError("Civitai перенаправил на вход в аккаунт. Для этой модели требуется бесплатный API-токен Civitai (Settings -> API Keys).")
-            if resp.status not in (200, 206) and resp.status != 416:
+            if resp.status not in (200, 206, 416):
                 raise RuntimeError(f"HTTP ошибка при скачивании: {resp.status}")
 
-            total = 0
-            if resp.status == 206:
+            if resp.status == 200:
+                have = 0
+                total = int(resp.headers.get("Content-Length", 0) or 0)
+            elif resp.status == 206:
                 cr = resp.headers.get("Content-Range", "")
                 m = re.search(r"/(\d+)$", cr)
-                total = int(m.group(1)) if m else have + int(resp.headers.get("Content-Length", 0))
-            elif resp.status == 200:
-                have = 0
-                total = int(resp.headers.get("Content-Length", 0))
-            elif resp.status == 416:
-                # Already complete
-                pass
+                total = int(m.group(1)) if m else have + int(resp.headers.get("Content-Length", 0) or 0)
+            else:
+                # 416: the server says "nothing to send from this offset".
+                # Only a .part that already equals the server-side size is complete.
+                cr = resp.headers.get("Content-Range", "")
+                m = re.search(r"\*/(\d+)$", cr)
+                total = int(m.group(1)) if m else 0
+                if not part.exists() or total <= 0 or part.stat().st_size != total:
+                    raise RuntimeError(
+                        "Файл недокачан: локальный фрагмент не совпадает с размером на сервере. "
+                        "Удалите его и скачайте заново.")
 
             CURRENT_DOWNLOAD["total"] = total
             CURRENT_DOWNLOAD["done"] = have
 
-            mode = "ab" if have and resp.status == 206 else "wb"
-            with open(part, mode) as f:
-                async for chunk in resp.content.iter_chunked(256 * 1024):
-                    if chunk:
+            if resp.status != 416:
+                mode = "ab" if (have and resp.status == 206) else "wb"
+                with open(part, mode) as f:
+                    async for chunk in resp.content.iter_chunked(256 * 1024):
+                        if not chunk:
+                            continue
                         f.write(chunk)
                         have += len(chunk)
                         downloaded_this_session += len(chunk)
                         CURRENT_DOWNLOAD["done"] = have
                         if total > 0:
                             CURRENT_DOWNLOAD["percent"] = min(100, round((have / total) * 100, 1))
-                        
                         elapsed = time.time() - start_time
                         if elapsed > 0.5:
                             speed_mb = (downloaded_this_session / (1024 * 1024)) / elapsed
                             CURRENT_DOWNLOAD["speed"] = f"{speed_mb:.1f} МБ/с"
 
-        # Rename .part to dest
-        if dest.exists():
-            dest.unlink()
-        part.rename(dest)
+        # Finalize: verify, then atomically replace. Never delete dest before it.
+        if not part.exists():
+            raise RuntimeError("Файл не скачан")
+        size = part.stat().st_size
+        if total > 0 and size != total:
+            raise RuntimeError(f"Загрузка неполная: {size} из {total} байт")
+        os.replace(part, dest)
 
         CURRENT_DOWNLOAD["status"] = "done"
         CURRENT_DOWNLOAD["percent"] = 100
