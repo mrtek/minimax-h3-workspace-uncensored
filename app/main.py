@@ -9,6 +9,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 import webbrowser
 from pathlib import Path
 
@@ -225,6 +226,8 @@ class ServerThread(threading.Thread):
         self.loop = None
         self.runner = None
         self.site = None
+        self.error = None
+        self.traceback = None
 
     def run(self):
         self.loop = asyncio.new_event_loop()
@@ -236,9 +239,12 @@ class ServerThread(threading.Thread):
             self.loop.run_until_complete(self.site.start())
             self.ready.set()
             self.loop.run_forever()
-        except Exception:
-            self.ready.set()
+        except Exception as e:
+            self.error = e
+            self.traceback = traceback.format_exc()
+            _log_startup(f"server failed to start: {e}\n{self.traceback}")
         finally:
+            self.ready.set()
             self._cleanup_loop()
 
     def _cleanup_loop(self):
@@ -416,6 +422,26 @@ def do_exit(srv=None, code=0):
             pass
 
 
+def explain_startup_failure(srv):
+    """Show the real reason instead of a blank window."""
+    text = (
+        "Не удалось запустить локальный сервер программы.\n\n"
+        f"Ошибка: {srv.error}\n\n"
+        f"Подробности: {server.DATA_DIR / 'startup.log'}\n\n"
+        "Программа будет закрыта. Если ошибка повторяется — пришлите файл startup.log."
+    )
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, text, "Minimax H3 Workspace", 0x10)
+    except Exception:
+        print(text)
+    try:
+        import subprocess
+        subprocess.Popen(["explorer", str(server.DATA_DIR)], creationflags=0x08000000)
+    except Exception:
+        pass
+
+
 def main():
     import ctypes
     if sys.platform == "win32":
@@ -427,7 +453,10 @@ def main():
     port = free_port()
     srv = ServerThread(port)
     srv.start()
-    srv.ready.wait(30)
+    if not srv.ready.wait(30) or srv.error is not None:
+        explain_startup_failure(srv)
+        do_exit(srv, 1)
+        return
     url = f"http://127.0.0.1:{port}"
 
     def explain_no_webview():

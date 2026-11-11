@@ -123,8 +123,18 @@ class Library:
     def __init__(self, path):
         self.path = path
         self.items = []
-        if path.exists():
-            self.items = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            if path.exists():
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(loaded, list):
+                    raise ValueError("library.json: expected a JSON array")
+                self.items = [x for x in loaded if isinstance(x, dict) and "id" in x]
+        except (OSError, ValueError):
+            try:
+                path.replace(path.with_name(f"{path.name}.broken-{time.strftime('%Y%m%d-%H%M%S')}"))
+            except OSError:
+                pass
+            self.items = []
 
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)

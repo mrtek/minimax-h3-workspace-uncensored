@@ -29,8 +29,24 @@ CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
 class Config:
     def __init__(self, path):
-        self.path = path
-        self.data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        self.path = Path(path)
+        self.data = {}
+        try:
+            if self.path.exists():
+                loaded = json.loads(self.path.read_text(encoding="utf-8"))
+                if not isinstance(loaded, dict):
+                    raise ValueError("config.json: expected a JSON object")
+                self.data = loaded
+        except (OSError, ValueError) as e:
+            self._quarantine(e)
+
+    def _quarantine(self, reason):
+        """A corrupted file must not prevent the app from starting: move it aside."""
+        try:
+            broken = self.path.with_name(f"{self.path.name}.broken-{time.strftime('%Y%m%d-%H%M%S')}")
+            self.path.replace(broken)
+        except OSError:
+            pass
 
     def get(self, key, default=None):
         return self.data.get(key, default)
@@ -38,7 +54,9 @@ class Config:
     def update(self, **kw):
         self.data.update(kw)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self.data, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        tmp.write_text(json.dumps(self.data, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, self.path)   # atomic: no half-written config.json
 
     @property
     def configured(self):
