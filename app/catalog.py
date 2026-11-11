@@ -63,6 +63,11 @@ def _m(repo, path, size_gb, category, name=None, sub=SUB):
 # the same file is published under two names; either one counts as present
 FILE_ALIASES = {
     "minimax_h3_latent_upscaler_3d_bf16.safetensors": ("minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors",),
+    "ae.safetensors": ("flux2-vae.safetensors", "flux_vae.safetensors", "ae.sft"),
+    "flux1-dev-fp8.safetensors": ("flux1-dev.safetensors", "flux1-dev-fp8-e4m3fn.safetensors", "flux1-dev-fp8.sft", "flux-1-dev-fp8.safetensors"),
+    "t5xxl_fp8_e4m3fn.safetensors": ("t5xxl_fp8.safetensors", "t5_fp8.safetensors", "t5xxl_fp8_e4m3fn_scaled.safetensors"),
+    "clip_l.safetensors": ("vi-l.safetensors", "clip_l14.safetensors", "clip-l.safetensors"),
+    "pornworksRealPornPhoto_ponyV04.safetensors": ("RealVisXL_V4.0.safetensors", "pornworksRealPornPhoto_v04.safetensors", "ponyDiffusionV6XL.safetensors"),
 }
 
 VARIANTS = {
@@ -202,20 +207,28 @@ VARIANTS = {
         "omni": _m("chatrlabs/Qwen-Image-2.1-Uncensored-Omni-LoRA-v0.1",
                    "chatrlabs-omni-lora-v0.1-bf16.safetensors", 0.67, "loras", sub=IMG_SUB),
     },
-    # FLUX.2 klein 4B (Apache 2.0, free for commercial use): edit a picture by text
+    # FLUX.1 [dev] FP8 (12B, фотореализм, поддержка Civitai LoRA)
     "flux_unet": {
-        "fp8": _m("black-forest-labs/FLUX.2-klein-4b-fp8", "flux-2-klein-4b-fp8.safetensors", 4.07,
+        "fp8": _m("Comfy-Org/flux1-dev", "flux1-dev-fp8.safetensors", 16.06,
                   "diffusion_models", sub=IMG_SUB),
     },
     "flux_clip": {
-        "uncensored": _m("ussoewwin/qwen3_4b_8b_abliterated_fp16_convrot_int8",
-                         "qwen3_4b_abliterated_fp16_converted.safetensors", 8.04,
-                         "text_encoders", sub=IMG_SUB),
-        "bf16": _m("Comfy-Org/z_image_turbo", "split_files/text_encoders/qwen_3_4b.safetensors", 8.04,
+        "fp8": _m("comfyanonymous/flux_text_encoders", "t5xxl_fp8_e4m3fn.safetensors", 4.89,
+                  "text_encoders", sub=IMG_SUB),
+    },
+    "flux_clip_l": {
+        "fp16": _m("comfyanonymous/flux_text_encoders", "clip_l.safetensors", 0.25,
                    "text_encoders", sub=IMG_SUB),
     },
     "flux_vae": {
-        "bf16": _m("Comfy-Org/flux2-dev", "split_files/vae/flux2-vae.safetensors", 0.34, "vae", sub=IMG_SUB),
+        "bf16": _m("camenduru/FLUX.1-dev", "ae.safetensors", 0.34, "vae", sub=IMG_SUB),
+    },
+    # SDXL / Pony Inpaint & Generation (100% Uncensored, ультрареалистичная взрослая анатомия, снятие одежды)
+    "sdxl_checkpoint": {
+        "pony": _m("Manjushri/pornworks-real-porn-photo-realistic-nsfw-sdxl-and-pony-chekpoint",
+                   "pornworksRealPornPhoto_ponyV04.safetensors", 6.46, "checkpoints", sub=IMG_SUB),
+        "realvis": _m("SG161222/RealVisXL_V4.0",
+                      "RealVisXL_V4.0.safetensors", 6.46, "checkpoints", sub=IMG_SUB),
     },
 }
 
@@ -230,7 +243,9 @@ ROLE_MARKS = {
     "seedvr_unet": ["seedvr"], "seedvr_vae": ["seedvr"], "relayvsr_unet": ["relayvsr"], "relayvsr_vae": ["relayvsr"], "krea_clip": ["qwen3vl", "qwen3-vl"],
     "krea_vae": ["qwen_image", "qwen-image"], "kreareal_unet": ["krea"], "kreareal_lora": ["realism"],
     "qwen_unet": ["qwen"], "qwen_clip": ["qwen3vl", "qwen3-vl", "abliterated"], "qwen_vae": ["qwen"],
-    "flux_unet": ["flux"], "qwen_lora": ["chatrlabs", "omni"], "flux_clip": ["qwen_3", "qwen3", "abliterated"], "flux_vae": ["flux"],
+    "flux_unet": ["flux1", "flux-1", "flux_1", "flux"], "flux_clip": ["t5", "t5xxl"], "flux_clip_l": ["clip_l", "vi-l", "clip"], "flux_vae": ["ae", "flux"],
+    "sdxl_checkpoint": ["pony", "sdxl", "realvis", "xl", "pornworks", "cyberrealistic", "epicrealism", "autism"],
+    "qwen_lora": ["chatrlabs", "omni"],
 }
 
 
@@ -253,7 +268,11 @@ VARIANT_LABELS = {
     "action_unet": {"int8": "обычная (int8)", "lite": "лёгкая (меньше памяти, чуть слабее)"},
     "krea_unet": {"int8": "Krea 2 Turbo (стандартная int8)", "redcraft": "RedCraft RedMix (Uncensored реализм)"},
     "qwen_clip": {"uncensored": "Uncensored (Abliterated int8)", "int8": "оригинальная (Comfy-Org int8)"},
-    "flux_clip": {"uncensored": "Uncensored (Abliterated fp16)", "bf16": "оригинальная (Comfy-Org bf16)"},
+    "flux_unet": {"fp8": "FLUX.1 [dev] FP8 (12B параметров)"},
+    "flux_clip": {"fp8": "T5-XXL FP8 (Comfy-Org / comfyanonymous)"},
+    "flux_clip_l": {"fp16": "CLIP-L FP16 (OpenAI ViT-L/14)"},
+    "flux_vae": {"bf16": "FLUX VAE (ae.safetensors)"},
+    "sdxl_checkpoint": {"pony": "Pony Realism (100% Uncensored, взрослая анатомия)", "realvis": "RealVisXL v4.0 (фотореализм людей и портретов)"},
 }
 
 # LoRA from the original action workflow that has no public download; used when the user has it
@@ -290,9 +309,11 @@ ROLE_DESCRIPTIONS = {
     "qwen_clip": "Текстовый энкодер для Qwen Image 2.1 (Qwen3-VL 8B).",
     "qwen_vae": "Автоэнкодер VAE для модели Qwen Image 2.1.",
     "qwen_lora": "Uncensored Omni-LoRA для Qwen Image 2.1: снимает ограничения диффузии, разблокирует взрослую анатомию и позы.",
-    "flux_unet": "Правка картинок для коммерческого использования на базе FLUX.2 klein (4B).",
-    "flux_clip": "Текстовый энкодер для FLUX.2 klein (Qwen3 4B).",
-    "flux_vae": "Автоэнкодер VAE для модели FLUX.2 klein.",
+    "flux_unet": "Флагманская модель генерации и правки изображений FLUX.1 [dev] 12B в оптимизированном формате FP8.",
+    "flux_clip": "Текстовый энкодер T5-XXL FP8 для понимания сложных промптов и деталей в FLUX.1 [dev].",
+    "flux_clip_l": "Текстовый энкодер CLIP-L (ViT-L/14) для распознавания объектов и стилей в FLUX.1 [dev].",
+    "flux_vae": "Автоэнкодер VAE для модели FLUX.1 [dev].",
+    "sdxl_checkpoint": "Чекпоинт SDXL / Pony для 100% реалистичной взрослой анатомии (NSFW), снятия одежды и детального инпейнта.",
 }
 
 ROLE_GROUPS = {
@@ -303,6 +324,7 @@ ROLE_GROUPS = {
     "kreareal_unet": "diffusion",
     "qwen_unet": "diffusion",
     "flux_unet": "diffusion",
+    "sdxl_checkpoint": "diffusion",
     "seedvr_unet": "diffusion",
     "relayvsr_unet": "diffusion",
     
@@ -310,6 +332,7 @@ ROLE_GROUPS = {
     "krea_clip": "text_encoder",
     "qwen_clip": "text_encoder",
     "flux_clip": "text_encoder",
+    "flux_clip_l": "text_encoder",
     
     "video_vae": "vae",
     "audio_vae": "vae",
@@ -366,13 +389,16 @@ ROLE_TITLES = {
     "qwen_clip": "Текстовый энкодер Qwen (Qwen3-VL 8B)",
     "qwen_vae": "VAE для Qwen Image 2.1",
     "qwen_lora": "LoRA ChatR Labs Omni Uncensored (Qwen 2.1)",
-    "flux_unet": "Основная модель — Правка изображения для коммерции (FLUX.2 klein 4B)",
-    "flux_clip": "Текстовый энкодер FLUX.2 klein (Qwen3 4B)",
-    "flux_vae": "VAE для FLUX.2",
+    "flux_unet": "Основная модель — FLUX.1 [dev] FP8 (12B)",
+    "flux_clip": "Текстовый энкодер T5-XXL (FLUX.1)",
+    "flux_clip_l": "Текстовый энкодер CLIP-L (FLUX.1)",
+    "flux_vae": "VAE для FLUX.1 [dev]",
+    "sdxl_checkpoint": "Основная модель — SDXL / Pony Inpaint (100% Uncensored)",
 }
 
 MODE_TITLES = {"video": "Image-to-Video", "lipsync": "Lipsync", "refs": "Референсы", "actor": "Актёрская игра", "swap": "Замена персонажа", "action": "Экшн-сцены",
-               "krea": "Изображение по тексту", "kreareal": "Изображение: реализм", "qwen": "Правка изображения", "flux": "Правка изображения: FLUX.2 (можно в коммерцию)",
+               "krea": "Изображение по тексту", "kreareal": "Изображение: реализм", "qwen": "Правка изображения", "flux": "Правка изображения: FLUX.1 [dev] (12B FP8)",
+               "sdxl": "Изображение и инпейнт: SDXL / Pony (100% Uncensored)",
                "upscale": "Увеличение видео и изображений", "relayvsr": "Быстрое увеличение видео (RelayVSR)", "long": "Длинное видео"}
 
 # Which roles each mode needs.
@@ -390,7 +416,8 @@ MODE_ROLES = {
     "krea": ["krea_unet", "krea_clip", "krea_vae"],
     "kreareal": ["kreareal_unet", "kreareal_lora", "krea_clip", "krea_vae"],
     "qwen": ["qwen_unet", "qwen_clip", "qwen_vae"],
-    "flux": ["flux_unet", "flux_clip", "flux_vae"],
+    "flux": ["flux_unet", "flux_clip", "flux_clip_l", "flux_vae"],
+    "sdxl": ["sdxl_checkpoint"],
     "upscale": ["seedvr_unet", "seedvr_vae"],
     "relayvsr": ["relayvsr_unet", "relayvsr_vae"],
 }
@@ -414,7 +441,8 @@ DEFAULT_CHOICE = {"fast_unet": "int8", "lipsync_unet": "full", "text_encoder": "
                   "realism_lora": "v1", "motion_repair_lora": "v1", "pika_lora": "hd8", "swap_lora": "v15", "sla_lora": "bf16",
                   "krea_unet": "int8", "krea_clip": "fp8", "krea_vae": "bf16", "kreareal_unet": "fp8", "kreareal_lora": "v2",
                   "qwen_unet": "int8", "qwen_clip": "uncensored", "qwen_vae": "bf16", "qwen_lora": "omni",
-                  "flux_unet": "fp8", "flux_clip": "uncensored", "flux_vae": "bf16",
+                  "flux_unet": "fp8", "flux_clip": "fp8", "flux_clip_l": "fp16", "flux_vae": "bf16",
+                  "sdxl_checkpoint": "pony",
                   "seedvr_unet": "int8", "seedvr_vae": "fp16", "relayvsr_unet": "x2", "relayvsr_vae": "x2"}
 
 
@@ -497,4 +525,4 @@ def model_entry(role, variant):
 
 
 # modes that appeared after the first release: the app offers them once after an update
-OFFER_MODES = ["flux", "long"]
+OFFER_MODES = ["sdxl", "flux", "long"]

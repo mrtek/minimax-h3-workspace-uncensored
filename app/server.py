@@ -381,7 +381,7 @@ class App:
             if hit:
                 found.add(role)
         # modes added after a set-up was made: with your own ComfyUI they switch on by themselves when the files are there
-        self.auto_modes = {m for m in ("krea", "kreareal", "qwen", "flux", "upscale", "long") if self.config.get("engine") == "external"
+        self.auto_modes = {m for m in ("krea", "kreareal", "qwen", "flux", "sdxl", "upscale", "long") if self.config.get("engine") == "external"
                            and all(r in found for r in catalog.MODE_ROLES[m])}
         needed = catalog.roles_for(self.modes())
         missing = [entries[r] for r in needed if r in entries and r not in found]
@@ -1424,7 +1424,7 @@ class App:
             return await self.queue_cloud(rh, graph, stages, meta)
         await self.stop_llm()  # the agent's model and H3 do not fit in VRAM together
         mode_key = (meta or {}).get("mode", "")
-        same = mode_key == getattr(self, "last_mode", None) and mode_key in ("krea", "kreareal", "qwen", "flux")
+        same = mode_key == getattr(self, "last_mode", None) and mode_key in ("krea", "kreareal", "qwen", "flux", "sdxl")
         self.last_mode = mode_key
         # nothing is running or waiting: drop the previous job's models and cache so each job starts clean.
         # Not between pictures of the same mode: the same big models would just be loaded from disk again.
@@ -1554,6 +1554,8 @@ class App:
         async for field in await req.multipart():
             if field.name == "image" and field.filename:
                 image = await self.upload_input(field)
+            elif field.name == "mask" and field.filename:
+                form["_mask"] = await self.upload_input(field)
             elif field.name in ("image2", "image3") and field.filename:
                 extra.append(await self.upload_input(field))
             else:
@@ -1678,7 +1680,6 @@ class App:
             "src": item.get("id", ""), "src_file": src_file})
 
     async def h_generate_krea(self, req):
-        await self.need_models("krea")
         form, _, seed = await self.read_image_form(req)
         prompt = form.get("prompt", "").strip()
         if not prompt:
@@ -1692,19 +1693,29 @@ class App:
         if custom:
             width, height = custom
         engine = form.get("engine", "krea")
+        if engine == "sdxl":
+            await self.need_models("sdxl")
+            negative = form.get("negative", "").strip()[:800]
+            graph, stages = wf.sdxl_t2i_graph(self.model_names, prompt, negative, width, height, seed,
+                                              extra_loras=self.sdxl_loras(form))
+            return await self.queue(graph, stages, {
+                "mode": "sdxl", "sub": "Изображение (SDXL Pony)", "prompt": prompt, "aspect": aspect, "q": "1K",
+                "len": 0.0, "res": f"{width}×{height}", "seed": seed, **lab})
         if engine == "flux":
             await self.need_models("flux")
-            graph, stages = wf.flux_t2i_graph(self.model_names, prompt, width, height, seed)
+            graph, stages = wf.flux_t2i_graph(self.model_names, prompt, width, height, seed,
+                                              extra_loras=self.flux_loras(form))
             return await self.queue(graph, stages, {
-                "mode": "krea", "sub": "Изображение (FLUX.2)", "prompt": prompt, "aspect": aspect, "q": "1K",
+                "mode": "flux", "sub": "Изображение (FLUX.1 dev)", "prompt": prompt, "aspect": aspect, "q": "1K",
                 "len": 0.0, "res": f"{width}×{height}", "seed": seed, **lab})
         if engine == "qwen":
             await self.need_models("qwen")
             graph, stages = wf.qwen_t2i_graph(self.model_names, prompt, form.get("negative", "").strip()[:600], width, height, seed,
                                               extra_loras=self.qwen_loras(form))
             return await self.queue(graph, stages, {
-                "mode": "krea", "sub": "Изображение (Qwen 2.1)", "prompt": prompt, "aspect": aspect, "q": "1K",
+                "mode": "qwen", "sub": "Изображение (Qwen 2.1)", "prompt": prompt, "aspect": aspect, "q": "1K",
                 "len": 0.0, "res": f"{width}×{height}", "seed": seed, **lab})
+        await self.need_models("krea")
         if form.get("style") == "real":
             await self.need_models("kreareal")
             scale = wf.KREA_REAL_SCALES.get(form.get("scale", "2k"), 1.5)
@@ -1719,11 +1730,10 @@ class App:
 
     async def h_generate_qwen(self, req):
         form, image, seed = await self.read_image_form(req)
-        flux = form.get("kind") != "sheet" and form.get("engine") == "flux"
-        await self.need_models("flux" if flux else "qwen")
+        engine = form.get("engine", "qwen")
         if form.get("kind") == "story" and form.get("frames") == "1":
-            # storyboard frame by frame (FLUX.2 klein): every frame is its own picture, the sheet is glued from them
-            use_qwen = form.get("engine") == "qwen"
+            # storyboard frame by frame: every frame is its own picture, the sheet is glued from them
+            use_qwen = engine == "qwen"
             await self.need_models("qwen" if use_qwen else "flux")
             frames = split_frames(form.get("prompt", ""))
             if len(frames) not in wf.FRAME_COLS:
@@ -1731,12 +1741,12 @@ class App:
             refs = [x for x in ([image] if image else []) + list(form.get("_extra") or [])]
             if use_qwen:
                 graph, stages, titles = wf.qwen_frames_graph(self.model_names, refs, frames, seed, size=round_size(form) or wf.FRAME_SIZE,
-                                                             line=form.get("line", "white"), extra_loras=self.qwen_loras(form))
+                                                              line=form.get("line", "white"), extra_loras=self.qwen_loras(form))
             else:
                 graph, stages, titles = wf.flux_frames_graph(self.model_names, refs, frames, seed, size=round_size(form) or wf.FRAME_SIZE,
                                                              line=form.get("line", "white"))
             return await self.queue(graph, stages, {
-                "mode": "qwen", "sub": "Раскадровка по кадрам", "prompt": form.get("prompt", "").strip(), "aspect": "",
+                "mode": "qwen" if use_qwen else "flux", "sub": "Раскадровка по кадрам", "prompt": form.get("prompt", "").strip(), "aspect": "",
                 "q": "", "len": 0.0, "res": "", "seed": seed}, titles=titles)
         if not image:
             raise web.HTTPBadRequest(text="Загрузите изображение")
@@ -1746,22 +1756,47 @@ class App:
                 raise web.HTTPBadRequest(text="Опишите историю по кадрам")
             refs = [image] + list(form.get("_extra") or [])
             sz = round_size(form) or wf.STORY_SIZE
-            if flux:
+            if engine == "flux":
+                await self.need_models("flux")
                 graph, stages = wf.flux_story_graph(self.model_names, refs, prompt, seed, sz)
+                m_mode = "flux"
             else:
+                await self.need_models("qwen")
                 graph, stages = wf.qwen_story_graph(self.model_names, refs, prompt, seed, sz, extra_loras=self.qwen_loras(form))
+                m_mode = "qwen"
             return await self.queue(graph, stages, {
-                "mode": "qwen", "sub": "Раскадровка по изображениям", "prompt": prompt, "aspect": "",
+                "mode": m_mode, "sub": "Раскадровка по изображениям", "prompt": prompt, "aspect": "",
                 "q": "", "len": 0.0, "res": "%d×%d" % wf.STORY_SIZE, "seed": seed})
-        if flux:
+        if engine == "sdxl":
+            await self.need_models("sdxl")
+            prompt = form.get("prompt", "").strip()
+            negative = form.get("negative", "").strip()[:800]
+            mask = form.get("_mask")
+            try:
+                denoise = float(form.get("denoise", "0.75"))
+            except (ValueError, TypeError):
+                denoise = 0.75
+            denoise = max(0.1, min(1.0, denoise))
+            sz = round_size(form)
+            graph, stages = wf.sdxl_inpaint_graph(self.model_names, prompt, negative, image, seed,
+                                                  mask=mask, denoise=denoise, size=sz,
+                                                  extra_loras=self.sdxl_loras(form))
+            sub = "Инпейнт (SDXL Pony)" if mask else "Правка (SDXL Pony)"
+            return await self.queue(graph, stages, {
+                "mode": "sdxl", "sub": sub, "prompt": prompt, "aspect": form.get("aspect", ""),
+                "q": "", "len": 0.0, "res": ("%d×%d" % sz if sz else ""), "seed": seed})
+        if engine == "flux":
+            await self.need_models("flux")
             prompt = form.get("prompt", "").strip()
             if not prompt:
                 raise web.HTTPBadRequest(text="Напишите, что изменить на изображении")
             mp = wf.QWEN_MP.get(form.get("size", "1"), 1.0)
-            graph, stages = wf.flux_edit_graph(self.model_names, prompt, image, mp, seed, form.get("_extra") or (), round_size(form))
+            graph, stages = wf.flux_edit_graph(self.model_names, prompt, image, mp, seed, form.get("_extra") or (), round_size(form),
+                                               extra_loras=self.flux_loras(form))
             return await self.queue(graph, stages, {
-                "mode": "qwen", "sub": "Правка изображения (FLUX.2)", "prompt": prompt, "aspect": "",
+                "mode": "flux", "sub": "Правка изображения (FLUX.1 dev)", "prompt": prompt, "aspect": "",
                 "q": "", "len": 0.0, "res": "", "seed": seed})
+        await self.need_models("qwen")
         if form.get("kind") == "sheet":
             panels = 6 if form.get("panels") == "6" else 4
             graph, stages, prompt = wf.qwen_sheet_graph(
@@ -1876,6 +1911,14 @@ class App:
                 continue
             loras.append((f, s))
         return loras
+
+    def sdxl_loras(self, form=None):
+        """Active LoRAs for SDXL / Pony from custom LoRAs."""
+        return [(f, s) for f, s in self.custom_loras(form)]
+
+    def flux_loras(self, form=None):
+        """Active LoRAs for FLUX.1 [dev] from custom LoRAs."""
+        return [(f, s) for f, s in self.custom_loras(form)]
 
     async def h_loras_custom(self, _req):
         import loras_registry

@@ -134,6 +134,18 @@ def _lora_chain(g, start, loras, base=60):
     return prev
 
 
+def _sdxl_lora_chain(g, model_start, clip_start, loras, base=60):
+    """Stack LoraLoader nodes (patching both model and clip) for SDXL and FLUX."""
+    m_prev, c_prev = model_start, clip_start
+    for i, (name, strength) in enumerate(loras):
+        nid = str(base + i)
+        g[nid] = {"class_type": "LoraLoader", "inputs": {
+            "model": m_prev, "clip": c_prev, "lora_name": name,
+            "strength_model": strength, "strength_clip": strength}}
+        m_prev, c_prev = [nid, 0], [nid, 1]
+    return m_prev, c_prev
+
+
 def ref_graph(m, prompt, width, height, seconds, seed, images, videos, audios, steps=6,
               ref_size="max", extra_loras=(), pika=None):
     """MinimaxH3_Ref to Video (ULTRA SPEED Singularity 4-step), single pass.
@@ -1056,26 +1068,113 @@ def _qwen_base(m, image, megapixels, prompt, seed, size=None, extras=(), extra_l
     return g, stages
 
 
-def flux_t2i_graph(m, prompt, width, height, seed):
-    """FLUX.2 klein 4B (distilled), picture by text: 4 steps, CFG 1, no negative prompt."""
+def sdxl_t2i_graph(m, prompt, negative, width, height, seed, extra_loras=(), steps=28, cfg=6.5):
+    """SDXL / Pony checkpoint, text to image: full uncensored photorealism, LoRA support."""
+    g = {
+        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": m["sdxl_checkpoint"]}},
+        "4": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
+        "5": {"class_type": "KSampler", "inputs": {
+            "seed": seed, "steps": steps, "cfg": cfg, "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0,
+            "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0]}},
+        "6": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
+        "7": {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/sdxl_t2i", "images": ["6", 0]}},
+    }
+    model_out, clip_out = ["1", 0], ["1", 1]
+    stages = {"1": "load", "4": "encode", "5": "sample", "6": "decode", "7": "save"}
+    if extra_loras:
+        model_out, clip_out = _sdxl_lora_chain(g, model_out, clip_out, extra_loras, base=60)
+        for i in range(len(extra_loras)):
+            stages[str(60 + i)] = "load"
+    g["2"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": clip_out}}
+    g["3"] = {"class_type": "CLIPTextEncode", "inputs": {"text": negative, "clip": clip_out}}
+    g["5"]["inputs"]["model"] = model_out
+    g["5"]["inputs"]["positive"] = ["2", 0]
+    g["5"]["inputs"]["negative"] = ["3", 0]
+    stages.update({"2": "encode", "3": "encode"})
+    return g, stages
+
+
+def sdxl_inpaint_graph(m, prompt, negative, image, seed, mask=None, denoise=0.75, size=None, extra_loras=(), steps=28, cfg=6.5):
+    """SDXL / Pony checkpoint: inpaint / clothing removal / img2img edit.
+    If mask is provided, uses VAEEncodeForInpaint to regenerate only the masked region.
+    If mask is None, uses VAEEncode + denoise for img2img editing (preserving overall pose/composition).
+    """
+    g = {
+        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": m["sdxl_checkpoint"]}},
+        "10": {"class_type": "LoadImage", "inputs": {"image": image}},
+    }
+    model_out, clip_out = ["1", 0], ["1", 1]
+    stages = {"1": "load", "10": "load"}
+    if extra_loras:
+        model_out, clip_out = _sdxl_lora_chain(g, model_out, clip_out, extra_loras, base=60)
+        for i in range(len(extra_loras)):
+            stages[str(60 + i)] = "load"
+
+    g["2"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": clip_out}}
+    g["3"] = {"class_type": "CLIPTextEncode", "inputs": {"text": negative, "clip": clip_out}}
+    stages.update({"2": "encode", "3": "encode"})
+
+    img_ref = ["10", 0]
+    if size:
+        g["11"] = {"class_type": "ImageScale", "inputs": {
+            "image": img_ref, "upscale_method": "lanczos", "width": size[0], "height": size[1], "crop": "center"}}
+        img_ref = ["11", 0]
+        stages["11"] = "encode"
+
+    if mask:
+        g["12"] = {"class_type": "LoadImage", "inputs": {"image": mask}}
+        mask_img = ["12", 0]
+        stages["12"] = "load"
+        if size:
+            g["13"] = {"class_type": "ImageScale", "inputs": {
+                "image": mask_img, "upscale_method": "lanczos", "width": size[0], "height": size[1], "crop": "center"}}
+            mask_img = ["13", 0]
+            stages["13"] = "encode"
+        g["14"] = {"class_type": "ImageToMask", "inputs": {"image": mask_img, "channel": "red"}}
+        g["15"] = {"class_type": "VAEEncodeForInpaint", "inputs": {
+            "pixels": img_ref, "vae": ["1", 2], "mask": ["14", 0], "grow_mask_by": 6}}
+        latent_ref = ["15", 0]
+        stages.update({"14": "encode", "15": "encode"})
+        run_denoise = denoise if denoise > 0.8 else 1.0
+    else:
+        g["15"] = {"class_type": "VAEEncode", "inputs": {"pixels": img_ref, "vae": ["1", 2]}}
+        latent_ref = ["15", 0]
+        stages["15"] = "encode"
+        run_denoise = denoise
+
+    g["20"] = {"class_type": "KSampler", "inputs": {
+        "seed": seed, "steps": steps, "cfg": cfg, "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": run_denoise,
+        "model": model_out, "positive": ["2", 0], "negative": ["3", 0], "latent_image": latent_ref}}
+    g["21"] = {"class_type": "VAEDecode", "inputs": {"samples": ["20", 0], "vae": ["1", 2]}}
+    g["22"] = {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/sdxl_inpaint", "images": ["21", 0]}}
+    stages.update({"20": "sample", "21": "decode", "22": "save"})
+    return g, stages
+
+
+def flux_t2i_graph(m, prompt, width, height, seed, extra_loras=(), guidance=3.5, steps=20):
+    """FLUX.1 [dev] FP8 (12B), picture by text: 20 steps, FluxGuidance 3.5, full LoRA support."""
     g = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["flux_unet"], "weight_dtype": "default"}},
-        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["flux_clip"], "type": "flux2", "device": "default"}},
+        "2": {"class_type": "DualCLIPLoader", "inputs": {
+            "clip_name1": m["flux_clip"], "clip_name2": m["flux_clip_l"], "type": "flux", "device": "default"}},
         "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["flux_vae"]}},
-        "4": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
-        "5": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["4", 0]}},
-        "6": {"class_type": "CFGGuider", "inputs": {"model": ["1", 0], "positive": ["4", 0], "negative": ["5", 0], "cfg": 1}},
-        "7": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
-        "8": {"class_type": "Flux2Scheduler", "inputs": {"steps": 4, "width": width, "height": height}},
-        "9": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
-        "10": {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}},
-        "11": {"class_type": "SamplerCustomAdvanced", "inputs": {
-            "noise": ["10", 0], "guider": ["6", 0], "sampler": ["9", 0], "sigmas": ["8", 0], "latent_image": ["7", 0]}},
-        "12": {"class_type": "VAEDecode", "inputs": {"samples": ["11", 0], "vae": ["3", 0]}},
-        "13": {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/flux_t2i", "images": ["12", 0]}},
+        "7": {"class_type": "EmptySD3LatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
     }
-    stages = {"1": "load", "2": "load", "3": "load", "4": "encode", "5": "encode", "6": "encode", "7": "encode",
-              "8": "encode", "9": "encode", "10": "encode", "11": "sample", "12": "decode", "13": "save"}
+    model_out, clip_out = ["1", 0], ["2", 0]
+    stages = {"1": "load", "2": "load", "3": "load", "7": "encode"}
+    if extra_loras:
+        model_out, clip_out = _sdxl_lora_chain(g, model_out, clip_out, extra_loras, base=60)
+        for i in range(len(extra_loras)):
+            stages[str(60 + i)] = "load"
+    g["4"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": clip_out}}
+    g["5"] = {"class_type": "FluxGuidance", "inputs": {"guidance": guidance, "conditioning": ["4", 0]}}
+    g["6"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["5", 0]}}
+    g["10"] = {"class_type": "KSampler", "inputs": {
+        "seed": seed, "steps": steps, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0,
+        "model": model_out, "positive": ["5", 0], "negative": ["6", 0], "latent_image": ["7", 0]}}
+    g["11"] = {"class_type": "VAEDecode", "inputs": {"samples": ["10", 0], "vae": ["3", 0]}}
+    g["12"] = {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/flux_t2i", "images": ["11", 0]}}
+    stages.update({"4": "encode", "5": "encode", "6": "encode", "10": "sample", "11": "decode", "12": "save"})
     return g, stages
 
 
@@ -1173,19 +1272,18 @@ def _glue(g, stages, titles, frame_nodes, line):
 
 
 def flux_frames_graph(m, refs, prompts, seed, size=FRAME_SIZE, line="white"):
-    """Storyboard frame by frame on FLUX.2 klein: every frame is its own picture (saved separately, full size) and the
+    """Storyboard frame by frame on FLUX.1 [dev]: every frame is its own picture (saved separately, full size) and the
     sheet is glued from them by ImageStitch with an exact thin line, so there are no margins or double frames."""
     n = len(prompts)
     g = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["flux_unet"], "weight_dtype": "default"}},
-        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["flux_clip"], "type": "flux2", "device": "default"}},
+        "2": {"class_type": "DualCLIPLoader", "inputs": {
+            "clip_name1": m["flux_clip"], "clip_name2": m["flux_clip_l"], "type": "flux", "device": "default"}},
         "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["flux_vae"]}},
-        "13": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": size[0], "height": size[1], "batch_size": 1}},
-        "14": {"class_type": "Flux2Scheduler", "inputs": {"steps": 4, "width": size[0], "height": size[1]}},
-        "15": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
+        "13": {"class_type": "EmptySD3LatentImage", "inputs": {"width": size[0], "height": size[1], "batch_size": 1}},
         "8": {"class_type": "CLIPTextEncode", "inputs": {"text": "", "clip": ["2", 0]}},
     }
-    stages = {"1": "load", "2": "load", "3": "load", "13": "encode", "14": "encode", "15": "encode", "8": "encode"}
+    stages = {"1": "load", "2": "load", "3": "load", "13": "encode", "8": "encode"}
     lat = []
     for i, img in enumerate(refs[:3], 1):
         a, b, v = f"10{i}", f"11{i}", f"12{i}"
@@ -1209,20 +1307,21 @@ def flux_frames_graph(m, refs, prompts, seed, size=FRAME_SIZE, line="white"):
         base = 200 + i * 10
         t = str(base)
         g[t] = {"class_type": "CLIPTextEncode", "inputs": {"text": text, "clip": ["2", 0]}}
-        pos = [t, 0]
+        gd = f"{base}_gd"
+        g[gd] = {"class_type": "FluxGuidance", "inputs": {"guidance": 3.5, "conditioning": [t, 0]}}
+        pos = [gd, 0]
         for j, v in enumerate(lat):
             nid = str(base + 1 + j)
             g[nid] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": pos, "latent": [v, 0]}}
             pos = [nid, 0]
             stages[nid] = "encode"
-        gd, nz, sm, dc, sv = (str(base + k) for k in (5, 6, 7, 8, 9))
-        g[gd] = {"class_type": "CFGGuider", "inputs": {"model": ["1", 0], "positive": pos, "negative": neg, "cfg": 1}}
-        g[nz] = {"class_type": "RandomNoise", "inputs": {"noise_seed": seed + i}}
-        g[sm] = {"class_type": "SamplerCustomAdvanced", "inputs": {
-            "noise": [nz, 0], "guider": [gd, 0], "sampler": ["15", 0], "sigmas": ["14", 0], "latent_image": ["13", 0]}}
+        sm, dc, sv = (str(base + k) for k in (7, 8, 9))
+        g[sm] = {"class_type": "KSampler", "inputs": {
+            "seed": seed + i, "steps": 20, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0,
+            "model": ["1", 0], "positive": pos, "negative": neg, "latent_image": ["13", 0]}}
         g[dc] = {"class_type": "VAEDecode", "inputs": {"samples": [sm, 0], "vae": ["3", 0]}}
         g[sv] = {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/story_frame", "images": [dc, 0]}}
-        stages.update({t: "encode", gd: "encode", nz: "encode", sm: "sample", dc: "decode", sv: "save"})
+        stages.update({t: "encode", gd: "encode", sm: "sample", dc: "decode", sv: "save"})
         titles[sv] = f"Кадр {i + 1}"
         frame_nodes.append([dc, 0])
     _glue(g, stages, titles, frame_nodes, line)
@@ -1273,16 +1372,18 @@ def qwen_frames_graph(m, refs, prompts, seed, size=FRAME_SIZE, line="white", ext
 
 
 def flux_story_graph(m, images, prompt, seed, size=STORY_SIZE):
-    """Storyboard from 1-3 pictures on FLUX.2 klein: every picture is one more ReferenceLatent (image 1, image 2 ...)."""
+    """Storyboard from 1-3 pictures on FLUX.1 [dev]: every picture is one more ReferenceLatent (image 1, image 2 ...)."""
     g = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["flux_unet"], "weight_dtype": "default"}},
-        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["flux_clip"], "type": "flux2", "device": "default"}},
+        "2": {"class_type": "DualCLIPLoader", "inputs": {
+            "clip_name1": m["flux_clip"], "clip_name2": m["flux_clip_l"], "type": "flux", "device": "default"}},
         "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["flux_vae"]}},
         "7": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
-        "8": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["7", 0]}},
+        "7g": {"class_type": "FluxGuidance", "inputs": {"guidance": 3.5, "conditioning": ["7", 0]}},
+        "8": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["7g", 0]}},
     }
-    stages = {"1": "load", "2": "load", "3": "load", "7": "encode", "8": "encode"}
-    pos, neg = ["7", 0], ["8", 0]
+    stages = {"1": "load", "2": "load", "3": "load", "7": "encode", "7g": "encode", "8": "encode"}
+    pos, neg = ["7g", 0], ["8", 0]
     for i, img in enumerate(images, 1):
         a, b, v, rp, rn = f"10{i}", f"11{i}", f"12{i}", f"13{i}", f"14{i}"
         g[a] = {"class_type": "LoadImage", "inputs": {"image": img}}
@@ -1294,37 +1395,41 @@ def flux_story_graph(m, images, prompt, seed, size=STORY_SIZE):
         pos, neg = [rp, 0], [rn, 0]
         for k in (a, b, v, rp, rn):
             stages[k] = "encode"
-    g["12"] = {"class_type": "CFGGuider", "inputs": {"model": ["1", 0], "positive": pos, "negative": neg, "cfg": 1}}
-    g["13"] = {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": size[0], "height": size[1], "batch_size": 1}}
-    g["14"] = {"class_type": "Flux2Scheduler", "inputs": {"steps": 4, "width": size[0], "height": size[1]}}
-    g["15"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}}
-    g["16"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}}
-    g["17"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
-        "noise": ["16", 0], "guider": ["12", 0], "sampler": ["15", 0], "sigmas": ["14", 0], "latent_image": ["13", 0]}}
+    g["13"] = {"class_type": "EmptySD3LatentImage", "inputs": {"width": size[0], "height": size[1], "batch_size": 1}}
+    g["17"] = {"class_type": "KSampler", "inputs": {
+        "seed": seed, "steps": 20, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0,
+        "model": ["1", 0], "positive": pos, "negative": neg, "latent_image": ["13", 0]}}
     g["18"] = {"class_type": "VAEDecode", "inputs": {"samples": ["17", 0], "vae": ["3", 0]}}
     g["19"] = {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/flux_story", "images": ["18", 0]}}
-    stages.update({"12": "encode", "13": "encode", "14": "encode", "15": "encode", "16": "encode",
-                   "17": "sample", "18": "decode", "19": "save"})
+    stages.update({"13": "encode", "17": "sample", "18": "decode", "19": "save"})
     return g, stages
 
 
-def flux_edit_graph(m, prompt, image, megapixels, seed, extras=(), size=None):
-    """FLUX.2 klein 4B (distilled), edit a picture: the official ComfyUI template on plain nodes, 4 steps, CFG 1.
-    The result keeps the shape of the picture (sides in steps of 16)."""
+def flux_edit_graph(m, prompt, image, megapixels, seed, extras=(), size=None, extra_loras=(), guidance=3.5, steps=20):
+    """FLUX.1 [dev] FP8 (12B), edit a picture: reference latents, FluxGuidance 3.5, optional LoRA."""
     g = {
         "1": {"class_type": "UNETLoader", "inputs": {"unet_name": m["flux_unet"], "weight_dtype": "default"}},
-        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": m["flux_clip"], "type": "flux2", "device": "default"}},
+        "2": {"class_type": "DualCLIPLoader", "inputs": {
+            "clip_name1": m["flux_clip"], "clip_name2": m["flux_clip_l"], "type": "flux", "device": "default"}},
         "3": {"class_type": "VAELoader", "inputs": {"vae_name": m["flux_vae"]}},
         "4": {"class_type": "LoadImage", "inputs": {"image": image}},
         "5": {"class_type": "ImageScaleToTotalPixels", "inputs": {
             "upscale_method": "lanczos", "megapixels": megapixels, "resolution_steps": 16, "image": ["4", 0]}},
         "6": {"class_type": "GetImageSize", "inputs": {"image": ["5", 0]}},
-        "7": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}},
-        "8": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["7", 0]}},
         "9": {"class_type": "VAEEncode", "inputs": {"pixels": ["5", 0], "vae": ["3", 0]}},
-        "10": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["7", 0], "latent": ["9", 0]}},
-        "11": {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["8", 0], "latent": ["9", 0]}},
     }
+    model_out, clip_out = ["1", 0], ["2", 0]
+    stages = {"1": "load", "2": "load", "3": "load", "4": "load", "5": "encode", "6": "encode", "9": "encode"}
+    if extra_loras:
+        model_out, clip_out = _sdxl_lora_chain(g, model_out, clip_out, extra_loras, base=60)
+        for i in range(len(extra_loras)):
+            stages[str(60 + i)] = "load"
+    g["7"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": clip_out}}
+    g["7g"] = {"class_type": "FluxGuidance", "inputs": {"guidance": guidance, "conditioning": ["7", 0]}}
+    g["8"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["7g", 0]}}
+    g["10"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["7g", 0], "latent": ["9", 0]}}
+    g["11"] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": ["8", 0], "latent": ["9", 0]}}
+    stages.update({"7": "encode", "7g": "encode", "8": "encode", "10": "encode", "11": "encode"})
     pos, neg = ["10", 0], ["11", 0]
     for k, img in enumerate(list(extras)[:2]):  # more reference pictures: image 2, image 3
         a, b, v, rp, rn = (f"{p}{k}" for p in ("30", "31", "32", "33", "34"))
@@ -1335,24 +1440,18 @@ def flux_edit_graph(m, prompt, image, megapixels, seed, extras=(), size=None):
         g[rp] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": pos, "latent": [v, 0]}}
         g[rn] = {"class_type": "ReferenceLatent", "inputs": {"conditioning": neg, "latent": [v, 0]}}
         pos, neg = [rp, 0], [rn, 0]
-    g.update({
-        "12": {"class_type": "CFGGuider", "inputs": {"model": ["1", 0], "positive": pos, "negative": neg, "cfg": 1}},
-        "13": {"class_type": "EmptyFlux2LatentImage", "inputs": {"width": ["6", 0], "height": ["6", 1], "batch_size": 1}},
-        "14": {"class_type": "Flux2Scheduler", "inputs": {"steps": 4, "width": ["6", 0], "height": ["6", 1]}},
-        "15": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "euler"}},
-        "16": {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}},
-        "17": {"class_type": "SamplerCustomAdvanced", "inputs": {
-            "noise": ["16", 0], "guider": ["12", 0], "sampler": ["15", 0], "sigmas": ["14", 0], "latent_image": ["13", 0]}},
-        "18": {"class_type": "VAEDecode", "inputs": {"samples": ["17", 0], "vae": ["3", 0]}},
-        "19": {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/flux", "images": ["18", 0]}},
-    })
+        for nid in (a, b, v, rp, rn):
+            stages[nid] = "encode"
+    g["13"] = {"class_type": "EmptySD3LatentImage", "inputs": {"width": ["6", 0], "height": ["6", 1], "batch_size": 1}}
+    g["17"] = {"class_type": "KSampler", "inputs": {
+        "seed": seed, "steps": steps, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0,
+        "model": model_out, "positive": pos, "negative": neg, "latent_image": ["13", 0]}}
+    g["18"] = {"class_type": "VAEDecode", "inputs": {"samples": ["17", 0], "vae": ["3", 0]}}
+    g["19"] = {"class_type": "SaveImage", "inputs": {"filename_prefix": "H3Workspace/flux", "images": ["18", 0]}}
     if size:  # own size: the picture is scaled to it, the result follows
         g["5"] = {"class_type": "ImageScale", "inputs": {
             "image": ["4", 0], "upscale_method": "lanczos", "width": size[0], "height": size[1], "crop": "center"}}
-    stages = {str(i): "load" for i in (1, 2, 3)}
-    stages.update({str(i): "encode" for i in range(4, 17)})
-    stages.update({k: "encode" for k in g if k.startswith(("30", "31", "32", "33", "34")) and len(k) == 3})
-    stages.update({"17": "sample", "18": "decode", "19": "save"})
+    stages.update({"13": "encode", "17": "sample", "18": "decode", "19": "save"})
     return g, stages
 
 

@@ -1,6 +1,6 @@
 ---
 name: storyboard
-description: Превращает рассказанную историю («первый кадр то-то, второй кадр то-то») в промпт для ОДНОЙ картинки-раскадровки: широкий кадр 16:9, разбитый на 2-9 кадров подряд, без номеров, подписей, стрелок и любого текста. Выдаёт готовый промпт под выбранную модель (Krea 2, FLUX.2 klein или Qwen 2.1). Включай, когда чат настроен на «Раскадровка».
+description: Превращает рассказанную историю («первый кадр то-то, второй кадр то-то») в промпт для ОДНОЙ картинки-раскадровки: широкий кадр 16:9, разбитый на 2-9 кадров подряд, без номеров, подписей, стрелок и любого текста. Выдаёт готовый промпт под выбранную модель (Krea 2, FLUX.1 dev или Qwen 2.1). Включай, когда чат настроен на «Раскадровка».
 ---
 
 # Раскадровка
@@ -53,7 +53,7 @@ description: Превращает рассказанную историю («п�
 A storyboard sheet in a single wide 16:9 image, [STYLE], divided into six equal frames in a grid of three columns and two rows, a full-bleed layout where the pictures extend all the way to the outer edges of the image, so that the top, bottom, left and right sides of the image are picture content with no white margin at all, and the pictures are separated from each other only by very thin black gutters, read left to right and top to bottom. Frame one: [wide shot of the scene]. Frame two: [medium shot...]. Frame three: [close-up...]. Frame four: [...]. Frame five: [...]. Frame six: [...]. The same [CHARACTER SHORT] appears in every frame with identical face, hair and outfit. Consistent [LIGHT AND PALETTE] across all frames. The sheet consists only of the illustrated frames, nothing is printed on it.
 ```
 
-### FLUX.2 klein (80-220 слов, порядок слов важен, без негатива)
+### FLUX.1 [dev] (80-220 слов, порядок слов важен, без негатива)
 Самое важное первым: носитель, число кадров и сетка, потом кадры по порядку, потом общие замки.
 
 ```prompt
@@ -69,7 +69,7 @@ The image is a [STYLE] storyboard sheet divided into six equal frames in a grid 
 
 ## Режим по кадрам (рекомендуется)
 
-В приложении есть режим «По кадрам» (FLUX.2 klein): каждый кадр рисуется ОТДЕЛЬНОЙ картинкой (сохраняется отдельно в полном размере), а лист с тонкой линией между кадрами склеивает программа. Поэтому здесь никаких рамок, полей и «листа» в промптах нет.
+В приложении есть режим «По кадрам» (FLUX.1 dev): каждый кадр рисуется ОТДЕЛЬНОЙ картинкой (сохраняется отдельно в полном размере), а лист с тонкой линией между кадрами склеивает программа. Поэтому здесь никаких рамок, полей и «листа» в промптах нет.
 
 Выдача: один блок prompt, в котором каждый кадр на своей строке: `1: ...`, `2: ...`. Число кадров строго 2, 3, 4, 6, 8 или 9. Каждая строка полный самостоятельный английский промпт ОДНОГО кадра:
 - начало строки: "In the same art style as image 1, a full-bleed picture that fills the entire frame right to its edges with no white border, no paper margin and no vignette." (если картинок нет, вместо "image 1" назови стиль словами);
