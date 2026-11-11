@@ -521,7 +521,11 @@ def choose_models(hw, profile=None):
 
 
 def model_entry(role, variant):
-    return dict(VARIANTS[role][variant], role=role, variant=variant, title=ROLE_TITLES[role])
+    v = VARIANTS.get(role, {}).get(variant)
+    if not v and role in VARIANTS:
+        variant = DEFAULT_CHOICE.get(role) or next(iter(VARIANTS[role]))
+        v = VARIANTS[role][variant]
+    return dict(v, role=role, variant=variant, title=ROLE_TITLES[role])
 
 
 # modes that appeared after the first release: the app offers them once after an update

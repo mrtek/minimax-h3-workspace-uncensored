@@ -227,7 +227,18 @@ class App:
         return Path(d) / catalog.COMFY_DIRNAME if d else None
 
     def choice(self):
-        return {**catalog.DEFAULT_CHOICE, **(self.config.get("choice") or {}), **(self.config.get("choice_override") or {})}
+        raw = {**catalog.DEFAULT_CHOICE, **(self.config.get("choice") or {}), **(self.config.get("choice_override") or {})}
+        out = {}
+        for role, variant in raw.items():
+            if role in catalog.VARIANTS:
+                if variant in catalog.VARIANTS[role]:
+                    out[role] = variant
+                else:
+                    out[role] = catalog.DEFAULT_CHOICE.get(role) or next(iter(catalog.VARIANTS[role]))
+        for role, default_var in catalog.DEFAULT_CHOICE.items():
+            if role not in out and role in catalog.VARIANTS:
+                out[role] = default_var
+        return out
 
     def modes(self):
         modes = list(self.config.get("modes") or catalog.MODE_ROLES)
