@@ -21,6 +21,7 @@ from pathlib import Path
 import aiohttp
 
 import catalog
+import procjob
 
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
@@ -388,6 +389,7 @@ class ComfyProcess:
         self.proc = subprocess.Popen(args, cwd=self.root, stdout=log, stderr=subprocess.STDOUT,
                                      creationflags=CREATE_NO_WINDOW, env=local_env(self.root),
                                      close_fds=True)
+        procjob.adopt(self.proc)   # dies with the app even if the app is killed from Task Manager
         try:
             log.close()
         except Exception:

@@ -1114,28 +1114,39 @@ def sdxl_inpaint_graph(m, prompt, negative, image, seed, mask=None, denoise=0.75
     g["3"] = {"class_type": "CLIPTextEncode", "inputs": {"text": negative, "clip": clip_out}}
     stages.update({"2": "encode", "3": "encode"})
 
+    # SDXL was taught on ~1024x1024. A native 4000 px photo is far outside that, and the model answers
+    # with invented anatomy and melted details - the "it hallucinates" complaint. So: the user's own
+    # width/height when given, otherwise the picture's own shape brought to about one megapixel.
     img_ref = ["10", 0]
     if size:
         g["11"] = {"class_type": "ImageScale", "inputs": {
             "image": img_ref, "upscale_method": "lanczos", "width": size[0], "height": size[1], "crop": "center"}}
-        img_ref = ["11", 0]
-        stages["11"] = "encode"
+    else:
+        g["11"] = {"class_type": "ImageScaleToTotalPixels", "inputs": {
+            "image": img_ref, "upscale_method": "lanczos", "megapixels": 1.0}}
+    img_ref = ["11", 0]
+    stages["11"] = "encode"
 
     if mask:
         g["12"] = {"class_type": "LoadImage", "inputs": {"image": mask}}
         mask_img = ["12", 0]
         stages["12"] = "load"
+        # the mask must land on exactly the pixels above: same node, same settings, same source shape
         if size:
             g["13"] = {"class_type": "ImageScale", "inputs": {
                 "image": mask_img, "upscale_method": "lanczos", "width": size[0], "height": size[1], "crop": "center"}}
-            mask_img = ["13", 0]
-            stages["13"] = "encode"
+        else:
+            g["13"] = {"class_type": "ImageScaleToTotalPixels", "inputs": {
+                "image": mask_img, "upscale_method": "lanczos", "megapixels": 1.0}}
+        mask_img = ["13", 0]
+        stages["13"] = "encode"
         g["14"] = {"class_type": "ImageToMask", "inputs": {"image": mask_img, "channel": "red"}}
         g["15"] = {"class_type": "VAEEncodeForInpaint", "inputs": {
             "pixels": img_ref, "vae": ["1", 2], "mask": ["14", 0], "grow_mask_by": 6}}
         latent_ref = ["15", 0]
         stages.update({"14": "encode", "15": "encode"})
-        run_denoise = denoise if denoise > 0.8 else 1.0
+        run_denoise = denoise   # the slider is the user's wish: VAEEncodeForInpaint carries its own noise mask,
+                                # so a value below 1.0 keeps the rest of the picture instead of repainting it
     else:
         g["15"] = {"class_type": "VAEEncode", "inputs": {"pixels": img_ref, "vae": ["1", 2]}}
         latent_ref = ["15", 0]

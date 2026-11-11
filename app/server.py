@@ -1814,7 +1814,7 @@ class App:
             sub = "Инпейнт (SDXL Pony)" if mask else "Правка (SDXL Pony)"
             return await self.queue(graph, stages, {
                 "mode": "sdxl", "sub": sub, "prompt": prompt, "aspect": form.get("aspect", ""),
-                "q": "", "len": 0.0, "res": ("%d×%d" % sz if sz else ""), "seed": seed})
+                "q": "", "len": 0.0, "res": ("%d×%d" % sz if sz else "~1 МП"), "seed": seed})
         if engine == "flux":
             await self.need_models("flux")
             prompt = form.get("prompt", "").strip()
@@ -3119,13 +3119,33 @@ class App:
         if not item:
             raise web.HTTPNotFound()
         recycled = False
-        paths_to_delete = {p for p in (self.file_path(item), Path(item["local"]) if item.get("local") else None) if p}
+        failed = []
+        # Both the original in ComfyUI's output folder and the program's own copy are ours to remove.
+        # file_path() returns only one of them, so the original used to survive every delete.
+        paths_to_delete = set()
+        f = item.get("file") or {}
+        if f.get("type") == "local":
+            if f.get("path"):
+                paths_to_delete.add(Path(f["path"]))
+        else:
+            out = self.output_dir or self._detect_output_dir()
+            fn, sf = f.get("filename"), f.get("subfolder") or ""
+            if out and fn:
+                paths_to_delete.add((out / sf / fn) if sf else (out / fn))
+        if item.get("local"):
+            paths_to_delete.add(Path(item["local"]))
         for path in paths_to_delete:
-            if path.exists():   # the original and the program's own copy both go to the Recycle Bin / unlinked
-                ok = await asyncio.to_thread(send_to_recycle_bin, path)
-                recycled = recycled or ok
+            if not path.exists():
+                continue
+            try:   # a shell call on a hung network path must not hold the request forever
+                ok = await asyncio.wait_for(asyncio.to_thread(send_to_recycle_bin, path), timeout=10)
+            except asyncio.TimeoutError:
+                ok = False
+            recycled = recycled or ok
+            if not ok:
+                failed.append(str(path))
         self.library.remove(item["id"])
-        return web.json_response({"ok": True, "recycled": recycled})
+        return web.json_response({"ok": True, "recycled": recycled, "failed": failed})
 
     async def h_results_get(self, _req):
         items = self.library.items
@@ -3766,7 +3786,11 @@ def comfy_error_text(res):
 
 
 def send_to_recycle_bin(path):
-    """Move file to Windows Recycle Bin via native Win32 SHFileOperationW, falling back to unlink."""
+    """Move file to the Windows Recycle Bin via SHFileOperationW.
+
+    True: the file is in the Recycle Bin (or was already gone). False: the shell refused - the file is
+    still on disk and the caller reports it. There is deliberately no permanent-unlink fallback.
+    """
     path = Path(path)
     if not path.exists():
         return True
@@ -3809,12 +3833,9 @@ def send_to_recycle_bin(path):
         except Exception:
             pass
 
-    # Direct deletion fallback
-    try:
-        path.unlink(missing_ok=True)
-        return not path.exists()
-    except Exception:
-        return False
+    # No destructive fallback: when the shell refuses (file is open, no rights), the user asked for the
+    # Recycle Bin, not for permanent removal. The caller reports the path as failed instead (SRV-022).
+    return False
 
 
 _LOCAL_ORIGIN_HOSTS = {"127.0.0.1", "localhost", "::1"}

@@ -15,7 +15,10 @@ DisableProgramGroupPage=yes
 DisableDirPage=no
 ; per-user install: no admin rights needed, and the app can write next to itself
 PrivilegesRequired=lowest
-OutputDir=output
+; output must live OUTSIDE the workspace: a build tree that a file sandbox labels
+; Low stamps an integrity label on every produced exe, and such an exe cannot
+; create its temp dir during install ("error code 5"). See audit/BRIEF.md §8.
+OutputDir=G:\Coding\h3-dist
 OutputBaseFilename=Minimax.H3.Workspace.Uncensored-Setup_v{#AppVersion}
 SetupIconFile=icon.ico
 UninstallDisplayIcon={app}\{#AppExe}

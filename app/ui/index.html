@@ -4889,10 +4889,13 @@ async function saveItems(items) {
   toast(items.length === 1 ? `Сохранение ${fileName(items[0])} — здесь откроется окно выбора папки` : `Сохранение ${items.length} видео — здесь откроется окно выбора папки`);
 }
 function askDelete(ids) {
+  // the viewer can be closed before the click lands: a null id used to become DELETE /api/library/null -> 404
+  ids = (ids || []).filter(id => id && byId(id));
   const items = ids.map(byId).filter(Boolean);
   const allImgs = items.length > 0 && items.every(it => it.kind === 'image');
   const allVids = items.length > 0 && items.every(it => it.kind !== 'image');
   const count = ids.length;
+  if (!count) return;
 
   if (count === 1) {
     $('#cfTitle').textContent = allImgs ? 'Удалить изображение?' : 'Удалить видео?';
@@ -4902,13 +4905,17 @@ function askDelete(ids) {
   $('#cfText').textContent = 'Файлы переместятся в корзину Windows — их можно будет восстановить.';
   $('#confirm').hidden = false;
   $('#cfOk').onclick = async () => {
+    $('#confirm').hidden = true;      // never leave the dialog hanging while the file system answers
+    $('#cfOk').disabled = true;
     const toRemove = [];
     if (API) {
       for (const id of [...ids]) {
         try {
           const r = await fetch(`/api/library/${id}`, { method: 'DELETE' });
           if (r.ok) {
+            const res = await r.json().catch(() => ({}));
             toRemove.push(id);
+            if (res.failed && res.failed.length) toast('Файл занят или недоступен — на диске остался: ' + res.failed.length);
           } else {
             const err = await r.json().catch(() => ({}));
             toast(err.error || 'Не удалось удалить');
@@ -4925,7 +4932,7 @@ function askDelete(ids) {
       if (i >= 0) LIB.splice(i, 1);
       selected.delete(id);
     });
-    $('#confirm').hidden = true;
+    $('#cfOk').disabled = false;
     if (toRemove.includes(openId)) closeViewer();
     renderLib();
     if (toRemove.length) {
@@ -7770,7 +7777,7 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
               <button data-e="flux">FLUX.1 [dev]<small>12B FP8, правка по референсам</small></button>
               <button data-e="qwen">Qwen 2.1<small>правка по описанию</small></button>
             </div>
-            <div class="hint qw-fluxhint" hidden></div></div>
+            <div class="hint qw-fluxhint" hidden></div>
           <textarea class="qw-prompt" placeholder="Что изменить и что оставить. Например: Этот человек сидит в кафе у окна и пьёт кофе. Лицо, причёска и одежда как на изображении."></textarea>
           <div class="ta-foot"><span class="hint">Скажите и что поменять, и что оставить прежним — так результат точнее</span></div>
           <div class="row qw-editonly" style="margin-top:12px"><div class="row-l">Формат кадра <span class="hint">по умолчанию как у вашего изображения</span></div><div class="chips qw-asp"></div></div>
@@ -7791,6 +7798,7 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
     QW_MASK_BLOB = null; QW_MASK_CANVAS_DATA = null;
     $('#qwMaskBadge', root).style.display = 'none';
     $('#qwBtnClearMask', root).style.display = 'none';
+    setDenoise(0.75);
   });
   const drop2 = $('#qwDrop2'), drop3 = $('#qwDrop3');
   szWire($('.qw-szwrap', root), S, () => upd(), () => IMG_SIZES[S.aspect] || [1376, 768]);
@@ -7872,6 +7880,11 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
     } catch {}
   }
   // Inpaint Controls and Canvas Drawing
+  const setDenoise = v => {
+    const r = $('#qwDenoiseRange', root); if (!r) return;
+    r.value = v;
+    $('#qwDenoiseVal', root).textContent = Number(v).toFixed(2);
+  };
   $('#qwDenoiseRange', root)?.addEventListener('input', e => {
     $('#qwDenoiseVal', root).textContent = Number(e.target.value).toFixed(2);
   });
@@ -7889,6 +7902,7 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
     QW_MASK_BLOB = null; QW_MASK_CANVAS_DATA = null;
     $('#qwMaskBadge', root).style.display = 'none';
     $('#qwBtnClearMask', root).style.display = 'none';
+    setDenoise(0.75);   // back to whole-picture editing
     toast('Маска сброшена');
   });
 
@@ -7990,6 +8004,8 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
     offCtx.putImageData(maskImgData, 0, 0);
     if (hasDrawing) {
       QW_MASK_CANVAS_DATA = drawImgData;
+      // with a mask, a low denoise only polishes the hole instead of painting it: 0.90-1.00 is what the hint says
+      if (Number($('#qwDenoiseRange', root)?.value || 0) < 0.85) setDenoise(0.95);
       off.toBlob(blob => {
         QW_MASK_BLOB = blob;
         $('#qwMaskBadge', root).style.display = 'inline-block';
@@ -8001,6 +8017,7 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
       QW_MASK_CANVAS_DATA = null;
       $('#qwMaskBadge', root).style.display = 'none';
       $('#qwBtnClearMask', root).style.display = 'none';
+      setDenoise(0.75);
     }
     maskModal.hidden = true;
   });

@@ -499,7 +499,23 @@ def main():
         webview.start(gui="edgechromium", private_mode=False,
                       storage_path=storage_path)
     except Exception:
-        # no WebView2: use the browser and keep running until the console/process is closed
+        # The browser fallback exists for machines without WebView2. Reaching it with WebView2 installed
+        # means the window stack failed (often while closing) - parking the process in an endless wait
+        # there left a windowless "Minimax H3 Workspace" process behind: that is the zombie users saw.
+        try:
+            import report
+            has_webview2 = not report.webview2_version().startswith("не найден")
+        except Exception:
+            has_webview2 = False
+        if has_webview2:
+            try:
+                with open(server.DATA_DIR / "startup.log", "a", encoding="utf-8") as fh:
+                    fh.write("webview failed; exiting instead of running windowless\n")
+            except Exception:
+                pass
+            do_exit(srv, 1)
+            return
+        # no WebView2 at all: the browser is the whole UI, so the local server must stay alive
         webbrowser.open(url)
         threading.Event().wait()
     finally:

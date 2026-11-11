@@ -16,6 +16,7 @@ from pathlib import Path
 import aiohttp
 
 import engine
+import procjob
 
 LLAMA_BUILD = "b11985"
 LLAMA_URL = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_BUILD}/llama-{LLAMA_BUILD}-bin-win-vulkan-x64.zip"
@@ -643,6 +644,7 @@ class LlamaServer:
         log = open(self.log_path, "w", encoding="utf-8", errors="replace")
         self.proc = subprocess.Popen(args, cwd=self.exe().parent, stdout=log, stderr=subprocess.STDOUT,
                                      creationflags=engine.CREATE_NO_WINDOW, close_fds=True)
+        procjob.adopt(self.proc)   # dies with the app even if the app is killed from Task Manager
         try:
             log.close()
         except Exception:
