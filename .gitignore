@@ -5,6 +5,7 @@ config.json
 
 # сборка (установщик выкладывается в Releases, а не в репозиторий)
 app/build/dist/
+app/build/build/
 app/build/work/
 app/build/output/
 *.exe
