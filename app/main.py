@@ -153,34 +153,25 @@ def kill_all_descendants(parent_pid):
         pass
 
 
+def _log_startup(text):
+    """Append a line to data/startup.log; never raise."""
+    try:
+        with (server.DATA_DIR / "startup.log").open("a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {text}\n")
+    except OSError:
+        pass
+
+
 def cleanup_stale_environment():
-    """Kill lingering background processes from previous crashed sessions
-    and remove stale webview lock files.
+    """Remove only what a crashed run of THIS app can leave behind.
+
+    ComfyUI and llama-server are children of this process: the Windows Job Object
+    (KILL_ON_JOB_CLOSE, see init_job_object) terminates them when we exit, so a
+    global process kill is not needed - it would kill other programs.
+    The only real leftover is a zero-byte WebView2 LOCK file in our own data dir.
     """
     if sys.platform != "win32":
         return
-    import subprocess
-    try:
-        subprocess.run(["taskkill", "/F", "/IM", "llama-server.exe"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                       creationflags=0x08000000, timeout=1)
-    except Exception:
-        pass
-
-    try:
-        ps = '''
-        param($dir)
-        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-            ($_.Name -eq "msedgewebview2.exe") -and ($_.CommandLine -like "*$dir*")
-        } | ForEach-Object {
-            Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-        }
-        '''
-        subprocess.run(["powershell", "-NoProfile", "-Command", ps, "-dir", "Minimax"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                       creationflags=0x08000000, timeout=2)
-    except Exception:
-        pass
 
     try:
         wv_dir = server.DATA_DIR / "webview"
@@ -189,10 +180,10 @@ def cleanup_stale_environment():
                 try:
                     if lock.is_file() and lock.stat().st_size == 0:
                         lock.unlink(missing_ok=True)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+                except OSError as e:
+                    _log_startup(f"cleanup: cannot remove {lock}: {e}")
+    except OSError as e:
+        _log_startup(f"cleanup: webview scan failed: {e}")
 
 
 def resolve_webview_storage_path():
