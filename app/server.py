@@ -21,6 +21,7 @@ import threading
 import time
 import subprocess
 import sys
+import tempfile
 import uuid
 import urllib.parse
 import webbrowser
@@ -2621,7 +2622,8 @@ class App:
 
             temp_audio_path = None
             if audio_bytes and len(audio_bytes) > 0:
-                temp_audio_path = Path(tempfile.gettempdir()) / f"h3s_mus_{uuid.uuid4().hex[:8]}_{audio_filename or 'audio.mp3'}"
+                safe_audio = Path(str(audio_filename or "audio.mp3").replace("\\", "/")).name or "audio.mp3"
+                temp_audio_path = Path(tempfile.gettempdir()) / f"h3s_mus_{uuid.uuid4().hex[:8]}_{safe_audio}"
                 temp_audio_path.write_bytes(audio_bytes)
 
             audio_opts = {
