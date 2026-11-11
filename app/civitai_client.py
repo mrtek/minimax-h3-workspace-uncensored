@@ -9,6 +9,7 @@ import json
 import os
 import re
 import time
+import urllib.parse
 from pathlib import Path
 import aiohttp
 
@@ -230,7 +231,15 @@ async def download_file_stream(session, url, dest_path, token=None):
     CURRENT_DOWNLOAD["file"] = dest.name
 
     download_url = url
-    if token and "token=" not in download_url:
+    if not url:
+        raise RuntimeError("Пустой URL")
+    parsed = urllib.parse.urlsplit(download_url)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme == "http" and host not in ("127.0.0.1", "localhost", "::1"):
+        raise RuntimeError("Скачивание разрешено только по https")
+    token_hosts = ("civitai.com", "civitai.space", "civitai.red", "huggingface.co", "hf.co")
+    if token and host and any(host == h or host.endswith("." + h) for h in token_hosts) \
+            and "token=" not in download_url:
         delim = "&" if "?" in download_url else "?"
         download_url = f"{download_url}{delim}token={token.strip()}"
 

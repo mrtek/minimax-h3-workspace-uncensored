@@ -2120,13 +2120,21 @@ class App:
         if not url or not filename:
             return web.json_response({"error": "Не указан URL или имя файла"}, status=400)
 
+        name = Path(str(filename).replace("\\", "/")).name
+        allowed_ext = (".safetensors", ".pt", ".ckpt", ".bin", ".gguf")
+        if not name or name in (".", "..") or Path(name).suffix.lower() not in allowed_ext:
+            return web.json_response({"error": "Недопустимое имя файла"}, status=400)
+
         root = self.comfy_root()
         if not root:
             return web.json_response({"error": "ComfyUI не найден"}, status=500)
 
         dest_dir = root / "ComfyUI" / "models" / "loras" / "MinimaxH3"
         dest_dir.mkdir(parents=True, exist_ok=True)
-        dest_path = dest_dir / filename
+        dest_path = dest_dir / name
+        # defence in depth: the resolved path must stay inside dest_dir
+        if dest_path.resolve().parent != dest_dir.resolve():
+            return web.json_response({"error": "Недопустимое имя файла"}, status=400)
 
         meta_name = body.get("name")
         meta_desc = body.get("desc")
@@ -2134,30 +2142,30 @@ class App:
         if meta_name or meta_triggers:
             all_meta = dict(self.config.get("custom_lora_meta") or {})
             entry = {
-                "name": meta_name or filename,
+                "name": meta_name or name,
                 "desc": meta_desc or "",
                 "triggers": meta_triggers or [],
                 "category": f"{source} LoRA",
                 "source": str(source).lower(),
             }
-            all_meta[f"MinimaxH3\\{filename}"] = entry
-            all_meta[filename] = entry
+            all_meta[f"MinimaxH3\\{name}"] = entry
+            all_meta[name] = entry
             self.config.update(custom_lora_meta=all_meta)
 
         if civitai_client.CURRENT_DOWNLOAD["active"]:
             return web.json_response({"error": "Уже идёт скачивание другой LoRA"}, status=409)
 
         civitai_client.CURRENT_DOWNLOAD["active"] = True
-        civitai_client.CURRENT_DOWNLOAD["name"] = meta_name or filename
+        civitai_client.CURRENT_DOWNLOAD["name"] = meta_name or name
 
         async def run_dl():
             try:
                 await civitai_client.download_file_stream(self.session, url, dest_path, token=token)
             except Exception as e:
-                self.note_error(f"Ошибка скачивания LoRA {filename}: {e}")
+                self.note_error(f"Ошибка скачивания LoRA {name}: {e}")
 
         asyncio.create_task(run_dl())
-        return web.json_response({"ok": True, "file": filename})
+        return web.json_response({"ok": True, "file": name})
 
     async def h_civitai_download_status(self, _req):
         import civitai_client
@@ -3203,6 +3211,9 @@ class App:
             return web.Response(body=body, content_type=r.headers.get("Content-Type", "application/octet-stream"))
 
     async def h_events(self, req):
+        if os.environ.get("H3_STRICT_ORIGIN", "1") != "0" \
+                and not _origin_ok(req.headers.get("Origin"), req.url.port):
+            return web.json_response({"error": "cross-origin websocket rejected"}, status=403)
         ws = web.WebSocketResponse(heartbeat=20)
         await ws.prepare(req)
         self.browsers.add(ws)
@@ -3806,9 +3817,46 @@ def send_to_recycle_bin(path):
         return False
 
 
+_LOCAL_ORIGIN_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _origin_ok(origin, port):
+    """True if `origin` is this machine on the same port (or Origin is absent)."""
+    if not origin:
+        return True                      # non-browser clients (curl, tests) send no Origin
+    if origin == "null":
+        return False                     # sandboxed iframe / file:// context
+    try:
+        parts = urllib.parse.urlsplit(origin)
+        if parts.scheme not in ("http", "https"):
+            return False
+        origin_port = parts.port or (80 if parts.scheme == "http" else 443)
+    except ValueError:
+        return False                     # malformed Origin: reject, never 500
+    host = parts.hostname or ""
+    if host == "::1":
+        host = "127.0.0.1"
+    return host in _LOCAL_ORIGIN_HOSTS and origin_port == port
+
+
+@web.middleware
+async def same_origin_only(request, handler):
+    """Reject cross-site state-changing requests: a random web page must not drive a local app.
+
+    aiohttp's request.json() ignores Content-Type, so a `text/plain` no-cors POST
+    from another site would otherwise be accepted. Browsers always attach Origin
+    to such requests, so rejecting foreign Origin closes the hole.
+    """
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        if os.environ.get("H3_STRICT_ORIGIN", "1") != "0":
+            if not _origin_ok(request.headers.get("Origin"), request.url.port):
+                return web.json_response({"error": "cross-origin request rejected"}, status=403)
+    return await handler(request)
+
+
 def build_app(comfy_override=None):
     state = App(comfy_override)
-    app = web.Application(client_max_size=300 * 1024 * 1024)
+    app = web.Application(middlewares=[same_origin_only], client_max_size=300 * 1024 * 1024)
     app.on_startup.append(state.start)
     app.on_cleanup.append(state.stop)
     app.add_routes([
