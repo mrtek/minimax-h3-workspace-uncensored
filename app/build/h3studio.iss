@@ -34,7 +34,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; the maker's own settings, library and keys live in dist\...\data: never ship or overwrite them
-Source: "dist\MinimaxH3Workspace\*"; DestDir: "{app}"; Excludes: "data,data\*,data_location.txt"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\MinimaxH3Workspace\*"; DestDir: "{app}"; Excludes: "data,data\*,data_location.txt"; Flags: ignoreversion recursesubdirs createallsubdirs restartreplace
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"

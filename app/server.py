@@ -953,7 +953,15 @@ class App:
             raise web.HTTPBadGateway(text=str(e))
         updater.run(installer)
         # the installer is already running on its own: leave, so it can replace the files and open the app again
-        asyncio.get_running_loop().call_later(3, lambda: os._exit(0))
+        def _terminate_now():
+            if sys.platform == "win32":
+                try:
+                    import ctypes
+                    ctypes.windll.kernel32.TerminateProcess(ctypes.windll.kernel32.GetCurrentProcess(), 0)
+                except Exception:
+                    pass
+            os._exit(0)
+        asyncio.get_running_loop().call_later(3, _terminate_now)
         return web.json_response({"ok": True})
 
     async def h_system(self, _req):
