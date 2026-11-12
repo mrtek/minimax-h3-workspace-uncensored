@@ -63,7 +63,7 @@ def _m(repo, path, size_gb, category, name=None, sub=SUB):
 # the same file is published under two names; either one counts as present
 FILE_ALIASES = {
     "minimax_h3_latent_upscaler_3d_bf16.safetensors": ("minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors",),
-    "ae.safetensors": ("flux2-vae.safetensors", "flux_vae.safetensors", "ae.sft"),
+    "ae.safetensors": ("flux_vae.safetensors", "ae.sft"),
     "flux1-dev-fp8.safetensors": ("flux1-dev.safetensors", "flux1-dev-fp8-e4m3fn.safetensors", "flux1-dev-fp8.sft", "flux-1-dev-fp8.safetensors"),
     "t5xxl_fp8_e4m3fn.safetensors": ("t5xxl_fp8.safetensors", "t5_fp8.safetensors", "t5xxl_fp8_e4m3fn_scaled.safetensors"),
     "clip_l.safetensors": ("vi-l.safetensors", "clip_l14.safetensors", "clip-l.safetensors"),
