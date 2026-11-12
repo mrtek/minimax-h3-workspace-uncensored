@@ -6,6 +6,7 @@ Nothing here needs extra packages: CPU load comes from GetSystemTimes, RAM from 
 import ctypes
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -39,25 +40,49 @@ def _num(text):
 
 class Monitor:
     def __init__(self):
+        self._lock = threading.Lock()
         self._cpu_prev = None
         self._cache, self._at = None, 0.0
 
     def cpu_percent(self):
-        idle, kernel, user = _FileTime(), _FileTime(), _FileTime()
-        if not ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user)):
+        try:
+            idle, kernel, user = _FileTime(), _FileTime(), _FileTime()
+            if not ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user)):
+                return None
+            now = (_ticks(idle), _ticks(kernel) + _ticks(user))  # kernel time already includes idle time
+            prev, self._cpu_prev = self._cpu_prev, now
+            if not prev or now[1] <= prev[1]:
+                return None
+            val = round(100 * (1 - (now[0] - prev[0]) / (now[1] - prev[1])), 1)
+            return max(0.0, min(100.0, val))
+        except Exception:
             return None
-        now = (_ticks(idle), _ticks(kernel) + _ticks(user))  # kernel time already includes idle time
-        prev, self._cpu_prev = self._cpu_prev, now
-        if not prev or now[1] <= prev[1]:
+
+    def cpu_temp(self):
+        """CPU temperature in degrees Celsius, or None if unavailable.
+
+        Windows user-mode application runs with PrivilegesRequired=lowest.
+        Without Ring-0 drivers or administrative elevation, direct CPU DTS/MSR readings
+        are unavailable. Returns None safely without blocking or raising exceptions.
+        """
+        try:
             return None
-        return round(100 * (1 - (now[0] - prev[0]) / (now[1] - prev[1])), 1)
+        except Exception:
+            return None
 
     @staticmethod
     def ram():
-        m = _MemStatus(dwLength=ctypes.sizeof(_MemStatus))
-        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
-        total = m.ullTotalPhys / GB
-        return {"total_gb": round(total, 1), "used_gb": round(total - m.ullAvailPhys / GB, 1)}
+        try:
+            m = _MemStatus(dwLength=ctypes.sizeof(_MemStatus))
+            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m)):
+                return None
+            total = m.ullTotalPhys / GB
+            if total <= 0:
+                return None
+            used = total - (m.ullAvailPhys / GB)
+            return {"total_gb": round(total, 1), "used_gb": round(max(0.0, used), 1)}
+        except Exception:
+            return None
 
     @staticmethod
     def gpu():
@@ -67,33 +92,80 @@ class Monitor:
                  "--format=csv,noheader,nounits"],
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=4,
                 creationflags=engine.CREATE_NO_WINDOW).stdout
-        except Exception:
-            return None
-        rows = [[x.strip() for x in line.split(",")] for line in out.strip().splitlines() if line.strip()]
-        if not rows:
-            return None
-        r = max(rows, key=lambda r: _num(r[3]) or 0)  # the card with the most memory is the one in use
-        used, total = _num(r[2]), _num(r[3])
-        return {"name": r[0].replace("NVIDIA GeForce ", ""), "util": _num(r[1]),
+            rows = [[x.strip() for x in line.split(",")] for line in out.strip().splitlines() if line.strip()]
+            valid_rows = [r for r in rows if len(r) >= 7]
+            if not valid_rows:
+                return None
+            r = max(valid_rows, key=lambda r: _num(r[3]) or 0)  # the card with the most memory is the one in use
+            used, total = _num(r[2]), _num(r[3])
+            return {
+                "name": r[0].replace("NVIDIA GeForce ", ""),
+                "util": _num(r[1]),
                 "vram_used_gb": round(used / 1024, 1) if used is not None else None,
                 "vram_total_gb": round(total / 1024, 1) if total is not None else None,
-                "temp": _num(r[4]), "power": _num(r[5]), "power_limit": _num(r[6])}
+                "temp": _num(r[4]),
+                "power": _num(r[5]),
+                "power_limit": _num(r[6]),
+            }
+        except Exception:
+            return None
 
     @staticmethod
     def disk(path):
-        p = Path(path)
-        while not p.exists() and p.parent != p:
-            p = p.parent
         try:
+            p = Path(path)
+            while not p.exists() and p.parent != p:
+                p = p.parent
             u = shutil.disk_usage(p)
-        except OSError:
+            return {"free_gb": round(u.free / GB), "total_gb": round(u.total / GB), "drive": p.drive or str(p)}
+        except Exception:
             return None
-        return {"free_gb": round(u.free / GB), "total_gb": round(u.total / GB), "drive": p.drive or str(p)}
+
+    def invalidate_cache(self):
+        """Invalidate cached metrics so the next sample() call fetches fresh data."""
+        with self._lock:
+            self._cache = None
+            self._at = 0.0
 
     def sample(self, disk_path):
         """At most one reading per second, however many windows ask."""
-        if self._cache and time.monotonic() - self._at < 1.0:
-            return self._cache
-        self._cache = {"cpu": self.cpu_percent(), "ram": self.ram(), "gpu": self.gpu(), "disk": self.disk(disk_path)}
-        self._at = time.monotonic()
-        return self._cache
+        with self._lock:
+            now = time.monotonic()
+            if self._cache is not None and (now - self._at) < 1.0:
+                return self._cache
+
+            try:
+                c_cpu = self.cpu_percent()
+            except Exception:
+                c_cpu = None
+
+            try:
+                c_temp = self.cpu_temp()
+            except Exception:
+                c_temp = None
+
+            try:
+                c_ram = self.ram()
+            except Exception:
+                c_ram = None
+
+            try:
+                c_gpu = self.gpu()
+            except Exception:
+                c_gpu = None
+
+            try:
+                c_disk = self.disk(disk_path)
+            except Exception:
+                c_disk = None
+
+            fresh = {
+                "cpu": c_cpu,
+                "cpu_temp": c_temp,
+                "ram": c_ram,
+                "gpu": c_gpu,
+                "disk": c_disk,
+            }
+            self._cache = fresh
+            self._at = now
+            return fresh

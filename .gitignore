@@ -43,3 +43,9 @@ audit/
 tools/
 HANDOFF.md
 .agent-teams/
+.agents/
+PROJECT.md
+TEST_INFRA.md
+pytest.ini
+tests/
+.pytest_cache/

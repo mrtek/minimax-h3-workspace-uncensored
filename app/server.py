@@ -182,6 +182,8 @@ class App:
         self.rh_models = None  # model paths found in the user's RunningHub workflow
         self.monitor = monitor.Monitor()
         self.recent_errors = []  # last problems, for the report to the author
+        self._agent_busy = False
+        self._unload_lock = asyncio.Lock()
         self.loop = None
         self.ffmpeg_download_task = None
         self.ffmpeg_download_cancel = None
@@ -411,7 +413,10 @@ class App:
         return names, missing
 
     async def comfy_json(self, method, path, **kw):
-        async with self.session.request(method, self.comfy + path, **kw) as r:
+        m = method.upper()
+        fn = getattr(self.session, m.lower(), None) if hasattr(self.session, m.lower()) else None
+        req = fn(self.comfy + path, **kw) if fn else self.session.request(method, self.comfy + path, **kw)
+        async with req as r:
             body = await r.text()
             data = json.loads(body) if body else None
             return r.status, data
@@ -985,6 +990,104 @@ class App:
             os._exit(0)
         asyncio.get_running_loop().call_later(3, _terminate_now)
         return web.json_response({"ok": True})
+
+    async def h_models_unload(self, _req):
+        """Evict loaded models from VRAM and RAM across ComfyUI and llama-server."""
+        if self.jobs:
+            return web.json_response({
+                "ok": False,
+                "error": "Нельзя выгрузить модели во время активной генерации видео"
+            }, status=409)
+
+        if getattr(self, "_agent_busy", False):
+            return web.json_response({
+                "ok": False,
+                "error": "Нельзя выгрузить модели во время работы агента"
+            }, status=409)
+
+        if not hasattr(self, "_unload_lock") or self._unload_lock is None:
+            self._unload_lock = asyncio.Lock()
+
+        if self._unload_lock.locked():
+            return web.json_response({
+                "ok": False,
+                "error": "Выгрузка моделей уже выполняется"
+            }, status=409)
+
+        async with self._unload_lock:
+            comfy_status = "offline"
+            llama_status = "not_running"
+            details = []
+
+            # 1. Free ComfyUI models & VRAM
+            try:
+                status, _ = await self.comfy_json(
+                    "POST", "/free",
+                    json={"unload_models": True, "free_memory": True},
+                    timeout=aiohttp.ClientTimeout(total=8)
+                )
+                if status == 200:
+                    comfy_status = "unloaded"
+                    details.append("ComfyUI: модели выгружены из памяти")
+                elif status == 500:
+                    comfy_status = "error_500"
+                    details.append(f"ComfyUI: вернул статус {status}")
+                elif status == 502:
+                    comfy_status = "error_502"
+                    details.append(f"ComfyUI: вернул статус {status}")
+                else:
+                    comfy_status = f"error_{status}"
+                    details.append(f"ComfyUI: вернул статус {status}")
+            except (aiohttp.ClientError, asyncio.TimeoutError):
+                comfy_status = "offline"
+                details.append("ComfyUI: не запущен или не отвечает")
+            except Exception as e:
+                comfy_status = "error"
+                details.append(f"ComfyUI: {e}")
+
+            # 2. Stop llama-server if active
+            if self.llm.alive():
+                try:
+                    await self.stop_llm()
+                    llama_status = "stopped"
+                    details.append("Агент (llama-server): остановлен, память освобождена")
+                except Exception as e:
+                    llama_status = "error"
+                    details.append(f"Агент: ошибка остановки ({e})")
+            else:
+                llama_status = "not_running"
+                details.append("Агент: не был запущен")
+
+            # 3. Allow OS/driver memory deallocation to settle
+            await asyncio.sleep(0.3)
+
+            # 4. Invalidate telemetry cache & obtain immediate fresh readings
+            if hasattr(self.monitor, "invalidate_cache"):
+                self.monitor.invalidate_cache()
+            elif hasattr(self.monitor, "_cache"):
+                self.monitor._cache = None
+                self.monitor._at = 0.0
+            where = self.output_dir or self.config.get("install_dir") or HOME
+            fresh_stats = await asyncio.to_thread(self.monitor.sample, where)
+
+            # 5. Formulate user-facing toast text
+            if comfy_status == "unloaded" and llama_status == "stopped":
+                message = "Модели ComfyUI и агента выгружены из памяти"
+            elif comfy_status == "unloaded":
+                message = "Модели ComfyUI выгружены из памяти"
+            elif llama_status == "stopped":
+                message = "Агент выгружен из памяти"
+            else:
+                message = "Активных моделей в памяти не обнаружено"
+
+            return web.json_response({
+                "ok": True,
+                "message": message,
+                "comfyui": comfy_status,
+                "llama": llama_status,
+                "details": details,
+                "stats": fresh_stats
+            })
 
     async def h_system(self, _req):
         """CPU / RAM / GPU / disk readings for the sidebar."""
@@ -3426,6 +3529,7 @@ class App:
         async def send(obj):
             await resp.write(f"data: {ag.dumps(obj)}\n\n".encode())
 
+        self._agent_busy = True
         try:
             if self.jobs:
                 raise RuntimeError("Сейчас идёт генерация видео — агент запустится, когда она закончится.")
@@ -3483,6 +3587,8 @@ class App:
             raise
         except Exception as e:
             await send({"type": "error", "message": str(e)})
+        finally:
+            self._agent_busy = False
         return resp
 
     async def h_agent_translate(self, req):
@@ -3496,6 +3602,7 @@ class App:
         variant = await self.llm_variant()
         if not self.llm.installed(variant):
             return web.json_response({"error": "Модель агента ещё не скачана."}, status=400)
+        self._agent_busy = True
         try:
             if not self.llm.alive():
                 try:
@@ -3522,6 +3629,8 @@ class App:
             return web.json_response({"text": out})
         except Exception as e:
             return web.json_response({"error": str(e) or "Не удалось перевести"}, status=500)
+        finally:
+            self._agent_busy = False
 
     # agent chat history: one JSON file per conversation in data/chats
 
@@ -3921,6 +4030,7 @@ def build_app(comfy_override=None):
         web.post("/api/models/download", state.h_models_download),
         web.post("/api/models/download/cancel", state.h_models_download_cancel),
         web.post("/api/models/variant", state.h_models_variant),
+        web.post("/api/models/unload", state.h_models_unload),
         web.get("/api/wf/list", state.h_wf_list),
         web.post("/api/wf/add", state.h_wf_add),
         web.get("/api/wf/{id}", state.h_wf_get),

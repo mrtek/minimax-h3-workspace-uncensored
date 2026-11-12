@@ -5,7 +5,7 @@
 [![ComfyUI Embedded](https://img.shields.io/badge/ComfyUI-Portable%20Embedded-ff5500.svg)](https://github.com/comfyanonymous/ComfyUI)
 [![FFmpeg Hardware Accelerated](https://img.shields.io/badge/FFmpeg-NVENC%20Accelerated-007800.svg?logo=ffmpeg)](https://ffmpeg.org/)
 [![License MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Release v1.1.13](https://img.shields.io/badge/Release-v1.1.13-crimson.svg)](https://github.com/mrtek/minimax-h3-workspace-uncensored/releases)
+[![Release v1.1.14](https://img.shields.io/badge/Release-v1.1.14-crimson.svg)](https://github.com/mrtek/minimax-h3-workspace-uncensored/releases)
 
 Универсальная творческая студия для Windows: локальная генерация видео и графики с помощью нейросетей семейства **MiniMax H3**, **FLUX.1 [dev] 12B FP8**, **SDXL / Pony Diffusion (100% Uncensored)**, **Krea 2**, **Qwen 2.1**, а также быстрый видеомонтаж, локальный AI-режиссёр и расширенная поддержка пользовательских LoRA **без ограничений и цензуры**.
 
@@ -152,8 +152,9 @@ ComfyUI работает автономно «под капотом» прогр
   - Занятая и доступная видеопамять (VRAM).
   - Нагрузка центрального процессора (CPU %).
   - Использование оперативной памяти (RAM).
-  - Температура GPU и текущее энергопотребление (Ватт).
+  - Температура GPU, температура CPU (при доступности сенсоров) и текущее энергопотребление (Ватт).
   - Свободное место на рабочем диске.
+  - **Кнопка «Выгрузить модели»**: мгновенная выгрузка тяжелых нейросетей из видеопамяти (VRAM) и ОЗУ без закрытия студии для освобождения ресурсов под другие задачи.
 - **Архитектура «Zero-Zombie»**: использование **Windows Job Objects** гарантирует, что при закрытии программы все фоновые подпроцессы (`llama-server.exe`, `whisper.exe`, сокеты ComfyUI) мгновенно завершаются операционной системой без зависаний в Диспетчере задач.
 - **Безопасная Библиотека**: удаление медиафайлов производится в системную **Корзину Windows** (`SHFileOperationW`) — случайное удаление ценного дубля можно легко отменить.
 
@@ -176,7 +177,7 @@ ComfyUI работает автономно «под капотом» прогр
 ### Вариант 1. Готовый установщик (Рекомендуется)
 
 1. Откройте страницу [**Releases на GitHub**](https://github.com/mrtek/minimax-h3-workspace-uncensored/releases).
-2. Скачайте последнюю версию инсталлятора: **`Minimax.H3.Workspace.Uncensored-Setup_v1.1.13.exe`**.
+2. Скачайте последнюю версию инсталлятора: **`Minimax.H3.Workspace.Uncensored-Setup_v1.1.14.exe`**.
 3. Запустите установку.
    *(Если Windows SmartScreen выдаст предупреждение о неизвестном издателе, нажмите «Подробнее» → «Выполнить в любом случае»).*
 4. Запустите ярлык **Minimax H3 Workspace** на рабочем столе.

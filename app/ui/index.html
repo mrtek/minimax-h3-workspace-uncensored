@@ -287,6 +287,7 @@ body.has-upd-banner .main .view{padding-top:14px!important}
 .vram i.hi{background:#ff4d4d}
 .meter{display:grid;gap:5px}
 .side-foot .stat b{font-variant-numeric:tabular-nums}
+#cpuTempRow b{font-variant-numeric:tabular-nums}
 .side-foot .stat small{color:var(--dim);font-size:11px}
 .rep-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 12px;padding:9px 10px;border-radius:11px;border:1px solid rgba(var(--accent-rgb),.45);background:var(--accent-soft);color:var(--text);font-weight:700;font-size:12.5px;width:100%;transition:.15s;flex:none}
 .rep-btn svg{width:16px;height:16px}
@@ -295,6 +296,69 @@ body.has-upd-banner .main .view{padding-top:14px!important}
 .sup-btn{display:block;margin:-4px 0 12px;padding:4px 10px;width:100%;text-align:center;font-size:12px;color:var(--muted);font-weight:600;border-radius:9px;flex:none}
 .sup-btn:hover{color:var(--text)}
 @media (max-height:760px){.side-foot{gap:6px;padding:10px 12px}.side-foot .stat{font-size:11.5px}}
+
+/* Sidebar Unload Models Button */
+.unload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 4px;
+  padding: 7.5px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s ease;
+  user-select: none;
+  width: 100%;
+}
+.unload-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.unload-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform .2s ease;
+}
+.unload-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.unload-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.unload-btn:disabled,
+.unload-btn.busy {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.unload-btn.busy svg {
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@media (max-height: 760px) {
+  .unload-btn {
+    padding: 6px 8px;
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  .unload-btn svg {
+    width: 13px;
+    height: 13px;
+  }
+}
 
 /* main */
 .main{overflow:auto}
@@ -1020,8 +1084,13 @@ img.pr-media{object-position:center 38%}
       <div class="meter"><div class="stat"><span>Процессор</span><b id="cpuTxt">—</b></div><div class="vram"><i id="cpuBar"></i></div></div>
       <div class="meter"><div class="stat"><span>Память (ОЗУ)</span><b id="ramTxt">—</b></div><div class="vram"><i id="ramBar"></i></div></div>
       <div class="stat" id="tempRow" hidden><span>Температура GPU</span><b id="gpuTemp">—</b></div>
+      <div class="stat" id="cpuTempRow" hidden><span>Температура CPU</span><b id="cpuTemp">—</b></div>
       <div class="stat" id="powerRow" hidden><span>Питание GPU</span><b id="gpuPower">—</b></div>
       <div class="stat"><span>Диск <small id="diskName"></small></span><b id="diskTxt">—</b></div>
+      <button class="unload-btn" id="unloadModelsBtn" type="button" title="Освободить видеопамять (VRAM) и оперативную память (RAM) от загруженных моделей">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span id="unloadModelsTxt">Выгрузить модели</span>
+      </button>
     </div>
   </aside>
 
@@ -2008,7 +2077,10 @@ const g1 = n => (+n).toFixed(n >= 100 ? 0 : 1).replace(/\.0$/, '');
 async function pollSystem() {
   if (!API || document.hidden) return;
   try {
-    const s = await (await fetch('/api/system')).json();
+    const res = await fetch('/api/system');
+    if (!res.ok) return;
+    const s = await res.json();
+    if (!s) return;
     const gpu = s.gpu;
     if (gpu) {
       $('#gpuName').textContent = gpu.name;
@@ -2019,11 +2091,55 @@ async function pollSystem() {
       if (gpu.power != null) $('#gpuPower').textContent = `${Math.round(gpu.power)}` + (gpu.power_limit ? ` / ${Math.round(gpu.power_limit)}` : '') + ' Вт';
     } else $('#gpuName').textContent = 'не найдена';
     meter('#cpuTxt', '#cpuBar', s.cpu, s.cpu != null ? `${Math.round(s.cpu)} %` : '—');
-    meter('#ramTxt', '#ramBar', s.ram.used_gb / s.ram.total_gb * 100, `${g1(s.ram.used_gb)} / ${g1(s.ram.total_gb)} ГБ`);
+    if ($('#cpuTempRow')) {
+      if (s.cpu_temp != null && s.cpu_temp !== '') {
+        $('#cpuTempRow').hidden = false;
+        $('#cpuTemp').textContent = typeof s.cpu_temp === 'number' ? `${Math.round(s.cpu_temp)} °C` : s.cpu_temp;
+      } else {
+        $('#cpuTempRow').hidden = true;
+      }
+    }
+    if (s.ram) meter('#ramTxt', '#ramBar', s.ram.used_gb / s.ram.total_gb * 100, `${g1(s.ram.used_gb)} / ${g1(s.ram.total_gb)} ГБ`);
     if (s.disk) { $('#diskName').textContent = s.disk.drive; $('#diskTxt').textContent = `свободно ${s.disk.free_gb} ГБ`; }
   } catch { /* the server is restarting; try again on the next tick */ }
 }
 setInterval(pollSystem, 2000);
+
+/* ---------- Unload models button handler ---------- */
+$('#unloadModelsBtn')?.addEventListener('click', async () => {
+  const btn = $('#unloadModelsBtn');
+  const txt = $('#unloadModelsTxt');
+  if (!btn || btn.disabled || btn.classList.contains('busy')) return;
+
+  // Prevent unloading while active video generation is running
+  if (typeof QUEUE !== 'undefined' && Array.isArray(QUEUE) && QUEUE.some(j => j.state === 'queued' || j.state === 'running')) {
+    toast('Идёт генерация. Дождитесь окончания очереди или остановите её перед выгрузкой моделей.');
+    return;
+  }
+
+  const origTxt = txt ? txt.textContent : 'Выгрузить модели';
+  btn.disabled = true;
+  btn.classList.add('busy');
+  if (txt) txt.textContent = 'Выгрузка…';
+
+  try {
+    const res = await postJSON('/api/models/unload');
+    if (res && res.ok) {
+      toast(res.message || '✓ Модели выгружены из памяти');
+    } else {
+      toast('⚠ ' + (res?.error || res?.message || 'Не удалось выгрузить модели'));
+    }
+  } catch (err) {
+    toast('Ошибка выгрузки: ' + (err?.message || err));
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('busy');
+    if (txt) txt.textContent = origTxt;
+    // Trigger immediate refresh of hardware stats
+    await pollSystem();
+    setTimeout(pollSystem, 1200);
+  }
+});
 const normItem = it => ({ ...it, date: new Date(it.date) });
 
 /* ---------- navigation ---------- */
