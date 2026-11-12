@@ -1084,8 +1084,8 @@ img.pr-media{object-position:center 38%}
       <div class="meter"><div class="stat"><span>Процессор</span><b id="cpuTxt">—</b></div><div class="vram"><i id="cpuBar"></i></div></div>
       <div class="meter"><div class="stat"><span>Память (ОЗУ)</span><b id="ramTxt">—</b></div><div class="vram"><i id="ramBar"></i></div></div>
       <div class="stat" id="tempRow" hidden><span>Температура GPU</span><b id="gpuTemp">—</b></div>
-      <div class="stat" id="cpuTempRow" hidden><span>Температура CPU</span><b id="cpuTemp">—</b></div>
       <div class="stat" id="powerRow" hidden><span>Питание GPU</span><b id="gpuPower">—</b></div>
+      <div class="stat" id="cpuTempRow"><span>Температура CPU</span><b id="cpuTemp">—</b></div>
       <div class="stat"><span>Диск <small id="diskName"></small></span><b id="diskTxt">—</b></div>
       <button class="unload-btn" id="unloadModelsBtn" type="button" title="Освободить видеопамять (VRAM) и оперативную память (RAM) от загруженных моделей">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -1382,11 +1382,11 @@ img.pr-media{object-position:center 38%}
               <button data-t="plist">Список кадров<small>серия изображений</small></button>
               <button data-t="krea">Изображение по тексту<small>Krea 2</small></button>
               <button data-t="sdxl">Изображение по тексту<small>SDXL / Pony (Uncensored)</small></button>
-              <button data-t="fluxt">Изображение по тексту<small>FLUX.1 [dev] 12B</small></button>
+              <button data-t="fluxt">Изображение по тексту<small>FLUX.2 Klein 9B</small></button>
               <button data-t="qwent">Изображение по тексту<small>Qwen 2.1</small></button>
               <button data-t="qwen">Правка изображения<small>Qwen 2.1</small></button>
               <button data-t="sdxle">Инпейнт / снятие одежды<small>SDXL / Pony Inpaint</small></button>
-              <button data-t="flux">Правка изображения<small>FLUX.1 [dev] 12B</small></button>              <button data-t="story">Раскадровка<small>история в кадрах на одном изображении</small></button>
+              <button data-t="flux">Правка изображения<small>FLUX.2 Klein 9B</small></button>              <button data-t="story">Раскадровка<small>история в кадрах на одном изображении</small></button>
               <button data-t="sheet">Лист персонажа<small>4 панели, Krea 2</small></button>
               <button data-t="sheet6">Лист персонажа ×6<small>6 панелей, Krea 2</small></button>
             </div>
@@ -1394,7 +1394,7 @@ img.pr-media{object-position:center 38%}
               <button data-f="1">По кадрам<small>кадры отдельно + лист</small></button><button data-f="0">Одним листом<small>одно изображение сразу</small></button>
             </div>
             <div class="seg" id="agStoryM" hidden style="grid-template-columns:repeat(3,1fr);margin-top:10px">
-              <button data-m="krea">Krea 2<small>быстро</small></button><button data-m="flux">FLUX.1 [dev]<small>12B фотореализм</small></button><button data-m="qwen">Qwen 2.1<small>текст на кадре</small></button>
+              <button data-m="krea">Krea 2<small>быстро</small></button><button data-m="flux">FLUX.2 Klein 9B<small>4 шага, без цензуры</small></button><button data-m="qwen">Qwen 2.1<small>текст на кадре</small></button>
             </div>
             <small class="hint" id="agCtx" style="display:block;margin-top:8px"></small>
           </div>
@@ -1566,7 +1566,7 @@ img.pr-media{object-position:center 38%}
               <button class="mcard" data-m="krea"><i></i><b>Изображение по тексту</b><span>Krea 2: красивые изображения по описанию (можно в коммерцию)</span><small></small></button>
               <button class="mcard" data-m="kreareal"><i></i><b>Изображение: реализм</b><span>Krea 2 для реалистичных людей и фото (+15 ГБ)</span><small></small></button>
               <button class="mcard" data-m="sdxl"><i></i><b>SDXL / Pony: Uncensored & Инпейнт</b><span>100% без цензуры, анатомия, снятие одежды, кисть инпейнта (6.5 ГБ)</span><small></small></button>
-              <button class="mcard" data-m="flux"><i></i><b>FLUX.1 [dev] 12B FP8</b><span>Флагманский фотореализм, Dual-CLIP, LoRA и точная анатомия (+21 ГБ)</span><small></small></button>
+              <button class="mcard" data-m="flux"><i></i><b>FLUX.2 Klein 9B Uncensored</b><span>Мгновенная 4-шаговая генерация, точные референсы, без цензуры (+9.4 ГБ)</span><small></small></button>
               <button class="mcard" data-m="qwen"><i></i><b>Правка: Qwen 2.1</b><span>Qwen Image 2.1: изменить изображение, текст на картинке, лист персонажа</span><small></small></button>              <button class="mcard" data-m="upscale"><i></i><b>Увеличение видео и изображений</b><span>Увеличить готовое видео и добавить чёткости (долго, но по желанию)</span><small></small></button>
               <button class="mcard" data-m="relayvsr"><i></i><b>Быстрое увеличение видео (RelayVSR)</b><span>Увеличить готовое видео в 2 раза за минуты. Только видео, до ~10 с</span><small></small></button>
             </div>
@@ -2034,7 +2034,7 @@ function offerNewModes(s) {
   OFFER_SHOWN = true;
   const show = () => {
     if (!$('#confirm').hidden) return setTimeout(show, 3000);  // another question is open: wait
-    const name = { sdxl: 'SDXL / Pony (100% Uncensored, инпейнт)', flux: 'FLUX.1 [dev] 12B FP8 (фотореализм)', long: 'Видеостудия (клипы и ролики по сценам)' }[o.mode] || o.mode;
+    const name = { sdxl: 'SDXL / Pony (100% Uncensored, инпейнт)', flux: 'FLUX.2 Klein 9B (4 шага, без цензуры)', long: 'Видеостудия (клипы и ролики по сценам)' }[o.mode] || o.mode;
     const btn = $('#confirm [data-close]');
     const later = () => fetch('/api/mode/offered', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: o.mode }) });
     btn.addEventListener('click', later, { once: true });
@@ -2092,11 +2092,13 @@ async function pollSystem() {
     } else $('#gpuName').textContent = 'не найдена';
     meter('#cpuTxt', '#cpuBar', s.cpu, s.cpu != null ? `${Math.round(s.cpu)} %` : '—');
     if ($('#cpuTempRow')) {
+      $('#cpuTempRow').hidden = false;
       if (s.cpu_temp != null && s.cpu_temp !== '') {
-        $('#cpuTempRow').hidden = false;
         $('#cpuTemp').textContent = typeof s.cpu_temp === 'number' ? `${Math.round(s.cpu_temp)} °C` : s.cpu_temp;
+        $('#cpuTemp').title = '';
       } else {
-        $('#cpuTempRow').hidden = true;
+        $('#cpuTemp').textContent = 'н/д';
+        $('#cpuTemp').title = 'Датчик температуры CPU не отдаёт данные без прав администратора Windows (Ring-0 драйвера)';
       }
     }
     if (s.ram) meter('#ramTxt', '#ramBar', s.ram.used_gb / s.ram.total_gb * 100, `${g1(s.ram.used_gb)} / ${g1(s.ram.total_gb)} ГБ`);
@@ -4464,7 +4466,7 @@ function paintModelsList() {
       const modes = (m.modes || []).map(x => ({
         video: 'Image-to-Video', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра',
         swap: 'Замена персонажа', action: 'Экшн', long: 'Длинное видео', krea: 'Картинка по тексту',
-        kreareal: 'Картинка: реализм', sdxl: 'SDXL / Pony Uncensored', qwen: 'Правка картинки', flux: 'Правка: FLUX.1 dev',
+        kreareal: 'Картинка: реализм', sdxl: 'SDXL / Pony Uncensored', qwen: 'Правка картинки', flux: 'Правка: FLUX.2 Klein 9B',
         upscale: 'Увеличение', relayvsr: 'Быстрое увеличение'
       })[x]).filter(Boolean).join(', ') || 'дополнительно';
 
@@ -4577,7 +4579,7 @@ function renderModels(s) {
   MD_NEED = need.map(m => m.role);
   $('#mdFixExt').hidden = s.engine !== 'external' || !need.length;
   $('#mdFixExt').textContent = `Скачать недостающие (${need.length}, ${GB(need.reduce((a, m) => a + m.size, 0))})`;
-  const MN = { video: 'Image-to-Video', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра', swap: 'Замена персонажа', action: 'Экшн-сцены', long: 'Видеостудия', krea: 'Изображение по тексту', kreareal: 'Изображение: реализм', sdxl: 'Изображение и инпейнт: SDXL / Pony (Uncensored)', qwen: 'Правка изображения', flux: 'Правка изображения: FLUX.1 dev (12B FP8)', upscale: 'Увеличение видео и изображений', relayvsr: 'Быстрое увеличение видео (RelayVSR)' };
+  const MN = { video: 'Image-to-Video', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрская игра', swap: 'Замена персонажа', action: 'Экшн-сцены', long: 'Видеостудия', krea: 'Изображение по тексту', kreareal: 'Изображение: реализм', sdxl: 'Изображение и инпейнт: SDXL / Pony (Uncensored)', qwen: 'Правка изображения', flux: 'Правка изображения: FLUX.2 Klein 9B (4 шага, без цензуры)', upscale: 'Увеличение видео и изображений', relayvsr: 'Быстрое увеличение видео (RelayVSR)' };
   $('#mdAdd').innerHTML = s.engine === 'managed' || s.engine === 'external' ? Object.entries(s.add_modes || {}).map(([m, gb]) =>
     `<button class="btn" data-add="${m}">Добавить ${MN[m]} (+${String(gb).replace('.', ',')} ГБ)</button>`).join(' ') : '';
   $$(MODE_ORDER.map(v => `.nav[data-view="${v}"]`).join(',')).forEach(n => {
@@ -6297,7 +6299,7 @@ $('#agFile').onchange = async e => {
 };
 $('#agEmpty').onclick = e => { const s = e.target.closest('span'); if (s) { $('#agIn').value = s.textContent.replace(/[«»]/g, '').replace(/ \+ фото героинь$/, ''); $('#agIn').focus(); } };
 $('#agIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#agSend').click(); } });
-const AG_NAMES = { plist: 'список кадров', long: 'сцены длинного видео', video: 'Генерацию видео', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрскую игру', swap: 'Замену персонажа', action: 'Экшн-сцены', krea: 'Изображение по тексту', sdxl: 'SDXL / Pony (генерация)', sdxle: 'SDXL / Pony (инпейнт)', qwen: 'Правку изображения', flux: 'Правку изображения (FLUX.1 dev)', sheet: 'Изображение по тексту', sheet6: 'Изображение по тексту', fluxt: 'Изображение по тексту (FLUX.1 dev)', qwent: 'Изображение по тексту', story: 'Изображение по тексту' };
+const AG_NAMES = { plist: 'список кадров', long: 'сцены длинного видео', video: 'Генерацию видео', lipsync: 'Lipsync', refs: 'Референсы', actor: 'Актёрскую игру', swap: 'Замену персонажа', action: 'Экшн-сцены', krea: 'Изображение по тексту', sdxl: 'SDXL / Pony (генерация)', sdxle: 'SDXL / Pony (инпейнт)', qwen: 'Правку изображения', flux: 'Правку изображения (FLUX.2 Klein 9B)', sheet: 'Изображение по тексту', sheet6: 'Изображение по тексту', fluxt: 'Изображение по тексту (FLUX.2 Klein 9B)', qwent: 'Изображение по тексту', story: 'Изображение по тексту' };
 const AG_IMG = ['plist', 'krea', 'sdxl', 'sdxle', 'qwen', 'flux', 'sheet', 'sheet6', 'fluxt', 'qwent', 'story'];
 AG.storyModel = 'krea'; AG.storyFrames = true;
 AG.think = (() => { try { return localStorage.getItem('h3-ag-think') === 'deep' ? 'deep' : 'fast'; } catch { return 'fast'; } })();
@@ -6325,9 +6327,9 @@ function agCtx() {
          qwen: `Приложите изображение, которое нужно изменить (скрепка или «Из Библиотеки»), и напишите, что поменять. Изображений в чате: ${n}.`,
           sdxl: 'Опишите изображение: агент напишет подробный uncensored промпт и негатив для SDXL / Pony (качество, анатомия, одежда/nude).',
           sdxle: `Приложите изображение для правки/инпейнта: агент напишет промпт и подскажет маску для снятия одежды или изменения деталей в SDXL / Pony Inpaint. Изображений в чате: ${n}.`,
-          flux: `Приложите изображение, которое нужно изменить (скрепка или «Из Библиотеки»), и напишите, что поменять (FLUX.1 [dev] 12B). Дополнительные изображения станут image 2, image 3. Изображений в чате: ${n}.`,
+          flux: `Приложите изображение, которое нужно изменить (скрепка или «Из Библиотеки»), и напишите, что поменять (FLUX.2 Klein 9B). Дополнительные изображения станут image 2, image 3. Изображений в чате: ${n}.`,
          story: 'Расскажите историю по кадрам («первый кадр — …, второй кадр — …») и скажите, сколько кадров нужно. Агент напишет промпт одного изображения-раскадровки без подписей и номеров для выбранной модели.',
-          fluxt: 'Опишите изображение словами: агент напишет промпт для FLUX.1 [dev] 12B (без негатива, описание по порядку: главное сначала). Изображения в чате — только образцы настроения.',
+          fluxt: 'Опишите изображение словами: агент напишет промпт для FLUX.2 Klein 9B (без цензуры, 4 шага). Изображения в чате — только образцы настроения.',
          qwent: 'Опишите изображение словами: агент напишет промпт для Qwen 2.1. Негатив впишите отдельным полем в разделе. Изображения в чате — только образцы настроения.',
          sheet: `Опишите персонажа: агент напишет промпт листа из 4 панелей. Изображений в чате: ${n}.`,
          sheet6: `Опишите персонажа: агент напишет промпт листа из 6 панелей (в полный рост спереди, в три четверти, сбоку, сзади + два портрета). Изображений в чате: ${n}.` })[AG.target]
@@ -6355,7 +6357,7 @@ function renderAssistant(el, m) {
     const text = m.edits?.[i] ?? p.replace(/\n$/, '');
     html += `<div class="pblock"><pre${closed ? ` contenteditable="plaintext-only" spellcheck="false" data-b="${i}" title="Текст можно править прямо здесь"` : ''}>${esc(text)}</pre>${closed ? `<div class="pb-act">
       <button class="btn pri" data-send="${AG.target}">В ${AG_NAMES[AG.target]}</button>
-      <select class="pb-other"><option value="">Отправить в…</option><option value="video">Image-to-Video</option><option value="lipsync">Lipsync</option><option value="refs">Референсы</option><option value="actor">Актёрская игра</option><option value="swap">Замена персонажа</option><option value="action">Экшн-сцены</option><option value="long">Видеостудия (сцены)</option><option value="krea">Изображение по тексту (Krea 2)</option><option value="sdxl">Изображение по тексту (SDXL Pony)</option><option value="fluxt">Изображение по тексту (FLUX.1 dev)</option><option value="qwen">Правка изображения (Qwen 2.1)</option><option value="sdxle">Инпейнт / снятие одежды (SDXL Pony)</option><option value="flux">Правка изображения (FLUX.1 dev)</option></select>
+      <select class="pb-other"><option value="">Отправить в…</option><option value="video">Image-to-Video</option><option value="lipsync">Lipsync</option><option value="refs">Референсы</option><option value="actor">Актёрская игра</option><option value="swap">Замена персонажа</option><option value="action">Экшн-сцены</option><option value="long">Видеостудия (сцены)</option><option value="krea">Изображение по тексту (Krea 2)</option><option value="sdxl">Изображение по тексту (SDXL Pony)</option><option value="fluxt">Изображение по тексту (FLUX.2 Klein 9B)</option><option value="qwen">Правка изображения (Qwen 2.1)</option><option value="sdxle">Инпейнт / снятие одежды (SDXL Pony)</option><option value="flux">Правка изображения (FLUX.2 Klein 9B)</option></select>
       <button class="btn" data-ru title="Русский перевод только для чтения: в модель уходит английский текст">Показать по-русски</button><button class="btn" data-copy>Копировать</button><button class="btn" data-paste title="Вставить скопированный текст на место выделенного (или в конец)">Вставить</button><small class="pb-n">${text.length} симв.</small></div>` : ''}${m.ru?.[i] ? `<div class="pb-ru"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px"><b>По-русски (только для чтения):</b><button class="btn" data-copy-ru type="button" style="padding:3px 10px;font-size:12px">Копировать русский</button></div><span class="pb-ru-t">${esc(m.ru[i]).replace(/\n/g, '<br>')}</span></div>` : ''}</div>`;
   });
   if (m.status && !m.content) html += `<div class="st">${esc(m.status)}</div>`;
@@ -6874,7 +6876,7 @@ function onAgentSetup(ev) {
 
 // skills
 const SK_MODES = { always: 'Всегда', auto: 'Авто', off: 'Выкл' };
-const AG_SK_IMG = { 'storyboard': 'Раскадровка', 'krea-2': 'Изображение по тексту', 'sdxl-pony': 'SDXL / Pony (100% Uncensored)', 'flux1-dev': 'Изображение: FLUX.1 dev', 'qwen-image-2-1-director-prompt': 'Правка изображения', 'karta-personazha': 'Лист персонажа' };
+const AG_SK_IMG = { 'storyboard': 'Раскадровка', 'krea-2': 'Изображение по тексту', 'sdxl-pony': 'SDXL / Pony (100% Uncensored)', 'flux1-dev': 'Изображение: FLUX.2 Klein 9B', 'qwen-image-2-1-director-prompt': 'Правка изображения', 'karta-personazha': 'Лист персонажа' };
 function renderSkills(list) {
   $('#skCnt').textContent = `(${list.length})`;
   $('#skList').innerHTML = list.map(s => `<div class="sk" data-id="${esc(s.id)}">
@@ -7704,11 +7706,11 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
           <div class="seg kr-eng" style="grid-template-columns:repeat(4,1fr)">
             <button data-e="krea">Krea 2<small>быстрая генерация</small></button>
             <button data-e="sdxl">SDXL / Pony<small>100% Uncensored, анатомия</small></button>
-            <button data-e="flux">FLUX.1 [dev]<small>12B FP8, фотореализм, LoRA</small></button>
+            <button data-e="flux">FLUX.2 Klein 9B<small>4 шага, без цензуры</small></button>
             <button data-e="qwen">Qwen 2.1<small>текст на картинке</small></button>
           </div>
           <div class="hint kr-enghint" hidden></div>
-          <div class="hint" style="margin-top:6px"><b>SDXL / Pony</b>: 100% без цензуры, отличная прорисовка анатомии и сосков/гениталий. <b>FLUX.1 [dev]</b>: 12B FP8 флагманский реализм и LoRA.</div></div>
+          <div class="hint" style="margin-top:6px"><b>SDXL / Pony</b>: 100% без цензуры, отличная прорисовка анатомии и сосков/гениталий. <b>FLUX.2 Klein 9B</b>: мгновенная генерация за 4 шага, точные референсы, без цензуры.</div></div>
         <div class="row kr-neg" hidden><div class="row-l">Негативный промпт <span class="hint">что не должно быть на изображении</span></div>
           <textarea class="kr-negtxt" rows="2" placeholder="Пусто — быстрее и легче для видеокарты. Если нужно, впишите, например: blurry, low quality, extra fingers, text, watermark"></textarea><div class="hint" style="margin-top:4px">Негативный промпт замедляет Qwen примерно вдвое и требует больше видеопамяти. Заполняйте, только если без него не получается.</div></div>
         <div class="row kr-stylerow"><div class="row-l">Стиль</div>
@@ -7740,7 +7742,7 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
     $('.kr-scale', root).hidden = !(S.engine === 'krea' && S.style === 'real');
     $$('.kr-eng button', root).forEach(b => b.classList.toggle('on', b.dataset.e === S.engine));
     $('.kr-stylerow', root).hidden = S.engine !== 'krea'; $('.kr-neg', root).hidden = !(S.engine === 'qwen' || S.engine === 'sdxl');
-    $('.mode-pill span', root).textContent = { krea: 'Krea 2 · 1 МП', sdxl: 'SDXL / Pony · Uncensored', flux: 'FLUX.1 [dev] 12B · 1 МП', qwen: 'Qwen Image 2.1 · 1 МП' }[S.engine];
+    $('.mode-pill span', root).textContent = { krea: 'Krea 2 · 1 МП', sdxl: 'SDXL / Pony · Uncensored', flux: 'FLUX.2 Klein 9B · 1 МП', qwen: 'Qwen Image 2.1 · 1 МП' }[S.engine];
   };
   async function krEngCheck() {
     const hint = $('.kr-enghint', root); hint.hidden = true;
@@ -7752,11 +7754,11 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
       if (!(st.modes || []).includes(role) || miss.length) {
         hint.hidden = false;
         hint.textContent = st.engine === 'managed'
-          ? `Для этой модели нужны ещё файлы. Откройте «Настройки» и нажмите «Добавить ${role === 'sdxl' ? 'SDXL / Pony' : role === 'flux' ? 'FLUX.1 [dev]' : 'Правка изображения'}».`
+          ? `Для этой модели нужны ещё файлы. Откройте «Настройки» и нажмите «Добавить ${role === 'sdxl' ? 'SDXL / Pony' : role === 'flux' ? 'FLUX.2 Klein 9B' : 'Правка изображения'}».`
           : role === 'sdxl'
             ? 'Положите чекпоинт Pony в папку models/checkpoints вашего ComfyUI.'
             : role === 'flux'
-              ? 'Положите в папки models вашего ComfyUI: flux1-dev-fp8, t5xxl, clip_l, ae.'
+              ? 'Положите в папки models вашего ComfyUI: flux-2-klein-9b-fp8, flux2-klein-9b-uncensored, flux2-vae.'
               : 'Для Qwen 2.1 нужны её модели (раздел «Правка изображения»). Проверьте «Настройки».';
       }
     } catch {}
@@ -7890,7 +7892,7 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
             <div class="hint" style="margin-top:6px">Кадры пишите по одному в строке: «1: ...», «2: ...» (2, 3, 4, 6, 8 или 9 кадров). Каждый кадр сохраняется отдельно в Библиотеку в полном размере. FLUX.2 рисует кадр за секунды, Qwen 2.1 заметно дольше (минуты на кадр).</div></div>
             <div class="seg qw-eng" style="grid-template-columns:repeat(3,1fr)">
               <button data-e="sdxl">SDXL / Pony Inpaint<small>100% Uncensored, снятие одежды</small></button>
-              <button data-e="flux">FLUX.1 [dev]<small>12B FP8, правка по референсам</small></button>
+              <button data-e="flux">FLUX.2 Klein 9B<small>4 шага, правка по референсам</small></button>
               <button data-e="qwen">Qwen 2.1<small>правка по описанию</small></button>
             </div>
             <div class="hint qw-fluxhint" hidden></div>
@@ -7955,7 +7957,7 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
     $('.qw-inpaint-ctrls', root).hidden = S.engine !== 'sdxl' || S.kind === 'sheet';
     $('.mode-pill span', root).textContent = {
       sdxl: 'SDXL / Pony Inpaint · Uncensored',
-      flux: 'FLUX.1 [dev] 12B · Правка по референсам',
+      flux: 'FLUX.2 Klein 9B · Правка по референсам',
       qwen: 'Qwen Image 2.1 · Правка по описанию'
     }[S.engine] || S.engine;
     $('.qw-prompt', root).placeholder = S.engine === 'sdxl' ? 'Что должно появиться в заменяемой области (или на всем изображении). Например: score_9, score_8_up, photorealistic, 1girl, completely nude, bare breasts, detailed nipples, natural skin texture' : S.kind === 'story' && S.frames ? '1: первый кадр по-английски...\n2: второй кадр...\n(героя и место называйте image 1, image 2). Или попросите Агента (Раскадровка → По кадрам).' : S.kind === 'story' ? 'Расскажите историю по кадрам: первый кадр — …, второй кадр — …. Героя и место называйте <image1>, <image2>. Или попросите Агента (Раскадровка) написать промпт.' : 'Что изменить и что оставить. Например: Этот человек сидит в кафе у окна и пьёт кофе. Лицо, причёска и одежда как на изображении.';
@@ -7988,10 +7990,10 @@ const imgSeedForm = (S, fd) => { if (S.seedFixed && S.seed) fd.append('seed', S.
       if (!(st.modes || []).includes(role) || miss.length) {
         hint.hidden = false;
         hint.textContent = st.engine === 'managed'
-          ? `Для этой модели нужны ещё файлы. Откройте «Настройки» и нажмите «Добавить ${role === 'sdxl' ? 'SDXL / Pony' : 'FLUX.1 [dev]' }».`
+          ? `Для этой модели нужны ещё файлы. Откройте «Настройки» и нажмите «Добавить ${role === 'sdxl' ? 'SDXL / Pony' : 'FLUX.2 Klein 9B' }».`
           : role === 'sdxl'
             ? 'Положите чекпоинт Pony (например, pornworksRealPornPhoto_ponyV04.safetensors) в папку models/checkpoints вашего ComfyUI.'
-            : 'Положите в папки models вашего ComfyUI: flux1-dev-fp8, t5xxl, clip_l, ae.safetensors.';
+            : 'Положите в папки models вашего ComfyUI: flux-2-klein-9b-fp8, flux2-klein-9b-uncensored, flux2-vae.';
       }
     } catch {}
   }

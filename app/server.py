@@ -1839,7 +1839,7 @@ class App:
             graph, stages = wf.flux_t2i_graph(self.model_names, prompt, width, height, seed,
                                               extra_loras=self.flux_loras(form))
             return await self.queue(graph, stages, {
-                "mode": "flux", "sub": "Изображение (FLUX.1 dev)", "prompt": prompt, "aspect": aspect, "q": "1K",
+                "mode": "flux", "sub": "Изображение (FLUX.2 Klein 9B)", "prompt": prompt, "aspect": aspect, "q": "1K",
                 "len": 0.0, "res": f"{width}×{height}", "seed": seed, **lab})
         if engine == "qwen":
             await self.need_models("qwen")
@@ -1927,7 +1927,7 @@ class App:
             graph, stages = wf.flux_edit_graph(self.model_names, prompt, image, mp, seed, form.get("_extra") or (), round_size(form),
                                                extra_loras=self.flux_loras(form))
             return await self.queue(graph, stages, {
-                "mode": "flux", "sub": "Правка изображения (FLUX.1 dev)", "prompt": prompt, "aspect": "",
+                "mode": "flux", "sub": "Правка изображения (FLUX.2 Klein 9B)", "prompt": prompt, "aspect": "",
                 "q": "", "len": 0.0, "res": "", "seed": seed})
         await self.need_models("qwen")
         if form.get("kind") == "sheet":

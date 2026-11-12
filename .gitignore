@@ -49,3 +49,4 @@ TEST_INFRA.md
 pytest.ini
 tests/
 .pytest_cache/
+docs/
