@@ -1068,8 +1068,28 @@ def _qwen_base(m, image, megapixels, prompt, seed, size=None, extras=(), extra_l
     return g, stages
 
 
+PONY_DEFAULT_NEGATIVE = "score_4, score_3, score_2, score_1, source_pony, source_furry, ugly, bad anatomy, deformed, noisy, blurry, low quality"
+
+
+def _prepare_sdxl_prompt(ckpt_name, prompt, negative):
+    """If using a Pony checkpoint, ensure quality score tags and negative tags are present."""
+    ckpt_lower = (ckpt_name or "").lower()
+    is_pony = "pony" in ckpt_lower or "pornworks" in ckpt_lower
+    p = prompt.strip() if prompt else ""
+    n = negative.strip() if negative else ""
+    if is_pony:
+        if "score_" not in p.lower():
+            p = f"score_9, score_8_up, score_7_up, source_photo, photorealistic, {p}" if p else "score_9, score_8_up, score_7_up, source_photo, photorealistic"
+        if not n:
+            n = PONY_DEFAULT_NEGATIVE
+        elif "score_" not in n.lower():
+            n = f"{PONY_DEFAULT_NEGATIVE}, {n}"
+    return p, n
+
+
 def sdxl_t2i_graph(m, prompt, negative, width, height, seed, extra_loras=(), steps=28, cfg=6.5):
     """SDXL / Pony checkpoint, text to image: full uncensored photorealism, LoRA support."""
+    prompt, negative = _prepare_sdxl_prompt(m.get("sdxl_checkpoint", ""), prompt, negative)
     g = {
         "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": m["sdxl_checkpoint"]}},
         "4": {"class_type": "EmptyLatentImage", "inputs": {"width": width, "height": height, "batch_size": 1}},
@@ -1099,6 +1119,7 @@ def sdxl_inpaint_graph(m, prompt, negative, image, seed, mask=None, denoise=0.75
     If mask is provided, uses VAEEncodeForInpaint to regenerate only the masked region.
     If mask is None, uses VAEEncode + denoise for img2img editing (preserving overall pose/composition).
     """
+    prompt, negative = _prepare_sdxl_prompt(m.get("sdxl_checkpoint", ""), prompt, negative)
     g = {
         "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": m["sdxl_checkpoint"]}},
         "10": {"class_type": "LoadImage", "inputs": {"image": image}},
