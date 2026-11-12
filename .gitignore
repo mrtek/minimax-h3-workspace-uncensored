@@ -37,3 +37,9 @@ PROJECT_OVERVIEW_UNCENSORED.md
 # помощник (агент), скачанный пользователем в папку проекта, и заметки
 MinimaxH3_assistant/
 Память*.txt
+
+# внутренняя документация, аудит и служебные инструменты
+audit/
+tools/
+HANDOFF.md
+.agent-teams/
